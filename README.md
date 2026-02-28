@@ -1,4 +1,4 @@
-Manufacturing, Automation & Simulation Analytics for Factory Integration Sim Twin is a discrete evrnt simulator with a graphical GUI and 3D visualization.
+Manufacturing, Automation & Simulation Analytics for Factory Integration Sim Twin is a discrete event simulator with a graphical GUI and 3D visualization.
 
 It is based on SimPy as the core engine but adds a visual layer and a atatistics layer.
 
