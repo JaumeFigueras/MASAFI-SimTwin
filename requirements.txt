@@ -1,0 +1,13 @@
+# Docs system
+sphinx>=8.2.3
+sphinx-rtd-theme>=3.0.2
+Pygments>=2.19.2
+# Project dependencies
+simpy>=4.1.1
+PyQt6>=6.6
+pyqt6-sip>=13.11.0
+qt-material-icons>=0.4.1
+# Testing dependencies
+pytest>=8.4.2
+pytest-cov>=7.0.0
+pytest-qt>=4.4
