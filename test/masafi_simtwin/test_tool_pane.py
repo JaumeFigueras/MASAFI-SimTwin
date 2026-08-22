@@ -6,6 +6,7 @@ import pytest
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QLabel, QWidget
 
+from masafi_simtwin.theme import PANE_GAP
 from masafi_simtwin.tool_pane import (
     DEFAULT_PANE_HEIGHT,
     DEFAULT_PANE_WIDTH,
@@ -40,7 +41,8 @@ def test_the_title_is_shown_in_the_header(pane):
 
     assert pane.title == 'Project'
     assert pane.windowTitle() == 'Project'
-    assert pane.titleBarWidget().objectName() == 'ToolPaneHeader'
+    assert pane.header.objectName() == 'ToolPaneHeader'
+    assert pane.header.findChild(QLabel, 'ToolPaneTitle').text() == 'Project'
 
 
 def test_an_empty_pane_shows_a_placeholder(pane):
@@ -59,7 +61,7 @@ def test_content_is_held_as_given(qtbot):
     widget = ToolPane('Libraries', content)
     qtbot.addWidget(widget)
 
-    assert content.parentWidget() is widget.widget()
+    assert widget.widget().isAncestorOf(content)
     assert widget.widget().findChild(QLabel, 'ToolPanePlaceholder') is None
 
 
@@ -68,7 +70,7 @@ def test_the_header_closes_the_pane(pane, qtbot):
 
     pane.show()
     qtbot.waitExposed(pane)
-    close_button = pane.titleBarWidget().findChild(QWidget, 'ToolPaneClose')
+    close_button = pane.header.findChild(QWidget, 'ToolPaneClose')
 
     close_button.click()
 
@@ -78,7 +80,7 @@ def test_the_header_closes_the_pane(pane, qtbot):
 def test_the_close_button_carries_an_icon(pane):
     """The header button is drawn with a Material Symbol like every other icon."""
 
-    close_button = pane.titleBarWidget().findChild(QWidget, 'ToolPaneClose')
+    close_button = pane.header.findChild(QWidget, 'ToolPaneClose')
 
     assert not close_button.icon().isNull()
 
@@ -114,3 +116,28 @@ def test_a_pane_is_pinned_to_its_own_area(qtbot, area):
     qtbot.addWidget(widget)
 
     assert widget.allowedAreas() == area
+
+
+def test_the_pane_is_a_card_inset_from_its_dock(pane):
+    """The header and the content share one rounded card, held off the edges."""
+
+    outer = pane.widget()
+    margins = outer.layout().contentsMargins()
+    card = outer.findChild(QWidget, 'ToolPaneCard')
+
+    assert (margins.left(), margins.top(), margins.right(), margins.bottom()) == (
+        PANE_GAP,
+        PANE_GAP,
+        PANE_GAP,
+        PANE_GAP,
+    )
+    assert card is not None
+    assert card.isAncestorOf(pane.header)
+
+
+def test_the_dock_draws_no_title_bar_of_its_own(pane):
+    """Qt's title bar slot is emptied, since the header belongs inside the card."""
+
+    assert pane.titleBarWidget() is not None
+    assert pane.titleBarWidget() is not pane.header
+    assert pane.titleBarWidget().findChild(QWidget, 'ToolPaneClose') is None

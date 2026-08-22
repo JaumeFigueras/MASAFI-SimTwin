@@ -6,13 +6,36 @@ import pytest
 from PyQt6.QtGui import QPalette
 
 from masafi_simtwin.theme import (
+    CARD_RADIUS,
     COLORS,
+    PANE_GAP,
+    SEPARATOR_WIDTH,
     ColorScheme,
     ThemeManager,
     build_palette,
     build_stylesheet,
     detect_color_scheme,
 )
+
+
+def block_of(stylesheet: str, selector: str) -> str:
+    """Return the body of one rule of a style sheet.
+
+    Parameters
+    ----------
+    stylesheet : str
+        The style sheet to read.
+    selector : str
+        The selector of the rule, matched on its opening brace so that a rule
+        for a descendant of the same widget is not picked up instead.
+
+    Returns
+    -------
+    str
+        Everything between the braces of the rule.
+    """
+
+    return stylesheet.split(f'{selector} {{', 1)[1].split('}', 1)[0]
 
 
 def test_every_scheme_has_colors():
@@ -88,3 +111,46 @@ def test_apply_without_argument_follows_the_desktop(qapp):
         assert manager.scheme is detect_color_scheme()
     finally:
         manager.deleteLater()
+
+
+@pytest.mark.parametrize('scheme', list(ColorScheme))
+def test_the_cards_stand_out_from_the_ground(qapp, scheme):
+    """The gaps only read as gaps if the ground differs from both cards."""
+
+    colors = COLORS[scheme]
+
+    assert colors.window != colors.surface
+    assert colors.window != colors.editor
+
+
+@pytest.mark.parametrize('scheme', list(ColorScheme))
+def test_the_chrome_is_painted_on_the_ground(qapp, scheme):
+    """Top bar, tool stripe and status bar share the colour that fills the gaps."""
+
+    stylesheet = build_stylesheet(COLORS[scheme])
+    ground = COLORS[scheme].window
+
+    for selector in ('QWidget#TopBar', 'QToolBar#SideBar', 'QStatusBar#StatusBar'):
+        assert f'background: {ground}' in block_of(stylesheet, selector)
+
+
+@pytest.mark.parametrize('scheme', list(ColorScheme))
+def test_the_cards_are_rounded(qapp, scheme):
+    """Both kinds of card are drawn with the same corner radius."""
+
+    stylesheet = build_stylesheet(COLORS[scheme])
+
+    for selector in ('QFrame#ToolPaneCard', 'QFrame#DocumentCard'):
+        assert f'border-radius: {CARD_RADIUS}px' in block_of(stylesheet, selector)
+
+
+@pytest.mark.parametrize('scheme', list(ColorScheme))
+def test_the_separator_is_a_gap_the_user_can_grab(qapp, scheme):
+    """The handle between two cards is painted as ground and is wide enough to hit."""
+
+    stylesheet = build_stylesheet(COLORS[scheme])
+    block = block_of(stylesheet, 'QMainWindow::separator')
+
+    assert f'background: {COLORS[scheme].window}' in block
+    assert f'width: {SEPARATOR_WIDTH}px' in block
+    assert SEPARATOR_WIDTH >= PANE_GAP

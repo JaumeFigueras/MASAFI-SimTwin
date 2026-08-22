@@ -158,17 +158,39 @@ class MainWindow(QMainWindow):
 
         edit_menu = menu_bar.addMenu(self.tr('&Edit'))
         self._add_placeholder_actions(
-            edit_menu, [self.tr('Undo'), self.tr('Redo'), None, self.tr('Cut'), self.tr('Copy'), self.tr('Paste')]
+            edit_menu,
+            [
+                self.tr('Undo'),
+                self.tr('Redo'),
+                None,
+                self.tr('Cut'),
+                self.tr('Copy'),
+                self.tr('Paste'),
+            ],
         )
 
         view_menu = menu_bar.addMenu(self.tr('&View'))
         self._add_placeholder_actions(
-            view_menu, [self.tr('Tool Windows'), self.tr('Appearance'), None, self.tr('Zoom In'), self.tr('Zoom Out')]
+            view_menu,
+            [
+                self.tr('Tool Windows'),
+                self.tr('Appearance'),
+                None,
+                self.tr('Zoom In'),
+                self.tr('Zoom Out'),
+            ],
         )
 
         navigate_menu = menu_bar.addMenu(self.tr('&Navigate'))
         self._add_placeholder_actions(
-            navigate_menu, [self.tr('Block…'), self.tr('Sub-model…'), None, self.tr('Back'), self.tr('Forward')]
+            navigate_menu,
+            [
+                self.tr('Block…'),
+                self.tr('Sub-model…'),
+                None,
+                self.tr('Back'),
+                self.tr('Forward'),
+            ],
         )
 
         run_menu = menu_bar.addMenu(self.tr('&Run'))
@@ -179,7 +201,9 @@ class MainWindow(QMainWindow):
         run_menu.addAction(self.reset_action)
 
         tools_menu = menu_bar.addMenu(self.tr('&Tools'))
-        self._add_placeholder_actions(tools_menu, [self.tr('Block Libraries'), self.tr('Python Console')])
+        self._add_placeholder_actions(
+            tools_menu, [self.tr('Block Libraries'), self.tr('Python Console')]
+        )
         tools_menu.addSeparator()
         tools_menu.addAction(self.settings_action)
 

@@ -4,20 +4,35 @@ Every document type of the application — process flow model, animations, Petri
 nets — opens here as a tab over the same underlying model.  The area shows a
 placeholder while no document is open, in the way an IDE shows an empty editor
 background, and swaps to the tab widget as soon as the first one arrives.
+
+Like a tool pane, the documents are drawn as one rounded card — tab bar included,
+so the tabs belong to the card rather than floating on the ground beside it —
+inset by :data:`~masafi_simtwin.theme.PANE_GAP`.  The area itself is only the
+transparent holder of that gap.
 """
 
 from __future__ import annotations
 
 from PyQt6.QtCore import QSize, Qt, pyqtSignal
-from PyQt6.QtWidgets import QLabel, QStackedWidget, QTabBar, QTabWidget, QToolButton, QWidget
+from PyQt6.QtWidgets import (
+    QFrame,
+    QLabel,
+    QStackedWidget,
+    QTabBar,
+    QTabWidget,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from masafi_simtwin import icons
+from masafi_simtwin.theme import PANE_GAP
 
 #: Side, in pixels, of the close button drawn at the right of every tab.
 CLOSE_ICON_SIZE = 16
 
 
-class DocumentArea(QStackedWidget):
+class DocumentArea(QWidget):
     """The tabbed document interface.
 
     Parameters
@@ -49,8 +64,20 @@ class DocumentArea(QStackedWidget):
         self._tabs.setElideMode(Qt.TextElideMode.ElideRight)
         self._tabs.currentChanged.connect(self._on_current_changed)
 
-        self.addWidget(self._placeholder)
-        self.addWidget(self._tabs)
+        self._stack = QStackedWidget(self)
+        self._stack.addWidget(self._placeholder)
+        self._stack.addWidget(self._tabs)
+
+        card = QFrame(self)
+        card.setObjectName('DocumentCard')
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(0, 0, 0, 0)
+        card_layout.addWidget(self._stack)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(PANE_GAP, PANE_GAP, PANE_GAP, PANE_GAP)
+        layout.addWidget(card)
+
         self._update_visible_page()
 
     @property
@@ -64,6 +91,12 @@ class DocumentArea(QStackedWidget):
         """int: How many documents are open."""
 
         return self._tabs.count()
+
+    @property
+    def showing_placeholder(self) -> bool:
+        """bool: Whether the card is showing the placeholder instead of the tabs."""
+
+        return self._stack.currentWidget() is self._placeholder
 
     def add_document(self, widget: QWidget, title: str) -> int:
         """Open a document in a new tab and make it current.
@@ -150,4 +183,4 @@ class DocumentArea(QStackedWidget):
     def _update_visible_page(self) -> None:
         """Show the placeholder or the tabs, whichever the document count calls for."""
 
-        self.setCurrentWidget(self._tabs if self._tabs.count() else self._placeholder)
+        self._stack.setCurrentWidget(self._tabs if self._tabs.count() else self._placeholder)

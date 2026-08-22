@@ -5,6 +5,13 @@ the :class:`ThemeColors` record of the active scheme, which is turned into a
 ``QPalette`` and a style sheet by :func:`build_palette` and
 :func:`build_stylesheet` and applied by :class:`ThemeManager`.
 
+Three of those colours carry the layout.  ``window`` is the ground the whole
+application is laid on and the colour that shows through the gaps; ``surface``
+is the card a tool pane is drawn as; ``editor`` is the card the documents are
+drawn as.  Cards are inset by :data:`PANE_GAP` and their corners rounded by
+:data:`CARD_RADIUS`, which is what makes them read as floating on the ground
+rather than as regions of one flat window.
+
 The scheme itself is decided by the desktop.  Qt reports it through
 ``QStyleHints.colorScheme()`` and signals every change with
 ``colorSchemeChanged``, so switching the desktop between light and dark repaints
@@ -21,6 +28,17 @@ from PyQt6.QtGui import QColor, QGuiApplication, QPalette
 from PyQt6.QtWidgets import QApplication
 
 
+#: Ground, in pixels, left around every card.
+PANE_GAP = 3
+
+#: Radius, in pixels, of the corners of a card.
+CARD_RADIUS = 8
+
+#: Width, in pixels, of the handle a pane is resized by.  It sits between two
+#: cards that are already inset, so the gap the user sees is wider than this.
+SEPARATOR_WIDTH = 4
+
+
 class ColorScheme(Enum):
     """The two schemes the application knows how to paint."""
 
@@ -35,13 +53,14 @@ class ThemeColors:
     Attributes
     ----------
     window : str
-        Background of ordinary dialogs and of the window itself.
+        The ground everything is laid on: the chrome — top bar, tool stripes,
+        status bar — and the gaps between the cards.
     surface : str
-        Background of the chrome: top bar, tool stripes, status bar, tool panes.
+        Background of a tool pane card.
     editor : str
-        Background of the document area, the largest surface on screen.
+        Background of the document card, the largest surface on screen.
     border : str
-        Hairline that separates the chrome from the document area.
+        Hairline drawn inside a card, under a pane header.
     text : str
         Foreground of ordinary text.
     text_muted : str
@@ -78,7 +97,7 @@ class ThemeColors:
 
 
 LIGHT_COLORS = ThemeColors(
-    window='#f7f8fa',
+    window='#e4e6ea',
     surface='#f7f8fa',
     editor='#ffffff',
     border='#d3d5db',
@@ -94,7 +113,7 @@ LIGHT_COLORS = ThemeColors(
 )
 
 DARK_COLORS = ThemeColors(
-    window='#2b2d30',
+    window='#131417',
     surface='#2b2d30',
     editor='#1e1f22',
     border='#393b40',
@@ -197,8 +216,7 @@ def build_stylesheet(colors: ThemeColors) -> str:
 
     return f"""
     QWidget#TopBar {{
-        background: {colors.surface};
-        border-bottom: 1px solid {colors.border};
+        background: {colors.window};
     }}
 
     QWidget#TopBar QToolButton,
@@ -279,9 +297,8 @@ def build_stylesheet(colors: ThemeColors) -> str:
     }}
 
     QToolBar#SideBar {{
-        background: {colors.surface};
+        background: {colors.window};
         border: none;
-        border-right: 1px solid {colors.border};
         padding: 6px 4px;
         spacing: 4px;
     }}
@@ -292,9 +309,13 @@ def build_stylesheet(colors: ThemeColors) -> str:
     }}
 
     QMainWindow::separator {{
-        background: {colors.border};
-        width: 1px;
-        height: 1px;
+        background: {colors.window};
+        width: {SEPARATOR_WIDTH}px;
+        height: {SEPARATOR_WIDTH}px;
+    }}
+
+    QMainWindow::separator:hover {{
+        background: {colors.accent};
     }}
 
     QDockWidget {{
@@ -303,8 +324,14 @@ def build_stylesheet(colors: ThemeColors) -> str:
         titlebar-normal-icon: none;
     }}
 
-    QWidget#ToolPaneHeader {{
+    QFrame#ToolPaneCard {{
         background: {colors.surface};
+        border: none;
+        border-radius: {CARD_RADIUS}px;
+    }}
+
+    QWidget#ToolPaneHeader {{
+        background: transparent;
         border-bottom: 1px solid {colors.border};
     }}
 
@@ -325,7 +352,7 @@ def build_stylesheet(colors: ThemeColors) -> str:
     }}
 
     QWidget#ToolPaneContent {{
-        background: {colors.surface};
+        background: transparent;
     }}
 
     QLabel#ToolPanePlaceholder {{
@@ -335,7 +362,13 @@ def build_stylesheet(colors: ThemeColors) -> str:
 
     QWidget#DocumentArea,
     QLabel#DocumentPlaceholder {{
+        background: transparent;
+    }}
+
+    QFrame#DocumentCard {{
         background: {colors.editor};
+        border: none;
+        border-radius: {CARD_RADIUS}px;
     }}
 
     QLabel#DocumentPlaceholder {{
@@ -345,11 +378,11 @@ def build_stylesheet(colors: ThemeColors) -> str:
     QTabWidget#DocumentTabs::pane {{
         border: none;
         border-top: 1px solid {colors.border};
-        background: {colors.editor};
+        background: transparent;
     }}
 
     QTabWidget#DocumentTabs QTabBar {{
-        background: {colors.surface};
+        background: transparent;
     }}
 
     QTabWidget#DocumentTabs QTabBar::tab {{
@@ -382,8 +415,7 @@ def build_stylesheet(colors: ThemeColors) -> str:
     }}
 
     QStatusBar#StatusBar {{
-        background: {colors.surface};
-        border-top: 1px solid {colors.border};
+        background: {colors.window};
         color: {colors.text_muted};
     }}
 

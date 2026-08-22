@@ -6,6 +6,7 @@ import pytest
 from PyQt6.QtWidgets import QTabBar, QWidget
 
 from masafi_simtwin.document_area import DocumentArea
+from masafi_simtwin.theme import PANE_GAP
 
 
 @pytest.fixture
@@ -32,7 +33,7 @@ def test_starts_on_the_placeholder(area):
     """With nothing open the area shows its placeholder, not an empty tab bar."""
 
     assert area.document_count == 0
-    assert area.currentWidget() is area._placeholder
+    assert area.showing_placeholder
 
 
 def test_adding_a_document_shows_the_tabs(area):
@@ -42,7 +43,7 @@ def test_adding_a_document_shows_the_tabs(area):
 
     assert index == 0
     assert area.document_count == 1
-    assert area.currentWidget() is area.tabs
+    assert not area.showing_placeholder
     assert area.tabs.tabText(0) == 'Process Flow'
 
 
@@ -71,7 +72,7 @@ def test_closing_the_last_document_restores_the_placeholder(area):
     area.close_document(0)
 
     assert area.document_count == 0
-    assert area.currentWidget() is area._placeholder
+    assert area.showing_placeholder
 
 
 def test_closing_an_absent_document_is_harmless(area):
@@ -108,3 +109,19 @@ def test_the_close_button_closes_its_own_tab(area, qtbot):
 
     assert area.document_count == 1
     assert area.tabs.tabText(0) == 'Second'
+
+
+def test_the_documents_are_a_card_inset_from_the_window(area):
+    """Tabs and content share one rounded card, held off the edges of the area."""
+
+    margins = area.layout().contentsMargins()
+    card = area.findChild(QWidget, 'DocumentCard')
+
+    assert (margins.left(), margins.top(), margins.right(), margins.bottom()) == (
+        PANE_GAP,
+        PANE_GAP,
+        PANE_GAP,
+        PANE_GAP,
+    )
+    assert card is not None
+    assert card.isAncestorOf(area.tabs)
