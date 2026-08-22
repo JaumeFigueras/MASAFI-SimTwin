@@ -44,10 +44,11 @@ def top_bar(qtbot):
 
 
 def test_starts_with_the_hamburger_and_no_menu_bar(top_bar):
-    """The bar opens showing the button, not the menu bar."""
+    """The bar opens showing the buttons, not the menu bar."""
 
     assert not top_bar.menu_bar_visible
     assert top_bar._hamburger_button.isVisible()
+    assert top_bar._project_button.isVisible()
 
 
 def test_hamburger_swaps_itself_for_the_menu_bar(top_bar, qtbot):
@@ -59,7 +60,19 @@ def test_hamburger_swaps_itself_for_the_menu_bar(top_bar, qtbot):
     assert not top_bar._hamburger_button.isVisible()
 
 
-def test_triggering_a_menu_item_brings_the_button_back(top_bar, qtbot):
+def test_the_menu_bar_takes_the_place_of_the_project_button(top_bar, qtbot):
+    """The project name steps aside for as long as the menu titles are up."""
+
+    qtbot.mouseClick(top_bar._hamburger_button, Qt.MouseButton.LeftButton)
+    assert not top_bar._project_button.isVisible()
+
+    qtbot.mouseClick(top_bar, Qt.MouseButton.LeftButton, pos=QPoint(400, 10))
+
+    assert not top_bar.menu_bar_visible
+    assert top_bar._project_button.isVisible()
+
+
+def test_triggering_a_menu_item_brings_the_buttons_back(top_bar, qtbot):
     """The menu bar folds away as soon as an item is triggered."""
 
     qtbot.mouseClick(top_bar._hamburger_button, Qt.MouseButton.LeftButton)
@@ -69,16 +82,18 @@ def test_triggering_a_menu_item_brings_the_button_back(top_bar, qtbot):
 
     assert not top_bar.menu_bar_visible
     assert top_bar._hamburger_button.isVisible()
+    assert top_bar._project_button.isVisible()
 
 
 def test_losing_focus_brings_the_button_back(top_bar, qtbot):
     """Moving the keyboard focus away folds the menu bar away."""
 
     qtbot.mouseClick(top_bar._hamburger_button, Qt.MouseButton.LeftButton)
-    top_bar._project_button.setFocus()
+    top_bar._menu_bar.clearFocus()
     qtbot.waitUntil(lambda: not top_bar.menu_bar_visible, timeout=1000)
 
     assert top_bar._hamburger_button.isVisible()
+    assert top_bar._project_button.isVisible()
 
 
 def test_clicking_the_bar_itself_brings_the_button_back(top_bar, qtbot):

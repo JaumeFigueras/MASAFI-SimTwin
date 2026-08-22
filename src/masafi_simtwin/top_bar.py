@@ -9,7 +9,8 @@ settings button.
 The hamburger does not open a pop-up.  Clicking it *replaces* the button with
 the real ``QMenuBar``, laid out in the same place; the menu bar disappears and
 the button comes back as soon as an item is triggered or the user clicks
-elsewhere.  That is the behaviour of the compact main menu in PyCharm, and it is
+elsewhere.  The project button steps aside with it, so the menu titles keep the
+left of the bar to themselves and nothing shifts sideways as menus are opened.  That is the behaviour of the compact main menu in PyCharm, and it is
 why the menu bar lives in this widget rather than in the window's own menu bar
 slot — that slot is taken by this bar.
 """
@@ -293,6 +294,10 @@ class TopBar(QWidget):
     def _expand_menu_bar(self) -> None:
         """Replace the hamburger button with the menu bar and focus it.
 
+        The project button is taken down for as long as the menu bar is up: the
+        menu titles are what the left of the bar is for while the menu is open,
+        and the project name would only be pushed about as they take the room.
+
         While the menu bar stands in for the button, this widget filters the
         events of the whole application, which is what lets a click anywhere
         outside the menu fold it away again.
@@ -302,6 +307,7 @@ class TopBar(QWidget):
             return
 
         self._hamburger_button.hide()
+        self._project_button.hide()
         self._menu_bar.show()
         self._menu_bar.setFocus(Qt.FocusReason.MouseFocusReason)
 
@@ -310,7 +316,7 @@ class TopBar(QWidget):
             application.installEventFilter(self)
 
     def _collapse_menu_bar(self) -> None:
-        """Hide the menu bar and bring the hamburger button back."""
+        """Hide the menu bar and bring the hamburger and project buttons back."""
 
         application = QApplication.instance()
         if application is not None:
@@ -318,6 +324,7 @@ class TopBar(QWidget):
 
         self._menu_bar.hide()
         self._hamburger_button.show()
+        self._project_button.show()
 
     def _collapse_menu_bar_if_idle(self) -> None:
         """Collapse the menu bar unless the user is still working in it.
