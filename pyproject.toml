@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "masafi-simtwin"
+version = "0.1.0"
+description = "Graphical frontend for the MASAFI simulation libraries"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "Jaume Figueras", email = "jaume.figueras.jove@gmail.com" },
+]
+license = { text = "GPL-3.0-or-later" }
+dependencies = [
+    "PyQt6>=6.6",
+    "qt-material-icons>=0.4.1",
+    "qtpy>=2.4",
+]
+
+[project.scripts]
+masafi-simtwin = "masafi_simtwin.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["masafi_simtwin*", "simtwin_core*", "simtwin_adapters*"]
+
+[tool.setuptools.package-data]
+masafi_simtwin = ["resources/*.svg"]
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+
+[tool.coverage.run]
+source = ["src/masafi_simtwin"]

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <!-- Placeholder mark: three blocks wired into a flow. To be replaced by the
+       final MASAFI-SimTwin logo; the colours are deliberately theme neutral so
+       the mark reads on both the light and the dark chrome. -->
+  <g fill="none" stroke="#3574f0" stroke-width="1.6" stroke-linecap="round">
+    <path d="M7 7.5h4.5a1.5 1.5 0 0 1 1.5 1.5v6a1.5 1.5 0 0 0 1.5 1.5H17"/>
+  </g>
+  <rect x="1.5" y="4.5" width="6" height="6" rx="1.8" fill="#3574f0"/>
+  <rect x="16.5" y="13.5" width="6" height="6" rx="1.8" fill="#3574f0"/>
+  <circle cx="19.5" cy="7.5" r="2.6" fill="#6ea1ff"/>
+</svg>
