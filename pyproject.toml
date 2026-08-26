@@ -26,10 +26,13 @@ where = ["src"]
 include = ["masafi_simtwin*", "simtwin_core*", "simtwin_adapters*"]
 
 [tool.setuptools.package-data]
-masafi_simtwin = ["resources/*.svg"]
+masafi_simtwin = ["resources/*.svg", "translations/*.qm"]
 
 [tool.pytest.ini_options]
 testpaths = ["test"]
+markers = [
+    "i18n: checks of the translation catalogues rather than of the application",
+]
 
 [tool.coverage.run]
 source = ["src/masafi_simtwin"]

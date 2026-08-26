@@ -9,6 +9,9 @@ PYTEST        := $(VENV)/bin/pytest
 
 SRC_DIR       := src
 TEST_DIR      := test
+TOOLS_DIR     := tools
+TS_DIR        := $(SRC_DIR)/masafi_simtwin/translations
+LINGUIST      := $(shell command -v linguist 2>/dev/null || echo /usr/lib/qt6/bin/linguist)
 DOCS_DIR      := docs
 DOCS_BUILD    := $(DOCS_DIR)/build
 COVERAGE_DIR  := $(TEST_DIR)/coverage_reports
@@ -23,7 +26,7 @@ COVERAGE_DIR  := $(TEST_DIR)/coverage_reports
 help:  ## Show this help
 	@echo "MASAFI-SimTwin — available targets:"
 	@echo
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 	@echo
 
@@ -53,8 +56,15 @@ run:  ## Launch the application
 # ----------------------------------------------------------------------------
 
 .PHONY: test
-test:  ## Run all tests, fast (no coverage)
-	QT_QPA_PLATFORM=offscreen $(PYTEST) $(TEST_DIR) -q
+test:  ## Run the application tests, fast (no coverage)
+	QT_QPA_PLATFORM=offscreen $(PYTEST) $(TEST_DIR) -q -m "not i18n"
+
+.PHONY: test-i18n
+test-i18n:  ## Check the translation catalogues on their own
+	QT_QPA_PLATFORM=offscreen $(PYTEST) $(TEST_DIR) -q -m i18n
+
+.PHONY: test-all
+test-all: test test-i18n  ## Run the application tests and the translation checks
 
 .PHONY: test-full
 test-full:  ## Run all tests with coverage; reports in test/coverage_reports
@@ -71,6 +81,26 @@ test-full:  ## Run all tests with coverage; reports in test/coverage_reports
 test-one:  ## Run a single test, e.g. make test-one T=test/foo_test.py::test_bar
 	@test -n "$(T)" || { echo "Usage: make test-one T=<test path or node id>"; exit 2; }
 	QT_QPA_PLATFORM=offscreen $(PYTEST) $(T) -q
+
+# ----------------------------------------------------------------------------
+# Translations
+# ----------------------------------------------------------------------------
+
+.PHONY: translations
+translations: ts qm  ## Extract the strings and compile the catalogues
+
+.PHONY: ts
+ts:  ## Update the .ts catalogues from the sources
+	$(PYTHON) $(TOOLS_DIR)/update_translations.py --update
+
+.PHONY: qm
+qm:  ## Compile the .ts catalogues into the .qm the application loads
+	$(PYTHON) $(TOOLS_DIR)/update_translations.py --release
+
+.PHONY: linguist
+linguist:  ## Open a catalogue in Qt Linguist, e.g. make linguist L=ca
+	@test -n "$(L)" || { echo "Usage: make linguist L=<language>"; exit 2; }
+	$(LINGUIST) $(TS_DIR)/masafi_simtwin_$(L).ts &
 
 # ----------------------------------------------------------------------------
 # Documentation

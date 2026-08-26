@@ -24,6 +24,26 @@ def qapp_cls():
 
 
 @pytest.fixture(autouse=True, scope='session')
+def source_language(qapp):
+    """Run the suite in the source language, whatever the desktop says.
+
+    The application follows the locale of the machine it starts on, so on a
+    Catalan desktop every assertion on an English string would fail.  Taking
+    the catalogues back out leaves the ``tr()`` literals in place, which is what
+    the tests of the application are written against; the catalogues themselves
+    are checked by the tests marked ``i18n``.
+
+    Parameters
+    ----------
+    qapp : masafi_simtwin.application.SimTwinApplication
+        The application pytest-qt built.
+    """
+
+    qapp.remove_translators()
+    return qapp
+
+
+@pytest.fixture(autouse=True, scope='session')
 def isolated_settings(tmp_path_factory):
     """Keep ``QSettings`` out of the developer's real configuration.
 
