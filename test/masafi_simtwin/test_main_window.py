@@ -80,6 +80,47 @@ def test_menu_bar_has_the_classic_menus(window):
     assert titles == ['&File', '&Edit', '&View', '&Navigate', '&Run', '&Tools', '&Window', '&Help']
 
 
+def test_only_file_and_help_are_shown_without_a_project(window):
+    """With nothing open there is nothing to edit, view, navigate or run."""
+
+    titles = [
+        action.text() for action in window.top_bar._menu_bar.actions() if action.isVisible()
+    ]
+
+    assert titles == ['&File', '&Help']
+
+
+def test_the_other_menus_follow_the_open_project(window):
+    """The rest of the menu bar appears with a project and leaves with it."""
+
+    window.open_project_path('/home/jaume/codi/MASAFI-SimTwin')
+    opened = [
+        action.text() for action in window.top_bar._menu_bar.actions() if action.isVisible()
+    ]
+
+    window.close_project()
+    closed = [
+        action.text() for action in window.top_bar._menu_bar.actions() if action.isVisible()
+    ]
+
+    assert opened == ['&File', '&Edit', '&View', '&Navigate', '&Run', '&Tools', '&Window', '&Help']
+    assert closed == ['&File', '&Help']
+
+
+def test_the_file_menu_opens_with_new_open_and_recent(window):
+    """*File* leads with the three ways into a project, then close and exit."""
+
+    file_menu = window.top_bar._menu_bar.actions()[0].menu()
+    entries = [action for action in file_menu.actions() if not action.isSeparator()]
+
+    assert entries[0] is window.new_project_action
+    assert entries[1] is window.open_project_action
+    assert entries[2] is window._recent_menu.menuAction()
+    assert entries[3] is window.close_project_action
+    assert entries[4] is window.quit_action
+    assert not window.close_project_action.isEnabled()
+
+
 def test_simulation_controls_are_shared_with_the_run_menu(window):
     """The top bar buttons and the Run menu are two views of the same actions."""
 

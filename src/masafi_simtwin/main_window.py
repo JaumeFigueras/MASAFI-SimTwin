@@ -77,6 +77,14 @@ class MainWindow(QMainWindow):
         that the *Run* menu and the top bar share one action each.
         """
 
+        self.new_project_action = QAction(self.tr('New Project…'), self)
+        self.new_project_action.setShortcut(QKeySequence.StandardKey.New)
+        self.new_project_action.triggered.connect(
+            lambda: self.statusBar().showMessage(
+                self.tr('Creating a project is not implemented yet'), 4000
+            )
+        )
+
         self.open_project_action = QAction(self.tr('Open Project…'), self)
         self.open_project_action.setShortcut(QKeySequence.StandardKey.Open)
         self.open_project_action.triggered.connect(self.open_project)
@@ -143,12 +151,15 @@ class MainWindow(QMainWindow):
         PyQt6.QtWidgets.QMenuBar
             The menu bar.  Entries with no implementation behind them yet are
             present but disabled, so that the shape of the application is
-            visible without pretending the feature works.
+            visible without pretending the feature works.  Every menu is built
+            here, but only *File* and *Help* are visible while no project is
+            open; see :meth:`_update_menus_for_project`.
         """
 
         menu_bar = QMenuBar(self)
 
         file_menu = menu_bar.addMenu(self.tr('&File'))
+        file_menu.addAction(self.new_project_action)
         file_menu.addAction(self.open_project_action)
         self._recent_menu = file_menu.addMenu(self.tr('Open Recent'))
         file_menu.addSeparator()
@@ -215,6 +226,16 @@ class MainWindow(QMainWindow):
         help_menu.addSeparator()
         help_menu.addAction(self.about_action)
 
+        self._project_menus = [
+            edit_menu,
+            view_menu,
+            navigate_menu,
+            run_menu,
+            tools_menu,
+            window_menu,
+        ]
+        self._update_menus_for_project()
+
         return menu_bar
 
     def _add_placeholder_actions(self, menu: QMenu, titles: list[str | None]) -> None:
@@ -234,6 +255,17 @@ class MainWindow(QMainWindow):
                 continue
             action: QAction = menu.addAction(title)
             action.setEnabled(False)
+
+    def _update_menus_for_project(self) -> None:
+        """Show only the menus that make sense for the current project state.
+
+        With no project open there is nothing to edit, view, navigate or run, so
+        the menu bar keeps *File* and *Help* alone; the rest appear once a
+        project is open and go away again when it is closed.
+        """
+
+        for menu in self._project_menus:
+            menu.menuAction().setVisible(bool(self._project_name))
 
     # ------------------------------------------------------------------
     # Window furniture
@@ -407,6 +439,7 @@ class MainWindow(QMainWindow):
         self._top_bar.set_project_name(self._project_name)
         self.setWindowTitle(f'{self._project_name} — {APPLICATION_NAME}')
         self.close_project_action.setEnabled(True)
+        self._update_menus_for_project()
         self._remember_project(path)
         self.statusBar().showMessage(self.tr('Opened {0}').format(path), 4000)
 
@@ -417,6 +450,7 @@ class MainWindow(QMainWindow):
         self._top_bar.set_project_name(self.tr('No Project'))
         self.setWindowTitle(APPLICATION_NAME)
         self.close_project_action.setEnabled(False)
+        self._update_menus_for_project()
         self.statusBar().showMessage(self.tr('Project closed'), 4000)
 
     def _remember_project(self, path: str) -> None:
