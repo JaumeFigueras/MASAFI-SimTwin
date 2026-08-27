@@ -922,13 +922,12 @@ def test_clearing_says_so(window, make_project):
 def test_open_recent_lists_the_history_then_the_way_to_be_rid_of_it(window, make_project):
     """*File → Open Recent* is the drop-down without its *Open Project* entry."""
 
-    one, two = make_project('One'), make_project('Two')
-    window.open_project_path(one)
-    window.open_project_path(two)
+    window.open_project_path(make_project('One'))
+    window.open_project_path(make_project('Two'))
 
     assert open_recent(window) == [
-        two,
-        one,
+        'Two',
+        'One',
         '---',
         window.clear_recent_projects_action.text(),
     ]
@@ -978,8 +977,141 @@ def test_a_stored_history_reaches_both_menus_when_the_window_opens(window, make_
 
     assert reopened._recent_projects == [path]
     assert open_recent(reopened) == [
-        path,
+        'Bottling Line',
         '---',
         reopened.clear_recent_projects_action.text(),
     ]
     assert reopened.clear_recent_projects_action.isEnabled()
+
+
+# ----------------------------------------------------------------------
+# How the history is shown
+# ----------------------------------------------------------------------
+
+
+def test_a_project_is_listed_by_its_manifest_name(window, make_project):
+    """Not by its path, in either menu."""
+
+    path = make_project('Bottling Line')
+    window.open_project_path(path)
+
+    assert open_recent(window)[0] == 'Bottling Line'
+    assert drop_down(window)[2] == 'Bottling Line'
+
+
+def test_a_renamed_file_keeps_the_name_of_the_project_inside_it(window, make_project):
+    """Which is what reading the manifest buys."""
+
+    path = Path(make_project('Bottling Line'))
+    renamed = path.with_name(f'moved{project.PROJECT_SUFFIX}')
+    path.rename(renamed)
+    window.open_project_path(str(renamed))
+
+    assert open_recent(window)[0] == 'Bottling Line'
+
+
+def test_projects_sharing_a_name_are_told_apart_by_their_path(window, tmp_path):
+    """In both menus, and only the ones that clash."""
+
+    here, there = tmp_path / 'here', tmp_path / 'there'
+    here.mkdir()
+    there.mkdir()
+    first = str(project.create(project.path_for(here, 'Line'), 'Line'))
+    second = str(project.create(project.path_for(there, 'Line'), 'Line'))
+    other = str(project.create(project.path_for(here, 'Other'), 'Other'))
+
+    for path in (first, second, other):
+        window.open_project_path(path)
+
+    assert open_recent(window)[:3] == [
+        'Other',
+        f'Line ({second})',
+        f'Line ({first})',
+    ]
+    assert drop_down(window)[2:5] == open_recent(window)[:3]
+
+
+def test_the_entry_carries_the_path_it_opens(window, make_project):
+    """The label is a name now, so the path has to be kept on the entry."""
+
+    path = make_project('Bottling Line')
+    window.open_project_path(path)
+    entry = window._recent_menu.actions()[0]
+
+    assert entry.data() == path
+    assert entry.toolTip() == path
+
+
+def test_a_recent_entry_still_opens_its_project(window, make_project):
+    """The name shown must not get in the way of what the entry does."""
+
+    first = make_project('One')
+    window.open_project_path(first)
+    window.open_project_path(make_project('Two'))
+
+    window._recent_menu.actions()[1].trigger()
+
+    assert window.windowTitle() == f'One — {APPLICATION_NAME}'
+
+
+# ----------------------------------------------------------------------
+# Projects that have gone
+# ----------------------------------------------------------------------
+
+
+def test_a_deleted_project_is_forgotten_silently(window, make_project, qtbot):
+    """Deleted outside the application, so nothing is worth reporting."""
+
+    gone = make_project('Gone')
+    kept = make_project('Kept')
+    window.open_project_path(gone)
+    window.open_project_path(kept)
+    Path(gone).unlink()
+
+    reopened = MainWindow()
+    qtbot.addWidget(reopened)
+
+    assert reopened._recent_projects == [kept]
+    assert open_recent(reopened)[0] == 'Kept'
+    assert reopened.statusBar().currentMessage() == 'Ready'
+
+
+def test_forgetting_a_project_is_stored(window, make_project, qtbot):
+    """Otherwise it would come back on the next start-up."""
+
+    gone = make_project('Gone')
+    window.open_project_path(gone)
+    Path(gone).unlink()
+
+    MainWindow().close()
+    reopened = MainWindow()
+    qtbot.addWidget(reopened)
+
+    assert reopened._recent_projects == []
+
+
+def test_a_history_of_nothing_but_missing_projects_empties(window, make_project, qtbot):
+    """And the clear entry goes back to being disabled."""
+
+    for name in ('One', 'Two'):
+        path = make_project(name)
+        window.open_project_path(path)
+        Path(path).unlink()
+
+    reopened = MainWindow()
+    qtbot.addWidget(reopened)
+
+    assert reopened._recent_projects == []
+    assert not reopened.clear_recent_projects_action.isEnabled()
+    assert open_recent(reopened)[0] == 'No Recent Projects'
+
+
+def test_a_broken_project_keeps_its_place(window, tmp_path, qtbot):
+    """It is there, so it is not missing; it is shown under its file name."""
+
+    broken = tmp_path / f'broken{project.PROJECT_SUFFIX}'
+    broken.write_bytes(b'not a zip')
+    window._publish_recent_projects([str(broken)])
+
+    assert window._recent_projects == [str(broken)]
+    assert open_recent(window)[0] == 'broken'

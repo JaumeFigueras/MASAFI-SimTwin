@@ -592,11 +592,30 @@ class MainWindow(QMainWindow):
         window is built as well as whenever the history changes: the list is
         read back from the settings before either menu exists, so without it a
         stored history would reach the drop-down and never the menu.
+
+        A project is shown by the name in its manifest rather than by its path,
+        and projects whose files have gone are forgotten first, which is why
+        start-up is the right moment for this as well.
         """
 
-        self.clear_recent_projects_action.setEnabled(bool(self._recent_projects))
-        self._top_bar.set_recent_projects(self._recent_projects)
-        self._rebuild_recent_menu()
+        self._forget_missing_projects()
+        projects = project.labels_for(self._recent_projects)
+        self.clear_recent_projects_action.setEnabled(bool(projects))
+        self._top_bar.set_recent_projects(projects)
+        self._rebuild_recent_menu(projects)
+
+    def _forget_missing_projects(self) -> None:
+        """Drop from the history the projects whose files have gone.
+
+        Silently: a project deleted or moved outside the application is not
+        something the user needs telling about, and an entry that cannot lead
+        anywhere is worse than no entry.
+        """
+
+        existing = [path for path in self._recent_projects if Path(path).is_file()]
+        if existing != self._recent_projects:
+            self._recent_projects = existing
+            self._settings.setValue('recent_projects', existing)
 
     def _load_recent_projects(self) -> list[str]:
         """Read the recent project list back from the settings.
@@ -615,7 +634,7 @@ class MainWindow(QMainWindow):
             return [str(path) for path in stored]
         return []
 
-    def _rebuild_recent_menu(self) -> None:
+    def _rebuild_recent_menu(self, projects: list[tuple[str, str]]) -> None:
         """Mirror the recent project list into the *File → Open Recent* menu.
 
         The menu is the drop-down on the top bar without its *Open Project*
@@ -623,15 +642,22 @@ class MainWindow(QMainWindow):
         history, then a separator, then *Clear Recent Projects*.  The last entry
         is always there, disabled when there is nothing to clear, so that the
         menu keeps the same shape whatever the history holds.
+
+        Parameters
+        ----------
+        projects : list of tuple of str
+            The history as ``(label, path)`` pairs, most recent first.
         """
 
         self._recent_menu.clear()
-        if not self._recent_projects:
+        if not projects:
             empty = self._recent_menu.addAction(self.tr('No Recent Projects'))
             empty.setEnabled(False)
         else:
-            for path in self._recent_projects:
-                action = self._recent_menu.addAction(path)
+            for label, path in projects:
+                action = self._recent_menu.addAction(label)
+                action.setData(path)
+                action.setToolTip(path)
                 action.triggered.connect(
                     lambda _checked=False, selected=path: self.open_project_path(selected)
                 )

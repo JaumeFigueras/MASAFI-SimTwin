@@ -158,6 +158,54 @@ def read_manifest(path: str | Path) -> dict:
     return found
 
 
+def label_for(path: str | Path) -> str:
+    """Give the name to show for a project in a list of them.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        The project file.
+
+    Returns
+    -------
+    str
+        The name in the manifest, falling back to the file's own stem when the
+        manifest cannot be read.  A file that is there but unreadable keeps its
+        place in a history — it is a broken project rather than a missing one,
+        and opening it is what reports why.
+    """
+
+    try:
+        return name_of(path)
+    except ProjectError:
+        return Path(path).stem
+
+
+def labels_for(paths: list[str]) -> list[tuple[str, str]]:
+    """Name every project of a list, telling apart the ones that share a name.
+
+    Two projects of the same name in different places would otherwise be one
+    entry repeated, so those — and only those — carry their path after the name.
+
+    Parameters
+    ----------
+    paths : list of str
+        The project files, in the order they are to be shown.
+
+    Returns
+    -------
+    list of tuple of str
+        A ``(label, path)`` pair for each, in the order given.
+    """
+
+    names = [label_for(path) for path in paths]
+    repeated = {name for name in names if names.count(name) > 1}
+    return [
+        (f'{name} ({path})' if name in repeated else name, path)
+        for name, path in zip(names, paths)
+    ]
+
+
 def name_of(path: str | Path) -> str:
     """Give the name a project goes by.
 

@@ -254,7 +254,7 @@ class TopBar(QWidget):
         self._project_button.setText(name)
         self._project_button.setToolTip(name)
 
-    def set_recent_projects(self, paths: list[str]) -> None:
+    def set_recent_projects(self, projects: list[tuple[str, str]]) -> None:
         """Rebuild the project drop-down.
 
         The menu always opens with *Open Project*; the recent projects follow it
@@ -265,13 +265,19 @@ class TopBar(QWidget):
         The last entry is always there, disabled when there is nothing to clear,
         so that the menu keeps the same shape whatever the history holds.
 
+        A project is shown by its name; its path is on the entry as a tool tip,
+        and after the name in brackets when two projects of the history share a
+        name.  Naming them is the window's business, not the bar's — see
+        :func:`masafi_simtwin.project.labels_for`.
+
         Parameters
         ----------
-        paths : list of str
-            Paths of the recently opened projects, most recent first.
+        projects : list of tuple of str
+            The recently opened projects as ``(label, path)`` pairs, most recent
+            first.
         """
 
-        self._recent_projects = list(paths)
+        self._recent_projects = list(projects)
         menu = self._project_button.menu()
         menu.clear()
         menu.addAction(self._open_project_action)
@@ -281,9 +287,10 @@ class TopBar(QWidget):
             placeholder = menu.addAction(self.tr('No Recent Projects'))
             placeholder.setEnabled(False)
         else:
-            for path in self._recent_projects:
-                action = menu.addAction(path)
+            for label, path in self._recent_projects:
+                action = menu.addAction(label)
                 action.setData(path)
+                action.setToolTip(path)
                 action.triggered.connect(
                     lambda _checked=False, selected=path: self.recent_project_selected.emit(
                         selected

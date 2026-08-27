@@ -185,3 +185,83 @@ def test_the_project_file_knows_nothing_of_qt():
     source = Path(project.__file__).read_text(encoding='utf-8')
     assert 'PyQt6' not in source
     assert 'QtCore' not in source
+
+
+# ----------------------------------------------------------------------
+# How a project is named in a list of them
+# ----------------------------------------------------------------------
+
+
+def test_a_project_is_named_by_its_manifest(created):
+    """Not by its file, which is the point of keeping a name in there."""
+
+    renamed = created.with_name(f'copy{project.PROJECT_SUFFIX}')
+    created.rename(renamed)
+
+    assert project.label_for(renamed) == 'Bottling Line'
+
+
+def test_a_broken_project_falls_back_to_its_file_name(tmp_path):
+    """It is there but unreadable, so it keeps its place under some name."""
+
+    path = tmp_path / f'broken{project.PROJECT_SUFFIX}'
+    path.write_bytes(b'not a zip')
+
+    assert project.label_for(path) == 'broken'
+
+
+def test_projects_with_distinct_names_are_shown_by_name_alone(tmp_path):
+    """Which is the whole improvement: no paths in the common case."""
+
+    one = str(project.create(project.path_for(tmp_path, 'One'), 'One'))
+    two = str(project.create(project.path_for(tmp_path, 'Two'), 'Two'))
+
+    assert project.labels_for([one, two]) == [('One', one), ('Two', two)]
+
+
+def test_projects_sharing_a_name_carry_their_path(tmp_path):
+    """Otherwise the two would be one entry repeated."""
+
+    here, there = tmp_path / 'here', tmp_path / 'there'
+    here.mkdir()
+    there.mkdir()
+    first = str(project.create(project.path_for(here, 'Line'), 'Line'))
+    second = str(project.create(project.path_for(there, 'Line'), 'Line'))
+
+    assert project.labels_for([first, second]) == [
+        (f'Line ({first})', first),
+        (f'Line ({second})', second),
+    ]
+
+
+def test_only_the_names_that_clash_carry_a_path(tmp_path):
+    """A third project of its own name is left alone."""
+
+    here, there = tmp_path / 'here', tmp_path / 'there'
+    here.mkdir()
+    there.mkdir()
+    first = str(project.create(project.path_for(here, 'Line'), 'Line'))
+    second = str(project.create(project.path_for(there, 'Line'), 'Line'))
+    other = str(project.create(project.path_for(here, 'Other'), 'Other'))
+
+    labels = dict((path, label) for label, path in project.labels_for([first, second, other]))
+
+    assert labels[other] == 'Other'
+    assert labels[first].startswith('Line (')
+
+
+def test_the_order_given_is_the_order_returned(tmp_path):
+    """The history is most recent first and must stay that way."""
+
+    paths = [
+        str(project.create(project.path_for(tmp_path, name), name))
+        for name in ('One', 'Two', 'Three')
+    ]
+
+    assert [path for _label, path in project.labels_for(paths)] == paths
+
+
+def test_naming_nothing_gives_nothing(tmp_path):
+    """An empty history is not a special case anywhere else."""
+
+    assert project.labels_for([]) == []

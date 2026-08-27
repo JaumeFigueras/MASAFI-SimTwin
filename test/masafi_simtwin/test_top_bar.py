@@ -176,19 +176,28 @@ def test_project_menu_offers_open_project_first(top_bar):
 def test_project_menu_lists_recent_projects(top_bar):
     """Recent projects follow Open Project, in the order given."""
 
-    top_bar.set_recent_projects(['/home/jaume/codi/one', '/home/jaume/codi/two'])
+    top_bar.set_recent_projects(
+        [('One', '/home/jaume/codi/one'), ('Two', '/home/jaume/codi/two')]
+    )
     entries = top_bar._project_button.menu().actions()
 
-    assert [entry.text() for entry in entries[2:-2]] == [
-        '/home/jaume/codi/one',
-        '/home/jaume/codi/two',
-    ]
+    assert [entry.text() for entry in entries[2:-2]] == ['One', 'Two']
+
+
+def test_a_recent_project_carries_its_path(top_bar):
+    """The name is what is shown; the path is on the entry for the window."""
+
+    top_bar.set_recent_projects([('One', '/home/jaume/codi/one')])
+    entry = top_bar._project_button.menu().actions()[2]
+
+    assert entry.data() == '/home/jaume/codi/one'
+    assert entry.toolTip() == '/home/jaume/codi/one'
 
 
 def test_the_menu_ends_with_a_separator_and_the_clear_entry(top_bar):
     """Whatever the history holds, so the menu keeps one shape."""
 
-    for history in ([], ['/home/jaume/codi/one']):
+    for history in ([], [('One', '/home/jaume/codi/one')]):
         top_bar.set_recent_projects(history)
         entries = top_bar._project_button.menu().actions()
 
@@ -199,7 +208,7 @@ def test_the_menu_ends_with_a_separator_and_the_clear_entry(top_bar):
 def test_the_clear_entry_is_the_action_the_bar_was_given(top_bar):
     """The bar shows the window's action rather than one of its own."""
 
-    top_bar.set_recent_projects(['/home/jaume/codi/one'])
+    top_bar.set_recent_projects([('One', '/home/jaume/codi/one')])
     last = top_bar._project_button.menu().actions()[-1]
 
     assert last.text() == 'Clear Recent Projects'
@@ -207,9 +216,9 @@ def test_the_clear_entry_is_the_action_the_bar_was_given(top_bar):
 
 
 def test_selecting_a_recent_project_is_reported(top_bar, qtbot):
-    """Picking a project from the drop-down emits its path."""
+    """Picking a project from the drop-down emits its path, not its name."""
 
-    top_bar.set_recent_projects(['/home/jaume/codi/one'])
+    top_bar.set_recent_projects([('One', '/home/jaume/codi/one')])
     entry = top_bar._project_button.menu().actions()[2]
 
     with qtbot.waitSignal(top_bar.recent_project_selected, timeout=1000) as blocker:
