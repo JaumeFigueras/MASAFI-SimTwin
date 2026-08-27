@@ -23,5 +23,14 @@ dark.
 from __future__ import annotations
 
 from masafi_simtwin.dialogs.about import AboutDialog
+from masafi_simtwin.dialogs.new_project import NewProjectDialog
+from masafi_simtwin.dialogs.restart import ask_to_restart, warn_restart_needed
+from masafi_simtwin.dialogs.settings import SettingsDialog
 
-__all__ = ['AboutDialog']
+__all__ = [
+    'AboutDialog',
+    'NewProjectDialog',
+    'SettingsDialog',
+    'ask_to_restart',
+    'warn_restart_needed',
+]

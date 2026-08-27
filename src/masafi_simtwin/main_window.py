@@ -12,20 +12,31 @@ the documents fill the centre; the status bar closes the window at the bottom.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PyQt6.QtCore import QSettings, QSize, Qt
 from PyQt6.QtGui import QAction, QKeySequence
 from PyQt6.QtWidgets import (
+    QApplication,
+    QDialog,
     QFileDialog,
     QLabel,
     QMainWindow,
     QMenu,
     QMenuBar,
+    QMessageBox,
     QStatusBar,
     QWidget,
 )
 
-from masafi_simtwin import APPLICATION_NAME, icons
-from masafi_simtwin.dialogs import AboutDialog
+from masafi_simtwin import APPLICATION_NAME, icons, project
+from masafi_simtwin.dialogs import (
+    AboutDialog,
+    NewProjectDialog,
+    SettingsDialog,
+    ask_to_restart,
+)
+from masafi_simtwin.preferences import needs_restart
 from masafi_simtwin.document_area import DocumentArea
 from masafi_simtwin.side_bar import SideBar
 from masafi_simtwin.tool_pane import ToolPane
@@ -80,11 +91,7 @@ class MainWindow(QMainWindow):
 
         self.new_project_action = QAction(self.tr('New Project…'), self)
         self.new_project_action.setShortcut(QKeySequence.StandardKey.New)
-        self.new_project_action.triggered.connect(
-            lambda: self.statusBar().showMessage(
-                self.tr('Creating a project is not implemented yet'), 4000
-            )
-        )
+        self.new_project_action.triggered.connect(self.new_project)
 
         self.open_project_action = QAction(self.tr('Open Project…'), self)
         self.open_project_action.setShortcut(QKeySequence.StandardKey.Open)
@@ -134,9 +141,7 @@ class MainWindow(QMainWindow):
         self.settings_action.setShortcut(QKeySequence.StandardKey.Preferences)
         self.settings_action.setMenuRole(QAction.MenuRole.PreferencesRole)
         icons.set_icon(self.settings_action, 'settings')
-        self.settings_action.triggered.connect(
-            lambda: self.statusBar().showMessage(self.tr('Settings are not implemented yet'), 4000)
-        )
+        self.settings_action.triggered.connect(self.show_settings)
 
         self.about_action = QAction(self.tr('About {0}').format(APPLICATION_NAME), self)
         self.about_action.setMenuRole(QAction.MenuRole.AboutRole)
@@ -415,32 +420,81 @@ class MainWindow(QMainWindow):
     # Projects
     # ------------------------------------------------------------------
 
-    def open_project(self) -> None:
-        """Ask for a project directory and open it."""
+    def new_project(self) -> None:
+        """Ask where a new project goes, write it, and open it.
 
-        directory = QFileDialog.getExistingDirectory(self, self.tr('Open Project'))
-        if directory:
-            self.open_project_path(directory)
+        The dialog settles on a path and nothing more; the writing happens here,
+        where a failure has a window to be reported on.
+        """
+
+        dialog = NewProjectDialog(self, self._last_location())
+        if dialog.exec() != QDialog.DialogCode.Accepted or dialog.project_path is None:
+            return
+        try:
+            created = project.create(dialog.project_path, dialog.name)
+        except project.ProjectError as error:
+            QMessageBox.critical(
+                self,
+                self.tr('The project could not be created'),
+                str(error),
+            )
+            return
+        self.open_project_path(str(created))
+
+    def open_project(self) -> None:
+        """Ask for a project file and open it."""
+
+        path, _filter = QFileDialog.getOpenFileName(
+            self,
+            self.tr('Open Project'),
+            self._last_location(),
+            self.tr('MASAFI-SimTwin projects (*{0})').format(project.PROJECT_SUFFIX),
+        )
+        if path:
+            self.open_project_path(path)
 
     def open_project_path(self, path: str) -> None:
         """Open a project by path.
 
-        There is no project model yet, so this records the project as open,
-        moves it to the head of the recent list and updates the chrome.
+        There is no project model yet, so this reads the name out of the
+        manifest, records the project as open, moves it to the head of the
+        recent list and updates the chrome.
 
         Parameters
         ----------
         path : str
-            Directory of the project.
+            The ``.mfstz`` file of the project.
         """
 
-        self._project_name = path.rstrip('/').rpartition('/')[2] or path
+        try:
+            name = project.name_of(path)
+        except project.ProjectError as error:
+            QMessageBox.critical(self, self.tr('The project could not be opened'), str(error))
+            return
+
+        self._project_name = name
         self._top_bar.set_project_name(self._project_name)
         self.setWindowTitle(f'{self._project_name} — {APPLICATION_NAME}')
         self.close_project_action.setEnabled(True)
         self._update_menus_for_project()
         self._remember_project(path)
         self.statusBar().showMessage(self.tr('Opened {0}').format(path), 4000)
+
+    def _last_location(self) -> str:
+        """Give the directory to offer first in a project dialog.
+
+        Returns
+        -------
+        str
+            The directory of the most recently opened project, and an empty
+            string when there is none, which leaves the choice to the dialog.
+        """
+
+        for path in self._recent_projects:
+            parent = Path(path).parent
+            if parent.is_dir():
+                return str(parent)
+        return ''
 
     def close_project(self) -> None:
         """Close the open project and put the chrome back to its empty state."""
@@ -506,6 +560,21 @@ class MainWindow(QMainWindow):
         """Open the About dialog, modal over the window."""
 
         AboutDialog(self).exec()
+
+    def show_settings(self) -> None:
+        """Open the Settings dialog, and offer the restart it may have earned.
+
+        The question comes after the dialog has closed, which is what the
+        dialog told the user to expect when the preference was changed.
+        """
+
+        dialog = SettingsDialog(self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        if needs_restart(dialog.written) and ask_to_restart(self):
+            application = QApplication.instance()
+            if application is not None:
+                application.restart()
 
     # ------------------------------------------------------------------
     # Slots

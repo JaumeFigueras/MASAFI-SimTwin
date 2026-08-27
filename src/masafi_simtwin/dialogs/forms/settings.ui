@@ -1,0 +1,598 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>SettingsDialog</class>
+ <widget class="QDialog" name="SettingsDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>720</width>
+    <height>460</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Settings</string>
+  </property>
+  <property name="modal">
+   <bool>true</bool>
+  </property>
+  <layout class="QVBoxLayout" name="dialog_layout">
+   <item>
+    <widget class="QSplitter" name="splitter">
+     <property name="orientation">
+      <enum>Qt::Orientation::Horizontal</enum>
+     </property>
+     <property name="childrenCollapsible">
+      <bool>false</bool>
+     </property>
+     <widget class="QTreeWidget" name="category_tree">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="maximumSize">
+       <size>
+        <width>320</width>
+        <height>16777215</height>
+       </size>
+      </property>
+      <property name="minimumSize">
+       <size>
+        <width>180</width>
+        <height>0</height>
+       </size>
+      </property>
+      <property name="headerHidden">
+       <bool>true</bool>
+      </property>
+      <column>
+       <property name="text">
+        <string notr="true">Category</string>
+       </property>
+      </column>
+     <item>
+      <property name="text">
+       <string>Appearance</string>
+      </property>
+     <item>
+      <property name="text">
+       <string>Language</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>Themes</string>
+      </property>
+     </item>
+     </item>
+     <item>
+      <property name="text">
+       <string>Default Units</string>
+      </property>
+     <item>
+      <property name="text">
+       <string>Time</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>Space</string>
+      </property>
+     </item>
+     </item>
+     </widget>
+     <widget class="QStackedWidget" name="page_stack">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+        <horstretch>1</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+    <widget class="QWidget" name="appearance_page">
+     <layout class="QVBoxLayout" name="appearance_layout">
+      <property name="spacing">
+       <number>12</number>
+      </property>
+     <item>
+      <widget class="QLabel" name="appearance_heading">
+       <property name="font">
+        <font>
+         <pointsize>13</pointsize>
+         <bold>true</bold>
+        </font>
+       </property>
+       <property name="text">
+        <string notr="true">Appearance</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <layout class="QVBoxLayout" name="appearance_links">
+       <property name="spacing">
+        <number>6</number>
+       </property>
+      </layout>
+     </item>
+     <item>
+      <spacer name="appearance_spacer">
+       <property name="orientation">
+        <enum>Qt::Orientation::Vertical</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     </layout>
+    </widget>
+    <widget class="QWidget" name="language_page">
+     <layout class="QVBoxLayout" name="language_layout">
+      <property name="spacing">
+       <number>12</number>
+      </property>
+     <item>
+      <widget class="QLabel" name="language_heading">
+       <property name="font">
+        <font>
+         <pointsize>13</pointsize>
+         <bold>true</bold>
+        </font>
+       </property>
+       <property name="text">
+        <string notr="true">Language</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <layout class="QFormLayout" name="languages_form">
+       <property name="fieldGrowthPolicy">
+        <enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum>
+       </property>
+       <property name="horizontalSpacing">
+        <number>12</number>
+       </property>
+       <property name="verticalSpacing">
+        <number>8</number>
+       </property>
+       <item row="0" column="0">
+        <widget class="QLabel" name="language_label">
+         <property name="text">
+          <string extracomment="label of the language chooser in the settings">Language:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="1">
+        <widget class="QComboBox" name="language_combo">
+         <property name="minimumSize">
+          <size>
+           <width>180</width>
+           <height>0</height>
+          </size>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+     <item>
+      <widget class="QLabel" name="language_note">
+       <property name="placeholder" stdset="0">
+        <bool>true</bool>
+       </property>
+       <property name="wordWrap">
+        <bool>true</bool>
+       </property>
+       <property name="text">
+        <string extracomment="under the language chooser, so the restart is not a surprise">The language is applied when the application starts.</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="language_spacer">
+       <property name="orientation">
+        <enum>Qt::Orientation::Vertical</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     </layout>
+    </widget>
+    <widget class="QWidget" name="themes_page">
+     <layout class="QVBoxLayout" name="themes_layout">
+      <property name="spacing">
+       <number>12</number>
+      </property>
+     <item>
+      <widget class="QLabel" name="themes_heading">
+       <property name="font">
+        <font>
+         <pointsize>13</pointsize>
+         <bold>true</bold>
+        </font>
+       </property>
+       <property name="text">
+        <string notr="true">Themes</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <layout class="QFormLayout" name="themes_form">
+       <property name="fieldGrowthPolicy">
+        <enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum>
+       </property>
+       <property name="horizontalSpacing">
+        <number>12</number>
+       </property>
+       <property name="verticalSpacing">
+        <number>8</number>
+       </property>
+       <item row="0" column="0">
+        <widget class="QLabel" name="theme_label">
+         <property name="text">
+          <string extracomment="label of the theme chooser in the settings">Theme:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="1">
+        <widget class="QComboBox" name="theme_combo">
+         <property name="minimumSize">
+          <size>
+           <width>180</width>
+           <height>0</height>
+          </size>
+         </property>
+         <item>
+          <property name="text">
+           <string extracomment="theme that follows the light or dark setting of the desktop">System default</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string extracomment="the light colour scheme">Light</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string extracomment="the dark colour scheme">Dark</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+      </layout>
+     </item>
+     <item>
+      <widget class="QLabel" name="themes_note">
+       <property name="placeholder" stdset="0">
+        <bool>true</bool>
+       </property>
+       <property name="wordWrap">
+        <bool>true</bool>
+       </property>
+       <property name="text">
+        <string extracomment="under the theme chooser, so the restart is not a surprise">The theme is applied when the application starts.</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="themes_spacer">
+       <property name="orientation">
+        <enum>Qt::Orientation::Vertical</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     </layout>
+    </widget>
+    <widget class="QWidget" name="units_page">
+     <layout class="QVBoxLayout" name="units_layout">
+      <property name="spacing">
+       <number>12</number>
+      </property>
+     <item>
+      <widget class="QLabel" name="units_heading">
+       <property name="font">
+        <font>
+         <pointsize>13</pointsize>
+         <bold>true</bold>
+        </font>
+       </property>
+       <property name="text">
+        <string notr="true">Default Units</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <layout class="QVBoxLayout" name="units_links">
+       <property name="spacing">
+        <number>6</number>
+       </property>
+      </layout>
+     </item>
+     <item>
+      <spacer name="units_spacer">
+       <property name="orientation">
+        <enum>Qt::Orientation::Vertical</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     </layout>
+    </widget>
+    <widget class="QWidget" name="time_page">
+     <layout class="QVBoxLayout" name="time_layout">
+      <property name="spacing">
+       <number>12</number>
+      </property>
+     <item>
+      <widget class="QLabel" name="time_heading">
+       <property name="font">
+        <font>
+         <pointsize>13</pointsize>
+         <bold>true</bold>
+        </font>
+       </property>
+       <property name="text">
+        <string notr="true">Time</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <layout class="QFormLayout" name="time_form">
+       <property name="fieldGrowthPolicy">
+        <enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum>
+       </property>
+       <property name="horizontalSpacing">
+        <number>12</number>
+       </property>
+       <property name="verticalSpacing">
+        <number>8</number>
+       </property>
+       <item row="0" column="0">
+        <widget class="QLabel" name="time_unit_label">
+         <property name="text">
+          <string extracomment="label of the time unit chooser">Unit:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="1">
+        <widget class="QComboBox" name="time_combo">
+         <property name="minimumSize">
+          <size>
+           <width>200</width>
+           <height>0</height>
+          </size>
+         </property>
+         <item>
+          <property name="text">
+           <string extracomment="a unit in the settings; the symbol in brackets is not translated">Microseconds (µs)</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string extracomment="a unit in the settings; the symbol in brackets is not translated">Milliseconds (ms)</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string extracomment="a unit in the settings; the symbol in brackets is not translated">Seconds (s)</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string extracomment="a unit in the settings; the symbol in brackets is not translated">Minutes (min)</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string extracomment="a unit in the settings; the symbol in brackets is not translated">Hours (h)</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string extracomment="a unit in the settings; the symbol in brackets is not translated">Days (d)</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+      </layout>
+     </item>
+     <item>
+      <spacer name="time_spacer">
+       <property name="orientation">
+        <enum>Qt::Orientation::Vertical</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     </layout>
+    </widget>
+    <widget class="QWidget" name="space_page">
+     <layout class="QVBoxLayout" name="space_layout">
+      <property name="spacing">
+       <number>12</number>
+      </property>
+     <item>
+      <widget class="QLabel" name="space_heading">
+       <property name="font">
+        <font>
+         <pointsize>13</pointsize>
+         <bold>true</bold>
+        </font>
+       </property>
+       <property name="text">
+        <string notr="true">Space</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <layout class="QFormLayout" name="space_form">
+       <property name="fieldGrowthPolicy">
+        <enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum>
+       </property>
+       <property name="horizontalSpacing">
+        <number>12</number>
+       </property>
+       <property name="verticalSpacing">
+        <number>8</number>
+       </property>
+       <item row="0" column="0">
+        <widget class="QLabel" name="distance_label">
+         <property name="text">
+          <string extracomment="label of the distance unit chooser">Distance:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="1">
+        <widget class="QComboBox" name="distance_combo">
+         <property name="minimumSize">
+          <size>
+           <width>200</width>
+           <height>0</height>
+          </size>
+         </property>
+         <item>
+          <property name="text">
+           <string extracomment="a unit in the settings; the symbol in brackets is not translated">Millimetres (mm)</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string extracomment="a unit in the settings; the symbol in brackets is not translated">Centimetres (cm)</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string extracomment="a unit in the settings; the symbol in brackets is not translated">Metres (m)</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string extracomment="a unit in the settings; the symbol in brackets is not translated">Decametres (dam)</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string extracomment="a unit in the settings; the symbol in brackets is not translated">Kilometres (km)</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+       <item row="1" column="0">
+        <widget class="QLabel" name="surface_label">
+         <property name="text">
+          <string extracomment="label of the surface unit chooser">Surface:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="1">
+        <widget class="QComboBox" name="surface_combo">
+         <property name="minimumSize">
+          <size>
+           <width>200</width>
+           <height>0</height>
+          </size>
+         </property>
+         <item>
+          <property name="text">
+           <string extracomment="a unit in the settings; the symbol in brackets is not translated">Square millimetres (mm²)</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string extracomment="a unit in the settings; the symbol in brackets is not translated">Square centimetres (cm²)</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string extracomment="a unit in the settings; the symbol in brackets is not translated">Square metres (m²)</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string extracomment="a unit in the settings; the symbol in brackets is not translated">Square decametres (dam²)</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string extracomment="a unit in the settings; the symbol in brackets is not translated">Hectares (ha)</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string extracomment="a unit in the settings; the symbol in brackets is not translated">Square kilometres (km²)</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+      </layout>
+     </item>
+     <item>
+      <widget class="QLabel" name="space_note">
+       <property name="placeholder" stdset="0">
+        <bool>true</bool>
+       </property>
+       <property name="wordWrap">
+        <bool>true</bool>
+       </property>
+       <property name="text">
+        <string extracomment="under the surface unit chooser on the Space page">Surface units are used for statistics only, never for defining a model.</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="space_spacer">
+       <property name="orientation">
+        <enum>Qt::Orientation::Vertical</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     </layout>
+    </widget>
+     </widget>
+    </widget>
+   </item>
+   <item>
+    <widget class="QDialogButtonBox" name="button_box">
+     <property name="orientation">
+      <enum>Qt::Orientation::Horizontal</enum>
+     </property>
+     <property name="standardButtons">
+      <set>QDialogButtonBox::StandardButton::Cancel|QDialogButtonBox::StandardButton::Ok</set>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

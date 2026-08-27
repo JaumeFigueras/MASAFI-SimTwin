@@ -2,10 +2,25 @@
 
 from __future__ import annotations
 
+import tempfile
+
 import pytest
 from PyQt6.QtCore import QSettings
 
 from masafi_simtwin.application import SimTwinApplication
+
+#: Where the suite's ``QSettings`` are kept, instead of the developer's own.
+#:
+#: This is done on import rather than in a fixture because the application
+#: reads its preferences while it is being constructed — the language is
+#: settled before the first widget exists — so the redirection has to be in
+#: place before any fixture can build an application.
+SETTINGS_DIRECTORY = tempfile.mkdtemp(prefix='masafi-simtwin-settings-')
+
+QSettings.setDefaultFormat(QSettings.Format.IniFormat)
+QSettings.setPath(
+    QSettings.Format.IniFormat, QSettings.Scope.UserScope, SETTINGS_DIRECTORY
+)
 
 
 @pytest.fixture(scope='session')
@@ -43,31 +58,21 @@ def source_language(qapp):
     return qapp
 
 
-@pytest.fixture(autouse=True, scope='session')
-def isolated_settings(tmp_path_factory):
-    """Keep ``QSettings`` out of the developer's real configuration.
+@pytest.fixture(scope='session')
+def isolated_settings():
+    """Give the directory ``QSettings`` was redirected to on import.
 
-    The main window persists its recent project list through ``QSettings``.
-    Pointing the INI search path at a temporary directory means a test run
-    neither reads nor overwrites what the developer has on disk.
+    The redirection itself is :data:`SETTINGS_DIRECTORY`, done when this module
+    is imported; this only hands the path to the tests that want to look at the
+    file.
 
-    Parameters
-    ----------
-    tmp_path_factory : pytest.TempPathFactory
-        Factory for the temporary directory.
-
-    Yields
-    ------
-    pathlib.Path
-        The directory the settings were written to.
+    Returns
+    -------
+    str
+        The directory the settings are written to.
     """
 
-    directory = tmp_path_factory.mktemp('settings')
-    QSettings.setDefaultFormat(QSettings.Format.IniFormat)
-    QSettings.setPath(
-        QSettings.Format.IniFormat, QSettings.Scope.UserScope, str(directory)
-    )
-    yield directory
+    return SETTINGS_DIRECTORY
 
 
 @pytest.fixture(autouse=True)

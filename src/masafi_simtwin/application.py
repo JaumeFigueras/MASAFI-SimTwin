@@ -8,9 +8,10 @@ Fusion is the one style that honours it identically everywhere.
 
 from __future__ import annotations
 
+import os
 import sys
 
-from PyQt6.QtCore import QLibraryInfo, QLocale, QTranslator
+from PyQt6.QtCore import QLibraryInfo, QLocale, QSettings, QTranslator
 from PyQt6.QtWidgets import QApplication
 
 from masafi_simtwin import (
@@ -21,7 +22,8 @@ from masafi_simtwin import (
     icons,
 )
 from masafi_simtwin.main_window import MainWindow
-from masafi_simtwin.theme import ThemeManager
+from masafi_simtwin.preferences import SYSTEM_THEME, Preferences
+from masafi_simtwin.theme import ColorScheme, ThemeManager
 from masafi_simtwin.translations import CATALOGUE_PREFIX, directory
 
 
@@ -48,11 +50,15 @@ class SimTwinApplication(QApplication):
         self.setOrganizationDomain(ORGANISATION_DOMAIN)
         self.setStyle('Fusion')
 
+        QSettings.setDefaultFormat(QSettings.Format.IniFormat)
+        self.preferences = Preferences()
+
         self._translators: list[QTranslator] = []
         self._install_translators()
 
         self.theme = ThemeManager(self)
         self.theme.scheme_changed.connect(lambda _scheme: icons.refresh())
+        self.theme.override = self.scheme_of_choice()
         self.theme.apply()
 
     def _install_translators(self) -> None:
@@ -63,9 +69,39 @@ class SimTwinApplication(QApplication):
         application translates itself wins over Qt's.
         """
 
-        locale = QLocale.system()
+        locale = self.locale_of_choice()
         self.install_qt_translator(locale)
         self.install_application_translator(locale)
+
+    def locale_of_choice(self) -> QLocale:
+        """Give the locale the catalogues should be loaded for.
+
+        The language the user chose wins over the desktop's; an unset
+        preference is what leaves the application following the machine it
+        starts on.
+
+        Returns
+        -------
+        PyQt6.QtCore.QLocale
+            The locale to load the catalogues for.
+        """
+
+        language = self.preferences.value('appearance/language')
+        return QLocale(language) if language else QLocale.system()
+
+    def scheme_of_choice(self) -> ColorScheme | None:
+        """Give the colour scheme the user asked for outright.
+
+        Returns
+        -------
+        ColorScheme, optional
+            The scheme stored in ``appearance/theme``, or ``None`` when it is
+            left at the system default, which is what leaves the application
+            following the desktop.
+        """
+
+        theme = self.preferences.value('appearance/theme')
+        return ColorScheme(theme) if theme != SYSTEM_THEME else None
 
     def install_qt_translator(self, locale: QLocale) -> bool:
         """Install Qt's own catalogue for a locale.
@@ -108,6 +144,23 @@ class SimTwinApplication(QApplication):
         return self._install(
             translator, translator.load(locale, CATALOGUE_PREFIX, '_', str(directory()))
         )
+
+    def restart(self) -> None:
+        """Start the application again, in place of this process.
+
+        The settings are flushed first: replacing the process image skips every
+        destructor, so a preference that ``QSettings`` had not written out yet
+        would be lost — which would be the one the user restarted for.
+
+        The interpreter and the arguments are the ones this run was started
+        with, so a restart works the same whether the application was launched
+        through ``python -m masafi_simtwin``, through the console script, or
+        from an IDE.
+        """
+
+        self.preferences.settings.sync()
+        self.closeAllWindows()
+        os.execv(sys.executable, [sys.executable, *sys.argv])
 
     def remove_translators(self) -> None:
         """Take every installed catalogue back out.

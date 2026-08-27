@@ -37,7 +37,7 @@ pytestmark = pytest.mark.i18n
 SOURCES = Path(__file__).resolve().parents[2] / 'src' / 'masafi_simtwin'
 
 
-def messages(path: Path) -> dict[tuple[str, str], str | None]:
+def messages(path: Path) -> dict[tuple[str, str, str], str | None]:
     """Read the messages of a catalogue.
 
     Parameters
@@ -48,20 +48,32 @@ def messages(path: Path) -> dict[tuple[str, str], str | None]:
     Returns
     -------
     dict
-        The translation of every ``(context, source)`` pair.  The value is
-        ``None`` when the message is untranslated or still marked unfinished.
+        The translation of every ``(context, source, disambiguation)`` message.
+        The value is ``None`` when the message is untranslated or still marked
+        unfinished.
+
+    Notes
+    -----
+    The disambiguation belongs in the key.  One context may hold the same source
+    twice — *System default* is offered by both the theme chooser and the
+    language chooser — and keying on the source alone would let the translated
+    one silently stand in for the untranslated one.
     """
 
-    found: dict[tuple[str, str], str | None] = {}
+    found: dict[tuple[str, str, str], str | None] = {}
     for context in ElementTree.parse(path).getroot().iter('context'):
         name = context.findtext('name', '')
         for message in context.iter('message'):
-            source = message.findtext('source', '')
+            key = (
+                name,
+                message.findtext('source', ''),
+                message.findtext('comment', ''),
+            )
             translation = message.find('translation')
             if translation is None or translation.get('type') or not translation.text:
-                found[(name, source)] = None
+                found[key] = None
             else:
-                found[(name, source)] = translation.text
+                found[key] = translation.text
     return found
 
 
@@ -137,7 +149,7 @@ def test_the_source_catalogue_repeats_the_source():
     """
 
     differing = [
-        source for (_context, source), translation
+        source for (_context, source, _comment), translation
         in messages(catalogue(SOURCE_LANGUAGE, '.ts')).items()
         if translation != source
     ]
@@ -167,7 +179,8 @@ def test_the_compiled_catalogue_matches_its_source(language):
     translator.load(str(catalogue(language, '.qm')))
     stale = [
         source
-        for (context, source), translation in messages(catalogue(language, '.ts')).items()
+        for (context, source, _comment), translation
+        in messages(catalogue(language, '.ts')).items()
         if translator.translate(context.encode(), source.encode()) != translation
     ]
 
@@ -180,7 +193,8 @@ def test_the_accelerators_of_the_menu_bar_stay_unique(language):
 
     keys = [
         translation[translation.index('&') + 1].lower()
-        for (context, source), translation in messages(catalogue(language, '.ts')).items()
+        for (context, source, _comment), translation
+        in messages(catalogue(language, '.ts')).items()
         if context == 'MainWindow' and source.startswith('&') and translation
     ]
 
@@ -193,7 +207,8 @@ def test_the_placeholders_survive_translation(language):
 
     wrong = [
         source
-        for (_context, source), translation in messages(catalogue(language, '.ts')).items()
+        for (_context, source, _comment), translation
+        in messages(catalogue(language, '.ts')).items()
         if translation and set(re.findall(r'{\d+}', source)) != set(re.findall(r'{\d+}', translation))
     ]
 

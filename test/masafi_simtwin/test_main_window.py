@@ -2,13 +2,41 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QDockWidget
+from PyQt6.QtWidgets import QDialog, QDockWidget
 
-from masafi_simtwin import APPLICATION_NAME
+from masafi_simtwin import APPLICATION_NAME, project
 from masafi_simtwin.main_window import MAX_RECENT_PROJECTS, MainWindow
 from masafi_simtwin.top_bar import TopBar
+
+
+@pytest.fixture
+def make_project(tmp_path):
+    """Give a maker of real project files.
+
+    A project is a ``.mfstz`` archive now, and the window reads its manifest to
+    learn what it is called, so the history cannot be exercised with names that
+    are not files.
+
+    Parameters
+    ----------
+    tmp_path : pathlib.Path
+        The temporary directory pytest made.
+
+    Returns
+    -------
+    collections.abc.Callable
+        A function taking a name and returning the path of a project of that
+        name, as a string.
+    """
+
+    def make(name: str) -> str:
+        return str(project.create(project.path_for(tmp_path, name), name))
+
+    return make
 
 
 @pytest.fixture
@@ -90,10 +118,10 @@ def test_only_file_and_help_are_shown_without_a_project(window):
     assert titles == ['&File', '&Help']
 
 
-def test_the_other_menus_follow_the_open_project(window):
+def test_the_other_menus_follow_the_open_project(window, make_project):
     """The rest of the menu bar appears with a project and leaves with it."""
 
-    window.open_project_path('/home/jaume/codi/MASAFI-SimTwin')
+    window.open_project_path(make_project('Bottling Line'))
     opened = [
         action.text() for action in window.top_bar._menu_bar.actions() if action.isVisible()
     ]
@@ -146,21 +174,26 @@ def test_running_updates_the_status_bar(window):
     assert window.statusBar().currentMessage() == 'Running'
 
 
-def test_opening_a_project_updates_the_chrome(window):
-    """Opening a project names it on the button, in the title and in the history."""
+def test_opening_a_project_updates_the_chrome(window, make_project):
+    """Opening a project names it on the button, in the title and in the history.
 
-    window.open_project_path('/home/jaume/codi/MASAFI-SimTwin')
+    The name comes out of the manifest rather than off the file name, which is
+    what makes a renamed file still show the project it holds.
+    """
 
-    assert window.top_bar._project_button.text() == 'MASAFI-SimTwin'
-    assert window.windowTitle() == f'MASAFI-SimTwin — {APPLICATION_NAME}'
+    path = make_project('Bottling Line')
+    window.open_project_path(path)
+
+    assert window.top_bar._project_button.text() == 'Bottling Line'
+    assert window.windowTitle() == f'Bottling Line — {APPLICATION_NAME}'
     assert window.close_project_action.isEnabled()
-    assert window._recent_projects[0] == '/home/jaume/codi/MASAFI-SimTwin'
+    assert window._recent_projects[0] == path
 
 
-def test_closing_a_project_restores_the_empty_chrome(window):
+def test_closing_a_project_restores_the_empty_chrome(window, make_project):
     """Closing the project puts the button and the title back."""
 
-    window.open_project_path('/home/jaume/codi/MASAFI-SimTwin')
+    window.open_project_path(make_project('Bottling Line'))
     window.close_project()
 
     assert window.top_bar._project_button.text() == 'No Project'
@@ -168,24 +201,27 @@ def test_closing_a_project_restores_the_empty_chrome(window):
     assert not window.close_project_action.isEnabled()
 
 
-def test_reopening_a_project_moves_it_to_the_head(window):
+def test_reopening_a_project_moves_it_to_the_head(window, make_project):
     """A project opened again rises to the top of the history without duplicating."""
 
-    window.open_project_path('/one')
-    window.open_project_path('/two')
-    window.open_project_path('/one')
+    one, two = make_project('One'), make_project('Two')
+    window.open_project_path(one)
+    window.open_project_path(two)
+    window.open_project_path(one)
 
-    assert window._recent_projects == ['/one', '/two']
+    assert window._recent_projects == [one, two]
 
 
-def test_history_is_capped(window):
+def test_history_is_capped(window, make_project):
     """The history keeps only the most recent projects."""
 
+    last = ''
     for number in range(MAX_RECENT_PROJECTS + 5):
-        window.open_project_path(f'/project-{number}')
+        last = make_project(f'Project {number}')
+        window.open_project_path(last)
 
     assert len(window._recent_projects) == MAX_RECENT_PROJECTS
-    assert window._recent_projects[0] == f'/project-{MAX_RECENT_PROJECTS + 4}'
+    assert window._recent_projects[0] == last
 
 
 
@@ -347,3 +383,237 @@ def test_the_about_action_opens_the_about_dialog(window, monkeypatch):
     monkeypatch.setattr('masafi_simtwin.main_window.AboutDialog', StubAboutDialog)
     window.about_action.trigger()
     assert opened == [window]
+
+
+def stub_settings(monkeypatch, result, written=()):
+    """Put a settings dialog that neither draws nor blocks in the window's way.
+
+    Parameters
+    ----------
+    monkeypatch : pytest.MonkeyPatch
+        The patcher.
+    result : int
+        What ``exec`` should return, an accepted or a rejected dialog.
+    written : tuple of str, optional
+        The keys the stub claims to have written.
+
+    Returns
+    -------
+    list
+        The parents the dialog was built with, one entry per opening.
+    """
+
+    opened = []
+
+    class StubSettingsDialog:
+        def __init__(self, parent=None):
+            opened.append(parent)
+            self.written = written
+
+        def exec(self):
+            return result
+
+    monkeypatch.setattr('masafi_simtwin.main_window.SettingsDialog', StubSettingsDialog)
+    return opened
+
+
+def stub_restart(monkeypatch, answer):
+    """Answer the restart question without asking it.
+
+    Parameters
+    ----------
+    monkeypatch : pytest.MonkeyPatch
+        The patcher.
+    answer : bool
+        What the user is to be taken to have answered.
+
+    Returns
+    -------
+    list
+        The parents the question was asked with, one entry per asking.
+    """
+
+    asked = []
+
+    def ask(parent=None):
+        asked.append(parent)
+        return answer
+
+    monkeypatch.setattr('masafi_simtwin.main_window.ask_to_restart', ask)
+    return asked
+
+
+def test_the_settings_action_opens_the_settings_dialog(window, monkeypatch):
+    """The action reaches the dialog instead of writing a message.
+
+    The dialog is modal, so it is stubbed rather than executed, as the About
+    one is.
+    """
+
+    opened = stub_settings(monkeypatch, QDialog.DialogCode.Rejected)
+    window.settings_action.trigger()
+    assert opened == [window]
+
+
+def test_a_cancelled_settings_dialog_asks_nothing(window, monkeypatch):
+    """Nothing was written, so there is nothing to restart for."""
+
+    stub_settings(monkeypatch, QDialog.DialogCode.Rejected, ('appearance/theme',))
+    asked = stub_restart(monkeypatch, False)
+    window.settings_action.trigger()
+    assert asked == []
+
+
+def test_a_setting_that_takes_effect_at_once_asks_nothing(window, monkeypatch):
+    """Only the preferences declared as needing a restart raise the question."""
+
+    stub_settings(monkeypatch, QDialog.DialogCode.Accepted, ('units/time',))
+    asked = stub_restart(monkeypatch, False)
+    window.settings_action.trigger()
+    assert asked == []
+
+
+def test_a_setting_that_needs_a_restart_asks_after_the_dialog_closes(window, monkeypatch):
+    """The question the dialog told the user to expect."""
+
+    stub_settings(monkeypatch, QDialog.DialogCode.Accepted, ('appearance/theme',))
+    asked = stub_restart(monkeypatch, False)
+    window.settings_action.trigger()
+    assert asked == [window]
+
+
+def test_answering_later_leaves_the_application_running(window, monkeypatch, qapp):
+    """Later means later: the settings are stored, nothing else happens."""
+
+    stub_settings(monkeypatch, QDialog.DialogCode.Accepted, ('appearance/theme',))
+    stub_restart(monkeypatch, False)
+    restarted = []
+    monkeypatch.setattr(type(qapp), 'restart', lambda self: restarted.append(self))
+
+    window.settings_action.trigger()
+    assert restarted == []
+
+
+def test_answering_now_restarts_the_application(window, monkeypatch, qapp):
+    """Now means the application starts again."""
+
+    stub_settings(monkeypatch, QDialog.DialogCode.Accepted, ('appearance/theme',))
+    stub_restart(monkeypatch, True)
+    restarted = []
+    monkeypatch.setattr(type(qapp), 'restart', lambda self: restarted.append(self))
+
+    window.settings_action.trigger()
+    assert restarted == [qapp]
+
+
+# ----------------------------------------------------------------------
+# Creating a project
+# ----------------------------------------------------------------------
+
+
+def stub_new_project(monkeypatch, result, path=None, name='Bottling Line'):
+    """Put a New Project dialog that neither draws nor blocks in the window's way.
+
+    Parameters
+    ----------
+    monkeypatch : pytest.MonkeyPatch
+        The patcher.
+    result : int
+        What ``exec`` should return.
+    path : pathlib.Path, optional
+        The path the dialog settles on.
+    name : str, optional
+        The name it was given.
+
+    Returns
+    -------
+    list
+        The locations the dialog was opened at, one entry per opening.
+    """
+
+    opened = []
+
+    class StubNewProjectDialog:
+        def __init__(self, parent=None, location=None):
+            opened.append(location)
+            self.project_path = path
+            self.name = name
+
+        def exec(self):
+            return result
+
+    monkeypatch.setattr('masafi_simtwin.main_window.NewProjectDialog', StubNewProjectDialog)
+    return opened
+
+
+def test_the_new_project_action_writes_and_opens_the_project(window, monkeypatch, tmp_path):
+    """The whole way from the menu entry to a project on disk."""
+
+    target = project.path_for(tmp_path, 'Bottling Line')
+    stub_new_project(monkeypatch, QDialog.DialogCode.Accepted, target)
+
+    window.new_project_action.trigger()
+
+    assert target.exists()
+    assert project.name_of(target) == 'Bottling Line'
+    assert window.windowTitle() == f'Bottling Line — {APPLICATION_NAME}'
+    assert window._recent_projects[0] == str(target)
+
+
+def test_a_cancelled_new_project_writes_nothing(window, monkeypatch, tmp_path):
+    """Nothing is created until the dialog is accepted."""
+
+    target = project.path_for(tmp_path, 'Bottling Line')
+    stub_new_project(monkeypatch, QDialog.DialogCode.Rejected, target)
+
+    window.new_project_action.trigger()
+
+    assert not target.exists()
+    assert window.windowTitle() == APPLICATION_NAME
+
+
+def test_a_project_that_cannot_be_written_is_reported(window, monkeypatch, tmp_path):
+    """The failure reaches the user rather than the traceback."""
+
+    target = tmp_path / 'nowhere' / f'Bottling Line{project.PROJECT_SUFFIX}'
+    stub_new_project(monkeypatch, QDialog.DialogCode.Accepted, target)
+    shown = []
+    monkeypatch.setattr(
+        'masafi_simtwin.main_window.QMessageBox.critical',
+        lambda parent, title, text: shown.append((title, text)),
+    )
+
+    window.new_project_action.trigger()
+
+    assert len(shown) == 1
+    assert window.windowTitle() == APPLICATION_NAME
+
+
+def test_a_file_that_is_not_a_project_is_reported(window, monkeypatch, tmp_path):
+    """A stale entry in the recent list, or the wrong file chosen by hand."""
+
+    path = tmp_path / f'not-a-project{project.PROJECT_SUFFIX}'
+    path.write_bytes(b'hello')
+    shown = []
+    monkeypatch.setattr(
+        'masafi_simtwin.main_window.QMessageBox.critical',
+        lambda parent, title, text: shown.append((title, text)),
+    )
+
+    window.open_project_path(str(path))
+
+    assert len(shown) == 1
+    assert window.windowTitle() == APPLICATION_NAME
+    assert window._recent_projects == []
+
+
+def test_a_new_project_is_offered_beside_the_last_one(window, monkeypatch, make_project):
+    """The dialog opens where the user was working, not in their documents."""
+
+    opened_project = make_project('Earlier')
+    window.open_project_path(opened_project)
+
+    opened = stub_new_project(monkeypatch, QDialog.DialogCode.Rejected)
+    window.new_project_action.trigger()
+
+    assert opened == [str(Path(opened_project).parent)]
