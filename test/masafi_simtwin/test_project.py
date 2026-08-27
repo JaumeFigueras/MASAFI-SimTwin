@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 import zipfile
 from pathlib import Path
 
@@ -52,19 +53,40 @@ def test_the_suffix_is_not_doubled(tmp_path):
 # ----------------------------------------------------------------------
 
 
-def test_a_new_project_is_a_zip_holding_its_manifest(created):
+def test_a_new_project_is_a_zip_holding_its_manifest_and_its_folders(created):
     """The container is an ordinary archive, openable with any zip tool."""
 
     assert zipfile.is_zipfile(created)
     with zipfile.ZipFile(created) as archive:
-        assert archive.namelist() == [project.MANIFEST_NAME]
+        assert archive.namelist() == [project.MANIFEST_NAME, *project.FOLDERS]
+
+
+def test_the_folders_are_the_shape_a_project_will_fill(created):
+    """One for each thing a project is made of, plus the logs of running it."""
+
+    assert project.FOLDERS == ('models/', 'simulations/', 'statistics/', 'logs/')
+
+    with zipfile.ZipFile(created) as archive:
+        folders = [info for info in archive.infolist() if info.is_dir()]
+
+    assert [info.filename for info in folders] == list(project.FOLDERS)
+    assert all(info.file_size == 0 for info in folders)
+
+
+def test_the_folders_are_real_directories_to_an_archive_tool(created):
+    """Without the directory bit they would show as empty files."""
+
+    with zipfile.ZipFile(created) as archive:
+        models = archive.getinfo('models/')
+
+    assert models.is_dir()
+    assert models.external_attr & 0x10
 
 
 def test_the_manifest_says_what_the_file_is(created):
     """A zip that merely holds a ``manifest.json`` is not a project."""
 
-    with zipfile.ZipFile(created) as archive:
-        found = json.loads(archive.read(project.MANIFEST_NAME))
+    found = project.read_manifest(created)
 
     assert found['format'] == project.FORMAT_NAME
     assert found['format_version'] == project.FORMAT_VERSION
@@ -73,10 +95,63 @@ def test_the_manifest_says_what_the_file_is(created):
     assert found['created']
 
 
-def test_the_format_is_versioned_from_the_first_file(created):
+def test_every_project_carries_a_uuid_of_its_own(tmp_path):
+    """Which is what tells two projects apart however they are renamed."""
+
+    first = project.create(project.path_for(tmp_path, 'One'), 'One')
+    second = project.create(project.path_for(tmp_path, 'Two'), 'Two')
+
+    identifiers = {project.read_manifest(path)['uuid'] for path in (first, second)}
+
+    assert len(identifiers) == 2
+    assert all(uuid.UUID(identifier) for identifier in identifiers)
+
+
+def test_the_uuid_belongs_to_the_project_not_to_the_file(created):
+    """A copied or renamed project keeps the identity it was made with."""
+
+    before = project.read_manifest(created)['uuid']
+    renamed = created.with_name(f'copy{project.PROJECT_SUFFIX}')
+    created.rename(renamed)
+
+    assert project.read_manifest(renamed)['uuid'] == before
+
+
+def test_the_author_is_whoever_made_the_project(created):
+    """Filled from the account running the application, and overridable."""
+
+    assert project.read_manifest(created)['author'] == project.current_user()
+
+
+def test_the_author_can_be_given_outright(tmp_path):
+    """Which is what a preference for it will use when there is one."""
+
+    path = project.create(project.path_for(tmp_path, 'Named'), 'Named', author='jaume')
+
+    assert project.read_manifest(path)['author'] == 'jaume'
+
+
+def test_the_company_is_blank_until_there_is_one_to_put_there(created):
+    """The field exists from the first project so that adding it is not a change."""
+
+    assert project.read_manifest(created)['company'] == ''
+
+
+def test_the_company_can_be_given_outright(tmp_path):
+    """As the author can."""
+
+    path = project.create(
+        project.path_for(tmp_path, 'Hired'), 'Hired', company='UPC'
+    )
+
+    assert project.read_manifest(path)['company'] == 'UPC'
+
+
+def test_the_format_is_versioned(created):
     """Nothing else about the contents is settled, so this one thing must be."""
 
-    assert project.read_manifest(created)['format_version'] == 1
+    assert project.read_manifest(created)['format_version'] == project.FORMAT_VERSION
+    assert project.FORMAT_VERSION >= 1
 
 
 def test_the_name_comes_out_of_the_manifest(created):

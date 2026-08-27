@@ -7,10 +7,13 @@ an ordinary zip archive holding :data:`MANIFEST_NAME` and, in time, everything
 else a project is made of: the flow model, the sub-models, the block library it
 was built against.
 
-**There is nothing but the manifest in there yet**, and the manifest holds only
-what cannot be added afterwards: which format this is and which version of it.
-Everything else about the contents is still to be designed, which is exactly why
-:data:`FORMAT_VERSION` is written from the first file onwards.
+The archive holds its manifest and the four directories of :data:`FOLDERS`,
+which are empty until there is something to put in them.  The manifest holds
+what identifies a project — the format and its version, a UUID generated once
+and never again, its name, and who made it — and nothing that can be worked out
+from the rest of the archive.  Everything else about the contents is still to be
+designed, which is exactly why :data:`FORMAT_VERSION` is written from the first
+file onwards.
 
 This module has no Qt in it, on purpose.  It is stdlib only — ``zipfile`` and
 ``json`` — so that it can move to :mod:`simtwin_core` unchanged once that
@@ -19,7 +22,9 @@ package exists, which is where a document format belongs.
 
 from __future__ import annotations
 
+import getpass
 import json
+import uuid
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -38,7 +43,12 @@ FORMAT_NAME = 'masafi-simtwin-project'
 
 #: The version of the layout inside the archive.  It is written from the first
 #: project onwards so that a reader can always tell what it is looking at.
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
+
+#: The directories every project carries, whether or not anything is in them
+#: yet.  A zip has no directories of its own; these are the empty entries that
+#: make one show a project's shape when it is opened with any archive tool.
+FOLDERS: tuple[str, ...] = ('models/', 'simulations/', 'statistics/', 'logs/')
 
 
 class ProjectError(Exception):
@@ -66,31 +76,90 @@ def path_for(directory: str | Path, name: str) -> Path:
     return Path(directory) / f'{stem}{PROJECT_SUFFIX}'
 
 
-def manifest(name: str) -> dict:
+def current_user() -> str:
+    """Give the name of whoever is running the application.
+
+    Returns
+    -------
+    str
+        The login name, or an empty string when the platform will not say —
+        which is not an error, only an author that has to be filled in later.
+    """
+
+    try:
+        return getpass.getuser()
+    except (KeyError, OSError):  # pragma: no cover - depends on the environment
+        return ''
+
+
+def manifest(name: str, author: str | None = None, company: str = '') -> dict:
     """Build the manifest of a new project.
 
     Parameters
     ----------
     name : str
         What the project is called.
+    author : str, optional
+        Who is making it, the current user by default.
+    company : str, optional
+        Who they are making it for, blank by default.
 
     Returns
     -------
     dict
         The manifest, ready to be written as JSON.
+
+    Notes
+    -----
+    ``uuid`` identifies this project and nothing else.  It is generated once,
+    here, and is never regenerated — a copy of a project carries the identity of
+    what it was copied from, which is the whole point of having one.
     """
 
     return {
         'format': FORMAT_NAME,
         'format_version': FORMAT_VERSION,
+        'uuid': str(uuid.uuid4()),
         'name': name,
+        'author': current_user() if author is None else author,
+        'company': company,
         'created': datetime.now(timezone.utc).isoformat(timespec='seconds'),
         'created_by': __version__,
     }
 
 
-def create(path: str | Path, name: str) -> Path:
+def _directory_entry(name: str) -> zipfile.ZipInfo:
+    """Build the archive entry that stands for an empty directory.
+
+    A zip holds a flat list of names, so a directory is an entry whose name ends
+    in a slash and which carries the directory bit.  Without the bit an archive
+    tool shows a nought byte file rather than a folder.
+
+    Parameters
+    ----------
+    name : str
+        The directory's name, ending in ``/``.
+
+    Returns
+    -------
+    zipfile.ZipInfo
+        The entry, dated so that two projects made from the same manifest are
+        byte for byte comparable.
+    """
+
+    info = zipfile.ZipInfo(name)
+    info.external_attr = (0o40755 << 16) | 0x10
+    return info
+
+
+def create(
+    path: str | Path, name: str, author: str | None = None, company: str = ''
+) -> Path:
     """Write a new, empty project.
+
+    The archive holds its manifest and the directories of :data:`FOLDERS`, empty
+    for now: a project opened in any archive tool shows the shape it will fill
+    rather than a single file.
 
     Parameters
     ----------
@@ -98,6 +167,10 @@ def create(path: str | Path, name: str) -> Path:
         The file to write.
     name : str
         What the project is called, which goes into the manifest.
+    author : str, optional
+        Who is making it, the current user by default.
+    company : str, optional
+        Who they are making it for, blank by default.
 
     Returns
     -------
@@ -115,7 +188,11 @@ def create(path: str | Path, name: str) -> Path:
         raise ProjectError(f'{target} is already there')
     try:
         with zipfile.ZipFile(target, 'w', zipfile.ZIP_DEFLATED) as archive:
-            archive.writestr(MANIFEST_NAME, json.dumps(manifest(name), indent=2))
+            archive.writestr(
+                MANIFEST_NAME, json.dumps(manifest(name, author, company), indent=2)
+            )
+            for folder in FOLDERS:
+                archive.writestr(_directory_entry(folder), b'')
     except OSError as error:
         raise ProjectError(str(error)) from error
     return target
