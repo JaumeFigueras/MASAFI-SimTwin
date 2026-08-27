@@ -37,6 +37,7 @@ from masafi_simtwin.dialogs import (
     ask_to_restart,
 )
 from masafi_simtwin.preferences import needs_restart
+from masafi_simtwin.project_tree import NodeKind, ProjectTree
 from masafi_simtwin.document_area import DocumentArea
 from masafi_simtwin.side_bar import SideBar
 from masafi_simtwin.tool_pane import ToolPane
@@ -75,7 +76,7 @@ class MainWindow(QMainWindow):
         self._create_document_area()
         self._create_status_bar()
 
-        self._top_bar.set_recent_projects(self._recent_projects)
+        self._show_recent_projects()
         self.statusBar().showMessage(self.tr('Ready'))
 
     # ------------------------------------------------------------------
@@ -97,9 +98,27 @@ class MainWindow(QMainWindow):
         self.open_project_action.setShortcut(QKeySequence.StandardKey.Open)
         self.open_project_action.triggered.connect(self.open_project)
 
+        self.clear_recent_projects_action = QAction(self.tr('Clear Recent Projects'), self)
+        self.clear_recent_projects_action.triggered.connect(self.clear_recent_projects)
+
         self.close_project_action = QAction(self.tr('Close Project'), self)
         self.close_project_action.setEnabled(False)
         self.close_project_action.triggered.connect(self.close_project)
+
+        self.new_model_action = QAction(self.tr('New Model…'), self)
+        self.new_model_action.triggered.connect(
+            lambda: self._report(self.tr('Creating a model is not implemented yet'))
+        )
+
+        self.new_simulation_action = QAction(self.tr('New Simulation…'), self)
+        self.new_simulation_action.triggered.connect(
+            lambda: self._report(self.tr('Creating a simulation is not implemented yet'))
+        )
+
+        self.project_settings_action = QAction(self.tr('Project Settings…'), self)
+        self.project_settings_action.triggered.connect(
+            lambda: self._report(self.tr('The project settings are not implemented yet'))
+        )
 
         self.quit_action = QAction(self.tr('Exit'), self)
         self.quit_action.setShortcut(QKeySequence.StandardKey.Quit)
@@ -158,6 +177,10 @@ class MainWindow(QMainWindow):
             visible without pretending the feature works.  Every menu is built
             here, but only *File* and *Help* are visible while no project is
             open; see :meth:`_update_menus_for_project`.
+
+            The application's own *Settings* sits in *File*, as it does in the
+            IDE this window is modelled on, and the simulation controls live on
+            the top bar alone until there is a run control behind them.
         """
 
         menu_bar = QMenuBar(self)
@@ -168,6 +191,8 @@ class MainWindow(QMainWindow):
         self._recent_menu = file_menu.addMenu(self.tr('Open Recent'))
         file_menu.addSeparator()
         file_menu.addAction(self.close_project_action)
+        file_menu.addSeparator()
+        file_menu.addAction(self.settings_action)
         file_menu.addSeparator()
         file_menu.addAction(self.quit_action)
 
@@ -196,31 +221,12 @@ class MainWindow(QMainWindow):
             ],
         )
 
-        navigate_menu = menu_bar.addMenu(self.tr('&Navigate'))
-        self._add_placeholder_actions(
-            navigate_menu,
-            [
-                self.tr('Block…'),
-                self.tr('Sub-model…'),
-                None,
-                self.tr('Back'),
-                self.tr('Forward'),
-            ],
-        )
-
-        run_menu = menu_bar.addMenu(self.tr('&Run'))
-        run_menu.addAction(self.run_action)
-        run_menu.addAction(self.stop_action)
-        run_menu.addAction(self.fast_forward_action)
-        run_menu.addSeparator()
-        run_menu.addAction(self.reset_action)
-
-        tools_menu = menu_bar.addMenu(self.tr('&Tools'))
-        self._add_placeholder_actions(
-            tools_menu, [self.tr('Block Libraries'), self.tr('Python Console')]
-        )
-        tools_menu.addSeparator()
-        tools_menu.addAction(self.settings_action)
+        project_menu = menu_bar.addMenu(self.tr('&Project'))
+        for entry in self.project_entries():
+            if entry is None:
+                project_menu.addSeparator()
+            else:
+                project_menu.addAction(entry)
 
         window_menu = menu_bar.addMenu(self.tr('&Window'))
         self._add_placeholder_actions(window_menu, [self.tr('Next Tab'), self.tr('Previous Tab')])
@@ -230,17 +236,30 @@ class MainWindow(QMainWindow):
         help_menu.addSeparator()
         help_menu.addAction(self.about_action)
 
-        self._project_menus = [
-            edit_menu,
-            view_menu,
-            navigate_menu,
-            run_menu,
-            tools_menu,
-            window_menu,
-        ]
+        self._project_menus = [edit_menu, view_menu, project_menu, window_menu]
         self._update_menus_for_project()
 
         return menu_bar
+
+    def project_entries(self) -> list[QAction | None]:
+        """Give what can be done to the open project.
+
+        The *Project* menu and the context menu of the project in the tree are
+        two views of this one list, so an entry cannot be added to one and
+        forgotten in the other.
+
+        Returns
+        -------
+        list of (PyQt6.QtGui.QAction or None)
+            The actions, with ``None`` where a separator goes.
+        """
+
+        return [
+            self.new_model_action,
+            self.new_simulation_action,
+            None,
+            self.project_settings_action,
+        ]
 
     def _add_placeholder_actions(self, menu: QMenu, titles: list[str | None]) -> None:
         """Fill a menu with disabled entries that mark out what will live there.
@@ -263,8 +282,8 @@ class MainWindow(QMainWindow):
     def _update_menus_for_project(self) -> None:
         """Show only the menus that make sense for the current project state.
 
-        With no project open there is nothing to edit, view, navigate or run, so
-        the menu bar keeps *File* and *Help* alone; the rest appear once a
+        With no project open there is nothing to edit, view or do to a project,
+        so the menu bar keeps *File* and *Help* alone; the rest appear once a
         project is open and go away again when it is closed.
         """
 
@@ -287,6 +306,7 @@ class MainWindow(QMainWindow):
                 self.reset_action,
             ],
             open_project_action=self.open_project_action,
+            clear_recent_projects_action=self.clear_recent_projects_action,
             search_action=self.search_action,
             settings_action=self.settings_action,
             parent=self,
@@ -332,11 +352,21 @@ class MainWindow(QMainWindow):
             ],
         ]
 
+        self._project_tree = ProjectTree(
+            {
+                NodeKind.ROOT: self.project_entries(),
+                NodeKind.MODELS: [self.new_model_action],
+                NodeKind.SIMULATIONS: [self.new_simulation_action],
+            },
+            self,
+        )
+        contents: dict[str, QWidget] = {'project': self._project_tree}
+
         self._tool_panes: dict[str, ToolPane] = {}
         for group in groups:
             panes = []
             for key, title, area in group:
-                pane = ToolPane(title, area=area, parent=self)
+                pane = ToolPane(title, contents.get(key), area=area, parent=self)
                 self.addDockWidget(area, pane)
                 pane.hide()
                 pane.visibilityChanged.connect(
@@ -477,6 +507,8 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f'{self._project_name} — {APPLICATION_NAME}')
         self.close_project_action.setEnabled(True)
         self._update_menus_for_project()
+        self._project_tree.set_project(name)
+        self.show_pane('project')
         self._remember_project(path)
         self.statusBar().showMessage(self.tr('Opened {0}').format(path), 4000)
 
@@ -497,13 +529,20 @@ class MainWindow(QMainWindow):
         return ''
 
     def close_project(self) -> None:
-        """Close the open project and put the chrome back to its empty state."""
+        """Close the open project and put the chrome back to its empty state.
+
+        The Project pane goes with the project it was opened for: it holds
+        nothing else, so leaving it behind would leave an empty panel taking up
+        the side of the window.
+        """
 
         self._project_name = ''
         self._top_bar.set_project_name(self.tr('No Project'))
         self.setWindowTitle(APPLICATION_NAME)
         self.close_project_action.setEnabled(False)
         self._update_menus_for_project()
+        self._project_tree.clear()
+        self.hide_pane('project')
         self.statusBar().showMessage(self.tr('Project closed'), 4000)
 
     def _remember_project(self, path: str) -> None:
@@ -516,8 +555,46 @@ class MainWindow(QMainWindow):
         """
 
         recent = [path] + [other for other in self._recent_projects if other != path]
-        self._recent_projects = recent[:MAX_RECENT_PROJECTS]
+        self._publish_recent_projects(recent[:MAX_RECENT_PROJECTS])
+
+    def clear_recent_projects(self) -> None:
+        """Forget every project in the history.
+
+        Only the history goes; the projects themselves are untouched, which is
+        why this is not worth a confirmation.
+        """
+
+        self._publish_recent_projects([])
+        self._report(self.tr('The list of recent projects was cleared'))
+
+    def _publish_recent_projects(self, paths: list[str]) -> None:
+        """Store the recent project list and show it everywhere it appears.
+
+        Storing it and showing it are one step, so that a history cannot be
+        written and left unshown.
+
+        Parameters
+        ----------
+        paths : list of str
+            The history, most recent first.
+        """
+
+        self._recent_projects = paths
         self._settings.setValue('recent_projects', self._recent_projects)
+        self._show_recent_projects()
+
+    def _show_recent_projects(self) -> None:
+        """Show the history in all three places it appears.
+
+        The drop-down on the top bar, the *File → Open Recent* menu and the
+        state of :attr:`clear_recent_projects_action` come from here, so they
+        cannot disagree about what the history holds.  This runs when the
+        window is built as well as whenever the history changes: the list is
+        read back from the settings before either menu exists, so without it a
+        stored history would reach the drop-down and never the menu.
+        """
+
+        self.clear_recent_projects_action.setEnabled(bool(self._recent_projects))
         self._top_bar.set_recent_projects(self._recent_projects)
         self._rebuild_recent_menu()
 
@@ -539,18 +616,28 @@ class MainWindow(QMainWindow):
         return []
 
     def _rebuild_recent_menu(self) -> None:
-        """Mirror the recent project list into the *File → Open Recent* menu."""
+        """Mirror the recent project list into the *File → Open Recent* menu.
+
+        The menu is the drop-down on the top bar without its *Open Project*
+        entry, which *File* already carries directly above this submenu: the
+        history, then a separator, then *Clear Recent Projects*.  The last entry
+        is always there, disabled when there is nothing to clear, so that the
+        menu keeps the same shape whatever the history holds.
+        """
 
         self._recent_menu.clear()
         if not self._recent_projects:
             empty = self._recent_menu.addAction(self.tr('No Recent Projects'))
             empty.setEnabled(False)
-            return
-        for path in self._recent_projects:
-            action = self._recent_menu.addAction(path)
-            action.triggered.connect(
-                lambda _checked=False, selected=path: self.open_project_path(selected)
-            )
+        else:
+            for path in self._recent_projects:
+                action = self._recent_menu.addAction(path)
+                action.triggered.connect(
+                    lambda _checked=False, selected=path: self.open_project_path(selected)
+                )
+
+        self._recent_menu.addSeparator()
+        self._recent_menu.addAction(self.clear_recent_projects_action)
 
     # ------------------------------------------------------------------
     # Dialogs
@@ -594,6 +681,63 @@ class MainWindow(QMainWindow):
 
         self._state_label.setText(state)
         self.statusBar().showMessage(state, 4000)
+
+    def show_pane(self, key: str) -> None:
+        """Open a tool pane if it is not open already.
+
+        Parameters
+        ----------
+        key : str
+            Identifier of the pane.
+        """
+
+        self._set_pane_open(key, True)
+
+    def hide_pane(self, key: str) -> None:
+        """Close a tool pane if it is open.
+
+        Parameters
+        ----------
+        key : str
+            Identifier of the pane.
+        """
+
+        self._set_pane_open(key, False)
+
+    def _set_pane_open(self, key: str, open_: bool) -> None:
+        """Open or close a tool pane.
+
+        The stripe button is what is pressed rather than the pane shown or
+        hidden, so that the button, the pane and the exclusivity of its group
+        stay in step.  A button already in the wanted state is left alone, so
+        that showing an open pane does not toggle it shut.
+
+        Parameters
+        ----------
+        key : str
+            Identifier of the pane.
+        open_ : bool
+            Whether the pane should end up open.
+        """
+
+        action = self._side_bar.pane_action(key)
+        if action is not None and action.isChecked() != open_:
+            action.setChecked(open_)
+
+    def _report(self, message: str) -> None:
+        """Say something in the status bar for a few seconds.
+
+        Each caller passes a whole translated sentence rather than a noun to
+        drop into one: a sentence built from a fragment cannot be translated
+        into a language whose grammar does not agree with English's.
+
+        Parameters
+        ----------
+        message : str
+            The translated sentence to show.
+        """
+
+        self.statusBar().showMessage(message, 4000)
 
     def _on_pane_toggled(self, key: str, checked: bool) -> None:
         """Open or close the pane a tool stripe button stands for.

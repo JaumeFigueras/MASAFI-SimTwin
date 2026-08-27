@@ -108,6 +108,8 @@ class TopBar(QWidget):
         *Run* menu and this bar.
     open_project_action : PyQt6.QtGui.QAction
         The *Open Project* action, shown at the top of the project drop-down.
+    clear_recent_projects_action : PyQt6.QtGui.QAction
+        The action that empties the history, shown at the foot of the drop-down.
     search_action : PyQt6.QtGui.QAction
         The action behind the search button.
     settings_action : PyQt6.QtGui.QAction
@@ -128,6 +130,7 @@ class TopBar(QWidget):
         menu_bar: QMenuBar,
         control_actions: list[QAction],
         open_project_action: QAction,
+        clear_recent_projects_action: QAction,
         search_action: QAction,
         settings_action: QAction,
         parent: QWidget | None = None,
@@ -138,6 +141,7 @@ class TopBar(QWidget):
 
         self._menu_bar = menu_bar
         self._open_project_action = open_project_action
+        self._clear_recent_projects_action = clear_recent_projects_action
         self._recent_projects: list[str] = []
 
         layout = QHBoxLayout(self)
@@ -254,8 +258,12 @@ class TopBar(QWidget):
         """Rebuild the project drop-down.
 
         The menu always opens with *Open Project*; the recent projects follow it
-        after a separator, most recent first.  With no history the list is
-        replaced by a disabled placeholder so that the menu is never empty.
+        after a separator, most recent first; and *Clear Recent Projects* closes
+        it after a separator of its own.  With no history the list is replaced by
+        a disabled placeholder so that the menu is never empty.
+
+        The last entry is always there, disabled when there is nothing to clear,
+        so that the menu keeps the same shape whatever the history holds.
 
         Parameters
         ----------
@@ -272,14 +280,18 @@ class TopBar(QWidget):
         if not self._recent_projects:
             placeholder = menu.addAction(self.tr('No Recent Projects'))
             placeholder.setEnabled(False)
-            return
+        else:
+            for path in self._recent_projects:
+                action = menu.addAction(path)
+                action.setData(path)
+                action.triggered.connect(
+                    lambda _checked=False, selected=path: self.recent_project_selected.emit(
+                        selected
+                    )
+                )
 
-        for path in self._recent_projects:
-            action = menu.addAction(path)
-            action.setData(path)
-            action.triggered.connect(
-                lambda _checked=False, selected=path: self.recent_project_selected.emit(selected)
-            )
+        menu.addSeparator()
+        menu.addAction(self._clear_recent_projects_action)
 
     # ------------------------------------------------------------------
     # Hamburger behaviour

@@ -34,6 +34,7 @@ def top_bar(qtbot):
         menu_bar=menu_bar,
         control_actions=controls,
         open_project_action=QAction('Open Project…'),
+        clear_recent_projects_action=QAction('Clear Recent Projects'),
         search_action=QAction('Search'),
         settings_action=QAction('Settings'),
     )
@@ -178,10 +179,31 @@ def test_project_menu_lists_recent_projects(top_bar):
     top_bar.set_recent_projects(['/home/jaume/codi/one', '/home/jaume/codi/two'])
     entries = top_bar._project_button.menu().actions()
 
-    assert [entry.text() for entry in entries[2:]] == [
+    assert [entry.text() for entry in entries[2:-2]] == [
         '/home/jaume/codi/one',
         '/home/jaume/codi/two',
     ]
+
+
+def test_the_menu_ends_with_a_separator_and_the_clear_entry(top_bar):
+    """Whatever the history holds, so the menu keeps one shape."""
+
+    for history in ([], ['/home/jaume/codi/one']):
+        top_bar.set_recent_projects(history)
+        entries = top_bar._project_button.menu().actions()
+
+        assert entries[-2].isSeparator()
+        assert entries[-1] is top_bar._clear_recent_projects_action
+
+
+def test_the_clear_entry_is_the_action_the_bar_was_given(top_bar):
+    """The bar shows the window's action rather than one of its own."""
+
+    top_bar.set_recent_projects(['/home/jaume/codi/one'])
+    last = top_bar._project_button.menu().actions()[-1]
+
+    assert last.text() == 'Clear Recent Projects'
+    assert last is top_bar._clear_recent_projects_action
 
 
 def test_selecting_a_recent_project_is_reported(top_bar, qtbot):

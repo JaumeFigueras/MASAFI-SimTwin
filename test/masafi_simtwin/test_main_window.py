@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import QDialog, QDockWidget
 
 from masafi_simtwin import APPLICATION_NAME, project
 from masafi_simtwin.main_window import MAX_RECENT_PROJECTS, MainWindow
+from masafi_simtwin.project_tree import NodeKind
 from masafi_simtwin.top_bar import TopBar
 
 
@@ -105,7 +106,7 @@ def test_menu_bar_has_the_classic_menus(window):
 
     titles = [action.text() for action in window.top_bar._menu_bar.actions()]
 
-    assert titles == ['&File', '&Edit', '&View', '&Navigate', '&Run', '&Tools', '&Window', '&Help']
+    assert titles == ['&File', '&Edit', '&View', '&Project', '&Window', '&Help']
 
 
 def test_only_file_and_help_are_shown_without_a_project(window):
@@ -131,7 +132,7 @@ def test_the_other_menus_follow_the_open_project(window, make_project):
         action.text() for action in window.top_bar._menu_bar.actions() if action.isVisible()
     ]
 
-    assert opened == ['&File', '&Edit', '&View', '&Navigate', '&Run', '&Tools', '&Window', '&Help']
+    assert opened == ['&File', '&Edit', '&View', '&Project', '&Window', '&Help']
     assert closed == ['&File', '&Help']
 
 
@@ -145,24 +146,44 @@ def test_the_file_menu_opens_with_new_open_and_recent(window):
     assert entries[1] is window.open_project_action
     assert entries[2] is window._recent_menu.menuAction()
     assert entries[3] is window.close_project_action
-    assert entries[4] is window.quit_action
+    assert entries[4] is window.settings_action
+    assert entries[5] is window.quit_action
     assert not window.close_project_action.isEnabled()
 
 
-def test_simulation_controls_are_shared_with_the_run_menu(window):
-    """The top bar buttons and the Run menu are two views of the same actions."""
+def test_the_simulation_controls_live_on_the_top_bar_alone(window):
+    """There is no *Run* menu while there is no run control behind it.
 
-    run_menu = window.top_bar._menu_bar.actions()[4].menu()
-    entries = [action for action in run_menu.actions() if not action.isSeparator()]
+    The actions are still the window's own and still carry their icons, so they
+    are ready for whatever menu they end up in.
+    """
 
-    assert entries == [
+    titles = [action.text() for action in window.top_bar._menu_bar.actions()]
+    assert '&Run' not in titles
+
+    for action in (
         window.run_action,
         window.stop_action,
         window.fast_forward_action,
         window.reset_action,
-    ]
-    for action in entries:
+    ):
         assert not action.icon().isNull()
+
+
+def test_the_project_menu_offers_what_can_be_done_to_a_project(window, make_project):
+    """*New Model*, *New Simulation*, a separator, and the project's settings."""
+
+    window.open_project_path(make_project('Bottling Line'))
+    project_menu = window.top_bar._menu_bar.actions()[3].menu()
+
+    assert project_menu.title() == '&Project'
+    assert project_menu.actions() == [
+        window.new_model_action,
+        window.new_simulation_action,
+        project_menu.actions()[2],
+        window.project_settings_action,
+    ]
+    assert project_menu.actions()[2].isSeparator()
 
 
 def test_running_updates_the_status_bar(window):
@@ -617,3 +638,348 @@ def test_a_new_project_is_offered_beside_the_last_one(window, monkeypatch, make_
     window.new_project_action.trigger()
 
     assert opened == [str(Path(opened_project).parent)]
+
+
+# ----------------------------------------------------------------------
+# The project pane
+# ----------------------------------------------------------------------
+
+
+def test_opening_a_project_shows_the_project_pane(window, make_project, qtbot):
+    """The pane comes out with the project, whether or not it was open."""
+
+    window.show()
+    qtbot.waitExposed(window)
+    assert not window.tool_pane('project').isVisible()
+
+    window.open_project_path(make_project('Bottling Line'))
+
+    assert window.tool_pane('project').isVisible()
+    assert window._side_bar.pane_action('project').isChecked()
+
+
+def test_a_pane_already_open_is_left_alone(window, make_project, qtbot):
+    """Showing an open pane must not toggle it shut."""
+
+    window.show()
+    qtbot.waitExposed(window)
+    window.show_pane('project')
+    window.open_project_path(make_project('Bottling Line'))
+
+    assert window.tool_pane('project').isVisible()
+
+
+def test_the_pane_holds_the_tree_of_the_open_project(window, make_project):
+    """The name of the project is the root, with its three parts under it."""
+
+    window.open_project_path(make_project('Bottling Line'))
+    root = window._project_tree.root()
+
+    assert root.text(0) == 'Bottling Line'
+    assert [root.child(i).text(0) for i in range(root.childCount())] == [
+        'Models',
+        'Simulations',
+        'Statistics',
+    ]
+
+
+def test_closing_a_project_empties_the_tree(window, make_project):
+    """There is no project, so there is nothing for the tree to show."""
+
+    window.open_project_path(make_project('Bottling Line'))
+    window.close_project()
+
+    assert window._project_tree.topLevelItemCount() == 0
+    assert window._project_tree.root() is None
+
+
+def test_closing_a_project_closes_the_project_pane(window, make_project, qtbot):
+    """The pane holds nothing but the project, so it goes with it."""
+
+    window.show()
+    qtbot.waitExposed(window)
+    window.open_project_path(make_project('Bottling Line'))
+    assert window.tool_pane('project').isVisible()
+
+    window.close_project()
+
+    assert not window.tool_pane('project').isVisible()
+    assert not window._side_bar.pane_action('project').isChecked()
+
+
+def test_closing_a_project_leaves_the_other_panes_alone(window, make_project, qtbot):
+    """Only the Project pane is tied to the project."""
+
+    window.show()
+    qtbot.waitExposed(window)
+    window.open_project_path(make_project('Bottling Line'))
+    window.show_pane('python')
+
+    window.close_project()
+
+    assert window.tool_pane('python').isVisible()
+
+
+def test_closing_a_pane_that_is_already_closed_does_nothing(window, qtbot):
+    """Hiding a closed pane must not toggle it open."""
+
+    window.show()
+    qtbot.waitExposed(window)
+    window.hide_pane('project')
+
+    assert not window.tool_pane('project').isVisible()
+
+
+def test_the_tree_and_the_project_menu_offer_the_same_actions(window, make_project):
+    """Which is the point of `project_entries`: one list, two views."""
+
+    window.open_project_path(make_project('Bottling Line'))
+    tree = window._project_tree
+    menu = tree.menu_for(tree.root())
+
+    assert [action for action in menu.actions() if not action.isSeparator()] == [
+        window.new_model_action,
+        window.new_simulation_action,
+        window.project_settings_action,
+    ]
+
+
+@pytest.mark.parametrize(
+    ('kind', 'expected'),
+    [
+        (NodeKind.MODELS, 'new_model_action'),
+        (NodeKind.SIMULATIONS, 'new_simulation_action'),
+    ],
+)
+def test_a_branch_offers_only_what_can_be_added_to_it(window, make_project, kind, expected):
+    """One entry each, and it is the window's own action."""
+
+    window.open_project_path(make_project('Bottling Line'))
+    tree = window._project_tree
+    menu = tree.menu_for(tree.node(kind))
+
+    assert menu.actions() == [getattr(window, expected)]
+
+
+def test_the_statistics_branch_offers_nothing(window, make_project):
+    """Nothing is added to it by hand."""
+
+    window.open_project_path(make_project('Bottling Line'))
+    tree = window._project_tree
+
+    assert tree.menu_for(tree.node(NodeKind.STATISTICS)) is None
+
+
+@pytest.mark.parametrize(
+    'action', ['new_model_action', 'new_simulation_action', 'project_settings_action']
+)
+def test_the_project_actions_say_they_are_not_written_yet(window, action):
+    """They are wired and reachable; what they will do is the next step."""
+
+    getattr(window, action).trigger()
+
+    assert 'not implemented yet' in window.statusBar().currentMessage()
+
+
+# ----------------------------------------------------------------------
+# Clearing the history
+# ----------------------------------------------------------------------
+
+
+def drop_down(window):
+    """List what the project drop-down of the top bar offers.
+
+    Parameters
+    ----------
+    window : masafi_simtwin.main_window.MainWindow
+        The window.
+
+    Returns
+    -------
+    list of str
+        The titles, with ``'---'`` for a separator.
+    """
+
+    return [
+        '---' if action.isSeparator() else action.text()
+        for action in window.top_bar._project_button.menu().actions()
+    ]
+
+
+def open_recent(window):
+    """List what *File → Open Recent* offers.
+
+    Parameters
+    ----------
+    window : masafi_simtwin.main_window.MainWindow
+        The window.
+
+    Returns
+    -------
+    list of str
+        The titles, with ``'---'`` for a separator.
+    """
+
+    return [
+        '---' if action.isSeparator() else action.text()
+        for action in window._recent_menu.actions()
+    ]
+
+
+def test_the_drop_down_ends_with_a_separator_and_the_clear_entry(window, make_project):
+    """Below *Open Project*, the history, then the way to be rid of it."""
+
+    window.open_project_path(make_project('Bottling Line'))
+    entries = drop_down(window)
+
+    assert entries[0] == window.open_project_action.text()
+    assert entries[1] == '---'
+    assert entries[-2] == '---'
+    assert entries[-1] == window.clear_recent_projects_action.text()
+
+
+def test_the_clear_entry_is_the_windows_own_action(window):
+    """Not a copy, so it is the same entry wherever it is put."""
+
+    menu = window.top_bar._project_button.menu()
+
+    assert menu.actions()[-1] is window.clear_recent_projects_action
+
+
+def test_the_drop_down_keeps_its_shape_with_no_history(window):
+    """The entry is always there, disabled when there is nothing to clear."""
+
+    assert drop_down(window) == [
+        window.open_project_action.text(),
+        '---',
+        'No Recent Projects',
+        '---',
+        window.clear_recent_projects_action.text(),
+    ]
+    assert not window.clear_recent_projects_action.isEnabled()
+
+
+def test_the_clear_entry_comes_alive_with_the_first_project(window, make_project):
+    """There is something to clear only once something has been opened."""
+
+    assert not window.clear_recent_projects_action.isEnabled()
+    window.open_project_path(make_project('Bottling Line'))
+    assert window.clear_recent_projects_action.isEnabled()
+
+
+def test_clearing_empties_the_history_everywhere_at_once(window, make_project):
+    """The drop-down, the *File* menu and the stored list all follow."""
+
+    window.open_project_path(make_project('One'))
+    window.open_project_path(make_project('Two'))
+
+    window.clear_recent_projects_action.trigger()
+
+    assert window._recent_projects == []
+    assert 'No Recent Projects' in drop_down(window)
+    assert open_recent(window) == [
+        'No Recent Projects',
+        '---',
+        window.clear_recent_projects_action.text(),
+    ]
+    assert not window.clear_recent_projects_action.isEnabled()
+
+
+def test_clearing_survives_a_new_window(window, make_project, qtbot):
+    """The history is stored, so forgetting it has to be stored too."""
+
+    window.open_project_path(make_project('Bottling Line'))
+    window.clear_recent_projects_action.trigger()
+
+    reopened = MainWindow()
+    qtbot.addWidget(reopened)
+
+    assert reopened._recent_projects == []
+    assert not reopened.clear_recent_projects_action.isEnabled()
+
+
+def test_clearing_leaves_the_open_project_alone(window, make_project):
+    """Only the history goes; the project stays open and its file untouched."""
+
+    path = make_project('Bottling Line')
+    window.open_project_path(path)
+    window.clear_recent_projects_action.trigger()
+
+    assert window.windowTitle() == f'Bottling Line — {APPLICATION_NAME}'
+    assert Path(path).exists()
+    assert window.close_project_action.isEnabled()
+
+
+def test_clearing_says_so(window, make_project):
+    """A menu entry that appears to do nothing has to report that it did."""
+
+    window.open_project_path(make_project('Bottling Line'))
+    window.clear_recent_projects_action.trigger()
+
+    assert 'cleared' in window.statusBar().currentMessage()
+
+
+def test_open_recent_lists_the_history_then_the_way_to_be_rid_of_it(window, make_project):
+    """*File → Open Recent* is the drop-down without its *Open Project* entry."""
+
+    one, two = make_project('One'), make_project('Two')
+    window.open_project_path(one)
+    window.open_project_path(two)
+
+    assert open_recent(window) == [
+        two,
+        one,
+        '---',
+        window.clear_recent_projects_action.text(),
+    ]
+
+
+def test_open_recent_holds_the_same_clear_action_as_the_drop_down(window):
+    """One action in two menus, so it can never be enabled in only one of them."""
+
+    from_menu = window._recent_menu.actions()[-1]
+    from_bar = window.top_bar._project_button.menu().actions()[-1]
+
+    assert from_menu is window.clear_recent_projects_action
+    assert from_bar is window.clear_recent_projects_action
+
+
+def test_open_recent_keeps_its_shape_with_no_history(window):
+    """The placeholder, a separator, and the disabled way to clear nothing."""
+
+    assert open_recent(window) == [
+        'No Recent Projects',
+        '---',
+        window.clear_recent_projects_action.text(),
+    ]
+
+
+def test_clearing_from_open_recent_works_as_from_the_drop_down(window, make_project):
+    """It is the same action, so it had better."""
+
+    window.open_project_path(make_project('Bottling Line'))
+    window._recent_menu.actions()[-1].trigger()
+
+    assert window._recent_projects == []
+
+
+def test_a_stored_history_reaches_both_menus_when_the_window_opens(window, make_project, qtbot):
+    """The list is read back before either menu exists, so it has to be pushed.
+
+    A window built with a history showed it in the drop-down but left the
+    *File* submenu empty until the next project was opened.
+    """
+
+    path = make_project('Bottling Line')
+    window.open_project_path(path)
+
+    reopened = MainWindow()
+    qtbot.addWidget(reopened)
+
+    assert reopened._recent_projects == [path]
+    assert open_recent(reopened) == [
+        path,
+        '---',
+        reopened.clear_recent_projects_action.text(),
+    ]
+    assert reopened.clear_recent_projects_action.isEnabled()
