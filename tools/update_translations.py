@@ -56,7 +56,7 @@ LRELEASE_DIRECTORIES = (
 LOCALES = {'en': 'en_US', 'ca': 'ca_ES'}
 
 
-def find_tool(name: str, directories: tuple[Path, ...] = ()) -> Path:
+def find_tool(name: str, directories: tuple[Path, ...] = (), hint: str = '') -> Path:
     """Locate one of the Qt Linguist tools.
 
     Parameters
@@ -67,6 +67,8 @@ def find_tool(name: str, directories: tuple[Path, ...] = ()) -> Path:
         Directories to look in besides the virtualenv and the ``PATH``.  The
         environment variable named after the tool, ``$LRELEASE``, wins over
         the search.
+    hint : str, optional
+        What to tell the user when the tool is missing, appended to the error.
 
     Returns
     -------
@@ -89,10 +91,11 @@ def find_tool(name: str, directories: tuple[Path, ...] = ()) -> Path:
     found = shutil.which(name)
     if found:
         return Path(found)
-    raise SystemExit(
-        f'{name} was not found.  On Debian, install it with '
-        f'`sudo apt install qt6-l10n-tools`, or point $LRELEASE at it.'
+    advice = hint or (
+        'On Debian, install it with `sudo apt install qt6-l10n-tools`, or point '
+        f'${name.upper()} at it.'
     )
+    raise SystemExit(f'{name} was not found.  {advice}')
 
 
 def update(language: str, pylupdate: Path) -> None:

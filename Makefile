@@ -83,6 +83,23 @@ test-one:  ## Run a single test, e.g. make test-one T=test/foo_test.py::test_bar
 	QT_QPA_PLATFORM=offscreen $(PYTEST) $(T) -q
 
 # ----------------------------------------------------------------------------
+# Forms
+# ----------------------------------------------------------------------------
+
+.PHONY: ui
+ui:  ## Compile the Qt Designer forms into their ui_*.py modules
+	$(PYTHON) $(TOOLS_DIR)/build_forms.py
+
+.PHONY: ui-check
+ui-check:  ## Fail when a form has been saved without running `make ui`
+	$(PYTHON) $(TOOLS_DIR)/build_forms.py --check
+
+.PHONY: designer
+designer:  ## Open a form in Qt Designer, e.g. make designer F=about
+	@test -n "$(F)" || { echo "Usage: make designer F=<form>"; exit 2; }
+	$(PYTHON) $(TOOLS_DIR)/build_forms.py --designer $(F)
+
+# ----------------------------------------------------------------------------
 # Translations
 # ----------------------------------------------------------------------------
 

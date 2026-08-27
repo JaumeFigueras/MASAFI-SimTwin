@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import (
 )
 
 from masafi_simtwin import APPLICATION_NAME, icons
+from masafi_simtwin.dialogs import AboutDialog
 from masafi_simtwin.document_area import DocumentArea
 from masafi_simtwin.side_bar import SideBar
 from masafi_simtwin.tool_pane import ToolPane
@@ -139,9 +140,7 @@ class MainWindow(QMainWindow):
 
         self.about_action = QAction(self.tr('About {0}').format(APPLICATION_NAME), self)
         self.about_action.setMenuRole(QAction.MenuRole.AboutRole)
-        self.about_action.triggered.connect(
-            lambda: self.statusBar().showMessage(APPLICATION_NAME, 4000)
-        )
+        self.about_action.triggered.connect(self.show_about)
 
     def _build_menu_bar(self) -> QMenuBar:
         """Build the classic menu bar shown in place of the hamburger button.
@@ -498,6 +497,15 @@ class MainWindow(QMainWindow):
             action.triggered.connect(
                 lambda _checked=False, selected=path: self.open_project_path(selected)
             )
+
+    # ------------------------------------------------------------------
+    # Dialogs
+    # ------------------------------------------------------------------
+
+    def show_about(self) -> None:
+        """Open the About dialog, modal over the window."""
+
+        AboutDialog(self).exec()
 
     # ------------------------------------------------------------------
     # Slots

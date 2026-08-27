@@ -326,3 +326,24 @@ def test_panes_cannot_be_torn_off(shown_window, key):
     features = shown_window.tool_pane(key).features()
 
     assert features == QDockWidget.DockWidgetFeature.DockWidgetClosable
+
+
+def test_the_about_action_opens_the_about_dialog(window, monkeypatch):
+    """The action builds the dialog over the window instead of writing a message.
+
+    The dialog is modal, so it is stubbed rather than executed: what is worth
+    asserting is that the action reaches it and parents it on the window.
+    """
+
+    opened = []
+
+    class StubAboutDialog:
+        def __init__(self, parent=None):
+            opened.append(parent)
+
+        def exec(self):
+            return 0
+
+    monkeypatch.setattr('masafi_simtwin.main_window.AboutDialog', StubAboutDialog)
+    window.about_action.trigger()
+    assert opened == [window]
