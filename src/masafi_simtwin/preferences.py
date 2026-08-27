@@ -36,6 +36,7 @@ preference the shell reads it and passes the plain value down.
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -162,6 +163,42 @@ def preference(key: str) -> Preference:
         return BY_KEY[key]
     except KeyError:
         raise KeyError(f'{key!r} is not a preference of this application') from None
+
+
+#: Where the identifier of this installation is kept.  It is not a
+#: :class:`Preference`: nobody chooses it, it has no default worth naming and it
+#: is never shown in the settings dialog.  It lives here because this is the
+#: module that owns what the application remembers about this user on this
+#: machine.
+INSTALL_KEY = 'identity/install'
+
+
+def install_id(settings: QSettings | None = None) -> str:
+    """Give the identifier of this installation, making one the first time.
+
+    It goes into a project's history, so that two projects edited on the same
+    machine can be seen to have been.  It says nothing about who the user is —
+    it is a random number generated locally and never sent anywhere — but it is
+    written into every project made or opened here, which is worth knowing and
+    worth saying out loud.
+
+    Parameters
+    ----------
+    settings : PyQt6.QtCore.QSettings, optional
+        Where to keep it.  The default is a plain ``QSettings()``.
+
+    Returns
+    -------
+    str
+        The identifier, the same one on every call.
+    """
+
+    store = settings if settings is not None else QSettings()
+    stored = store.value(INSTALL_KEY, '', type=str)
+    if not stored:
+        stored = str(uuid.uuid4())
+        store.setValue(INSTALL_KEY, stored)
+    return stored
 
 
 def needs_restart(keys: tuple[str, ...] | list[str]) -> bool:

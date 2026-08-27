@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 from PyQt6.QtCore import QSettings
 
 from masafi_simtwin.preferences import (
     BY_KEY,
+    INSTALL_KEY,
     PREFERENCES,
+    install_id,
     needs_restart,
     SYSTEM_LANGUAGE,
     SYSTEM_THEME,
@@ -269,3 +273,43 @@ def test_an_edit_refuses_a_value_outside_the_choices(preferences):
 
     with pytest.raises(ValueError, match='appearance/theme'):
         preferences.edit().set_value('appearance/theme', 'sepia')
+
+
+# ----------------------------------------------------------------------
+# The identifier of this installation
+# ----------------------------------------------------------------------
+
+
+def test_an_installation_identifier_is_made_once(path):
+    """The same one on every call, so a project's history is consistent."""
+
+    settings = QSettings(str(path), QSettings.Format.IniFormat)
+    first = install_id(settings)
+    second = install_id(settings)
+
+    assert first == second
+    assert uuid.UUID(first)
+
+
+def test_the_identifier_outlives_the_settings_object(path):
+    """It is stored, not held: it identifies the installation, not the run."""
+
+    first = install_id(QSettings(str(path), QSettings.Format.IniFormat))
+    reread = install_id(QSettings(str(path), QSettings.Format.IniFormat))
+
+    assert reread == first
+
+
+def test_two_installations_are_told_apart(tmp_path):
+    """Which is what makes it worth putting in a project's history."""
+
+    one = install_id(QSettings(str(tmp_path / 'a.ini'), QSettings.Format.IniFormat))
+    two = install_id(QSettings(str(tmp_path / 'b.ini'), QSettings.Format.IniFormat))
+
+    assert one != two
+
+
+def test_the_identifier_is_not_a_preference():
+    """Nobody chooses it, so it has no page and no default worth naming."""
+
+    assert INSTALL_KEY not in BY_KEY

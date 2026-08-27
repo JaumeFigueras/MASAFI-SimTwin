@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import QDialog, QDockWidget
 
 from masafi_simtwin import APPLICATION_NAME, project
 from masafi_simtwin.main_window import MAX_RECENT_PROJECTS, MainWindow
+from masafi_simtwin.preferences import install_id
 from masafi_simtwin.project_tree import NodeKind
 from masafi_simtwin.top_bar import TopBar
 
@@ -1115,3 +1116,110 @@ def test_a_broken_project_keeps_its_place(window, tmp_path, qtbot):
 
     assert window._recent_projects == [str(broken)]
     assert open_recent(window)[0] == 'broken'
+
+
+# ----------------------------------------------------------------------
+# The editing sessions a project records
+# ----------------------------------------------------------------------
+
+
+def events(path):
+    """List the events of a project's history.
+
+    Parameters
+    ----------
+    path : str
+        The project file.
+
+    Returns
+    -------
+    list of str
+        The event names, oldest first.
+    """
+
+    return [entry['event'] for entry in project.read_manifest(path)['history']]
+
+
+def test_opening_a_project_records_a_session(window, make_project):
+    """A session opens when the project does."""
+
+    path = make_project('Bottling Line')
+    window.open_project_path(path)
+
+    assert events(path) == [project.EVENT_CREATED, project.EVENT_OPENED]
+
+
+def test_closing_a_project_closes_its_session(window, make_project):
+    """With a duration, which is what makes the shape of a history readable."""
+
+    path = make_project('Bottling Line')
+    window.open_project_path(path)
+    window.close_project()
+
+    assert events(path) == [
+        project.EVENT_CREATED,
+        project.EVENT_OPENED,
+        project.EVENT_CLOSED,
+    ]
+    assert 'duration' in project.read_manifest(path)['history'][-1]
+
+
+def test_opening_another_project_closes_the_first_session(window, make_project):
+    """A window shows one project, so it is in one session at a time."""
+
+    first = make_project('One')
+    window.open_project_path(first)
+    window.open_project_path(make_project('Two'))
+
+    assert events(first)[-1] == project.EVENT_CLOSED
+
+
+def test_closing_the_window_closes_the_session(window, make_project):
+    """Quitting is a way of ending a session like any other."""
+
+    path = make_project('Bottling Line')
+    window.open_project_path(path)
+    window.close()
+
+    assert events(path)[-1] == project.EVENT_CLOSED
+
+
+def test_the_history_is_chained_across_sessions(window, make_project):
+    """The window writes through the same chaining as everything else."""
+
+    path = make_project('Bottling Line')
+    window.open_project_path(path)
+    window.close_project()
+
+    entries = project.read_manifest(path)['history']
+    assert [entry['previous'] for entry in entries[1:]] == [
+        entry['log_item_id'] for entry in entries[:-1]
+    ]
+
+
+def test_the_installation_is_recorded_with_every_session(window, make_project):
+    """Two projects edited on one machine can be seen to have been."""
+
+    path = make_project('Bottling Line')
+    window.open_project_path(path)
+
+    assert project.read_manifest(path)['history'][-1]['install'] == install_id()
+
+
+def test_a_history_that_cannot_be_written_does_not_stop_the_project_opening(
+    window, make_project, monkeypatch
+):
+    """A project on a read-only medium still opens; it says the record failed."""
+
+    path = make_project('Bottling Line')
+    monkeypatch.setattr(
+        'masafi_simtwin.project.record',
+        lambda *arguments, **keywords: (_ for _ in ()).throw(
+            project.ProjectError('read only')
+        ),
+    )
+
+    window.open_project_path(path)
+
+    assert window.windowTitle() == f'Bottling Line — {APPLICATION_NAME}'
+    assert 'history' in window.statusBar().currentMessage()

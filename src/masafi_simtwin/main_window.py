@@ -12,6 +12,7 @@ the documents fill the centre; the status bar closes the window at the bottom.
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from PyQt6.QtCore import QSettings, QSize, Qt
@@ -36,7 +37,7 @@ from masafi_simtwin.dialogs import (
     SettingsDialog,
     ask_to_restart,
 )
-from masafi_simtwin.preferences import needs_restart
+from masafi_simtwin.preferences import install_id, needs_restart
 from masafi_simtwin.project_tree import NodeKind, ProjectTree
 from masafi_simtwin.document_area import DocumentArea
 from masafi_simtwin.side_bar import SideBar
@@ -67,6 +68,8 @@ class MainWindow(QMainWindow):
 
         self._settings = QSettings()
         self._project_name: str = ''
+        self._project_path: str | None = None
+        self._session_started: float = 0.0
         self._recent_projects: list[str] = self._load_recent_projects()
 
         self._create_actions()
@@ -461,7 +464,9 @@ class MainWindow(QMainWindow):
         if dialog.exec() != QDialog.DialogCode.Accepted or dialog.project_path is None:
             return
         try:
-            created = project.create(dialog.project_path, dialog.name)
+            created = project.create(
+                dialog.project_path, dialog.name, install=install_id()
+            )
         except project.ProjectError as error:
             QMessageBox.critical(
                 self,
@@ -502,6 +507,11 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, self.tr('The project could not be opened'), str(error))
             return
 
+        self._end_session()
+        self._project_path = path
+        self._session_started = time.monotonic()
+        self._record(path, project.EVENT_OPENED)
+
         self._project_name = name
         self._top_bar.set_project_name(self._project_name)
         self.setWindowTitle(f'{self._project_name} — {APPLICATION_NAME}')
@@ -535,6 +545,8 @@ class MainWindow(QMainWindow):
         nothing else, so leaving it behind would leave an empty panel taking up
         the side of the window.
         """
+
+        self._end_session()
 
         self._project_name = ''
         self._top_bar.set_project_name(self.tr('No Project'))
@@ -603,6 +615,55 @@ class MainWindow(QMainWindow):
         self.clear_recent_projects_action.setEnabled(bool(projects))
         self._top_bar.set_recent_projects(projects)
         self._rebuild_recent_menu(projects)
+
+    def _end_session(self) -> None:
+        """Close the editing session of the open project, if there is one.
+
+        A session is a pair of entries rather than one written at the end, so
+        that a run cut short by a crash still leaves its opening behind — an
+        unclosed session is itself worth seeing.
+        """
+
+        if self._project_path is None:
+            return
+        duration = int(time.monotonic() - self._session_started)
+        self._record(self._project_path, project.EVENT_CLOSED, duration)
+        self._project_path = None
+
+    def _record(self, path: str, event: str, duration: int | None = None) -> None:
+        """Add an entry to a project's history, saying so if it cannot be added.
+
+        A history that cannot be written is not a reason to refuse to open a
+        project — a project on a read-only medium still opens — but it is worth
+        saying, because the record is the point.
+
+        Parameters
+        ----------
+        path : str
+            The project file.
+        event : str
+            What happened, one of the ``EVENT_*`` names of
+            :mod:`masafi_simtwin.project`.
+        duration : int, optional
+            Seconds the session lasted, on a closing entry.
+        """
+
+        try:
+            project.record(path, event, project.current_user(), install_id(), duration)
+        except project.ProjectError:
+            self._report(self.tr('The project history could not be written'))
+
+    def closeEvent(self, event) -> None:  # noqa: N802  (Qt naming)
+        """Close the open project's session before the window goes.
+
+        Parameters
+        ----------
+        event : PyQt6.QtGui.QCloseEvent
+            The close event, always accepted.
+        """
+
+        self._end_session()
+        super().closeEvent(event)
 
     def _forget_missing_projects(self) -> None:
         """Drop from the history the projects whose files have gone.

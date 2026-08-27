@@ -23,7 +23,9 @@ package exists, which is where a document format belongs.
 from __future__ import annotations
 
 import getpass
+import hashlib
 import json
+import os
 import uuid
 import zipfile
 from datetime import datetime, timezone
@@ -49,6 +51,17 @@ FORMAT_VERSION = 2
 #: yet.  A zip has no directories of its own; these are the empty entries that
 #: make one show a project's shape when it is opened with any archive tool.
 FOLDERS: tuple[str, ...] = ('models/', 'simulations/', 'statistics/', 'logs/')
+
+#: The events a project's history records.  A session is a pair: one entry when
+#: the project is opened, one when it is closed, so that a run that ends in a
+#: crash still leaves the opening behind.
+EVENT_CREATED = 'created'
+EVENT_OPENED = 'opened'
+EVENT_CLOSED = 'closed'
+
+#: How many characters of the digest a ``log_item_id`` keeps.  Far more than is
+#: forgeable by hand, and short enough to read out over a desk.
+LOG_ITEM_ID_LENGTH = 16
 
 
 class ProjectError(Exception):
@@ -128,6 +141,98 @@ def manifest(name: str, author: str | None = None, company: str = '') -> dict:
     }
 
 
+def _canonical(entry: dict) -> str:
+    """Render a history entry so that hashing it is reproducible.
+
+    Sorted keys and fixed separators, so that a manifest reformatted by any
+    tool still hashes to what it hashed to when it was written.
+
+    Parameters
+    ----------
+    entry : dict
+        The entry.
+
+    Returns
+    -------
+    str
+        Its canonical JSON.
+    """
+
+    return json.dumps(entry, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
+
+
+def link(entry: dict, previous: str | None) -> dict:
+    """Chain one history entry to the one before it.
+
+    The identifier covers the entry *and* the identifier of the entry before,
+    which in turn covers everything before that: one link deep is the whole
+    history deep.  Altering or removing any entry therefore invalidates every
+    entry after it, not only its own.
+
+    Parameters
+    ----------
+    entry : dict
+        What is being recorded.
+    previous : str, optional
+        The ``log_item_id`` of the entry before, ``None`` for the first.
+
+    Returns
+    -------
+    dict
+        The entry with ``previous`` and ``log_item_id`` added.
+    """
+
+    body = dict(entry, previous=previous)
+    digest = hashlib.sha256(_canonical(body).encode('utf-8')).hexdigest()
+    return dict(body, log_item_id=digest[:LOG_ITEM_ID_LENGTH])
+
+
+def history_entry(
+    event: str,
+    project: str,
+    author: str,
+    install: str,
+    duration: int | None = None,
+) -> dict:
+    """Build an unchained history entry.
+
+    The project's UUID is in every entry on purpose: a copy whose UUID has been
+    regenerated then carries a history that does not belong to it, so defeating
+    one of the two mechanisms means defeating both.
+
+    Parameters
+    ----------
+    event : str
+        One of :data:`EVENT_CREATED`, :data:`EVENT_OPENED`,
+        :data:`EVENT_CLOSED`.
+    project : str
+        The UUID of the project this happened to.
+    author : str
+        Whoever was at the keyboard.
+    install : str
+        Which installation of the application they were using.
+    duration : int, optional
+        Seconds the session lasted, on a closing entry.
+
+    Returns
+    -------
+    dict
+        The entry, ready to be chained by :func:`link`.
+    """
+
+    entry = {
+        'event': event,
+        'at': datetime.now(timezone.utc).isoformat(timespec='seconds'),
+        'project': project,
+        'author': author,
+        'install': install,
+        'app_version': __version__,
+    }
+    if duration is not None:
+        entry['duration'] = duration
+    return entry
+
+
 def _directory_entry(name: str) -> zipfile.ZipInfo:
     """Build the archive entry that stands for an empty directory.
 
@@ -153,7 +258,11 @@ def _directory_entry(name: str) -> zipfile.ZipInfo:
 
 
 def create(
-    path: str | Path, name: str, author: str | None = None, company: str = ''
+    path: str | Path,
+    name: str,
+    author: str | None = None,
+    company: str = '',
+    install: str = '',
 ) -> Path:
     """Write a new, empty project.
 
@@ -171,6 +280,9 @@ def create(
         Who is making it, the current user by default.
     company : str, optional
         Who they are making it for, blank by default.
+    install : str, optional
+        Which installation of the application is making it, for the first entry
+        of the history.
 
     Returns
     -------
@@ -186,16 +298,112 @@ def create(
     target = Path(path)
     if target.exists():
         raise ProjectError(f'{target} is already there')
+
+    content = manifest(name, author, company)
+    content['history'] = [
+        link(
+            history_entry(
+                EVENT_CREATED, content['uuid'], content['author'], install
+            ),
+            None,
+        )
+    ]
+
     try:
         with zipfile.ZipFile(target, 'w', zipfile.ZIP_DEFLATED) as archive:
-            archive.writestr(
-                MANIFEST_NAME, json.dumps(manifest(name, author, company), indent=2)
-            )
+            archive.writestr(MANIFEST_NAME, json.dumps(content, indent=2))
             for folder in FOLDERS:
                 archive.writestr(_directory_entry(folder), b'')
     except OSError as error:
         raise ProjectError(str(error)) from error
     return target
+
+
+def record(
+    path: str | Path,
+    event: str,
+    author: str,
+    install: str,
+    duration: int | None = None,
+) -> dict:
+    """Append one entry to a project's history.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        The project file.
+    event : str
+        One of :data:`EVENT_CREATED`, :data:`EVENT_OPENED`,
+        :data:`EVENT_CLOSED`.
+    author : str
+        Whoever was at the keyboard.
+    install : str
+        Which installation of the application they were using.
+    duration : int, optional
+        Seconds the session lasted, on a closing entry.
+
+    Returns
+    -------
+    dict
+        The entry that was appended, chained.
+
+    Raises
+    ------
+    ProjectError
+        When the project cannot be read, or cannot be written back.
+    """
+
+    content = read_manifest(path)
+    history = content.get('history') or []
+    previous = history[-1].get('log_item_id') if history else None
+    entry = link(
+        history_entry(event, content.get('uuid', ''), author, install, duration),
+        previous,
+    )
+    content['history'] = [*history, entry]
+    _rewrite_manifest(path, content)
+    return entry
+
+
+def _rewrite_manifest(path: str | Path, content: dict) -> None:
+    """Put a manifest back into a project, leaving everything else alone.
+
+    A zip entry cannot be replaced where it lies, so the archive is written
+    afresh beside the original and moved over it.  The move is what makes this
+    safe: an interrupted write leaves the original project untouched rather
+    than half of a new one.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        The project file.
+    content : dict
+        The manifest to write in place of the one that is there.
+
+    Raises
+    ------
+    ProjectError
+        When the project cannot be written back.
+    """
+
+    target = Path(path)
+    beside = target.with_name(f'{target.name}.writing')
+    try:
+        with zipfile.ZipFile(target) as source:
+            entries = [
+                (info, b'' if info.is_dir() else source.read(info.filename))
+                for info in source.infolist()
+            ]
+        with zipfile.ZipFile(beside, 'w', zipfile.ZIP_DEFLATED) as written:
+            for info, data in entries:
+                if info.filename == MANIFEST_NAME:
+                    written.writestr(info, json.dumps(content, indent=2))
+                else:
+                    written.writestr(info, data)
+        os.replace(beside, target)
+    except (OSError, zipfile.BadZipFile) as error:
+        beside.unlink(missing_ok=True)
+        raise ProjectError(f'{target} could not be written: {error}') from error
 
 
 def read_manifest(path: str | Path) -> dict:

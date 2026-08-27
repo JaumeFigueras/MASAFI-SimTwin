@@ -127,3 +127,42 @@ dialog, no default worth naming, and it is a list rather than a choice.
 **If it moves.** `Preference` would need a type the list round-trips through, and the settings file
 would gain a key nobody edits by hand. Not obviously an improvement — recorded so the inconsistency
 is a decision rather than an oversight.
+
+---
+
+## Copies are detected by identity, not yet by content
+
+**Now.** A project carries a `uuid` generated once and never regenerated, and an append-only
+`history` in its manifest whose entries are chained: each `log_item_id` is a truncated SHA-256 of the
+entry together with the identifier of the entry before it, so altering or removing any entry
+invalidates every entry after it. Each entry names the author, the installation, the application
+version and the project's own UUID. Verification is deliberately **not** in this repository.
+
+**What that catches.** A project copied and edited keeps the UUID and the original author's name in
+its history. A history edited by hand breaks the chain. Two submissions edited on one machine share
+an installation identifier.
+
+**What it does not catch.** A student who rebuilds the model in a project of their own. Nothing in
+the manifest can see that, because nothing in the manifest looks at the model.
+
+**What would.** A fingerprint of the model's *topology*, once there is a model to fingerprint.
+Renaming blocks and moving the layout changes names and coordinates but not the graph, so: strip
+everything cosmetic — names, coordinates, colours, comments — then canonicalise with
+Weisfeiler–Lehman refinement (each block labelled with its *type*, then
+`label ← hash(label, sorted(neighbour labels))` for three or four rounds), and store both the digest
+of the sorted final labels and the multiset of per-node labels. The digest catches identical networks
+however renamed or reordered; the multiset gives a Jaccard similarity, which is what is actually
+wanted — a copy with two blocks added should score 0.9, not "different". Hash the numeric parameters
+separately: students who restructure usually keep the numbers, and an identical non-default random
+seed is close to conclusive on its own.
+
+**Deliberate non-goals.** None of this is tamper-*proof*, and it should not pretend to be: the format
+is a readable zip and the chaining is in the source, so a determined student can rebuild the whole
+chain. What the chain changes is the cost — they must forge every link and a plausible sequence of
+timestamps, authors and versions, rather than delete one line. Against a history deleted outright,
+the signal is its *shape*: three entries from the night before the deadline against a class average
+of forty over two weeks. And no measure here should rely on secrecy of the *algorithm*; the topology
+fingerprint works even when fully understood, because evading it means genuinely building a different
+model.
+
+**Where.** `masafi_simtwin/project.py` — `link()`, `history_entry()`, `record()`.

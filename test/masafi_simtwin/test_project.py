@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import uuid
 import zipfile
@@ -340,3 +341,140 @@ def test_naming_nothing_gives_nothing(tmp_path):
     """An empty history is not a special case anywhere else."""
 
     assert project.labels_for([]) == []
+
+
+# ----------------------------------------------------------------------
+# The history, and the chain through it
+# ----------------------------------------------------------------------
+
+
+def history(path):
+    """Read a project's history.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        The project file.
+
+    Returns
+    -------
+    list of dict
+        Its entries, oldest first.
+    """
+
+    return project.read_manifest(path)['history']
+
+
+def test_a_new_project_starts_its_history(created):
+    """The first entry is the creation, and it names who made it."""
+
+    entries = history(created)
+
+    assert len(entries) == 1
+    assert entries[0]['event'] == project.EVENT_CREATED
+    assert entries[0]['author'] == project.current_user()
+    assert entries[0]['previous'] is None
+
+
+def test_every_entry_carries_the_projects_uuid(created):
+    """Regenerating the UUID leaves a history that no longer belongs to it."""
+
+    identifier = project.read_manifest(created)['uuid']
+    project.record(created, project.EVENT_OPENED, 'jaume', 'install-1')
+
+    assert {entry['project'] for entry in history(created)} == {identifier}
+
+
+def test_recording_appends_and_chains(created):
+    """Each entry's identifier covers the one before it."""
+
+    first = history(created)[0]
+    second = project.record(created, project.EVENT_OPENED, 'jaume', 'install-1')
+    third = project.record(created, project.EVENT_CLOSED, 'jaume', 'install-1', 120)
+
+    assert [entry['log_item_id'] for entry in history(created)] == [
+        first['log_item_id'],
+        second['log_item_id'],
+        third['log_item_id'],
+    ]
+    assert second['previous'] == first['log_item_id']
+    assert third['previous'] == second['log_item_id']
+    assert third['duration'] == 120
+
+
+def test_an_identifier_is_a_truncated_sha256(created):
+    """Not a checksum a forger can steer by nudging a timestamp."""
+
+    entry = history(created)[0]
+    body = {key: value for key, value in entry.items() if key != 'log_item_id'}
+    expected = hashlib.sha256(
+        json.dumps(body, sort_keys=True, separators=(',', ':')).encode()
+    ).hexdigest()
+
+    assert entry['log_item_id'] == expected[: project.LOG_ITEM_ID_LENGTH]
+    assert len(entry['log_item_id']) == 16
+
+
+def test_altering_an_entry_invalidates_every_entry_after_it(created):
+    """One link deep is the whole history deep.
+
+    This is the property the chain exists for, so it is checked here rather
+    than assumed: the identifier of an entry covers the identifier before it,
+    which covers everything before that.
+    """
+
+    for _ in range(4):
+        project.record(created, project.EVENT_OPENED, 'jaume', 'install-1')
+    entries = history(created)
+
+    # rewrite the first entry as another author would have to
+    tampered = dict(entries[0], author='someone-else')
+    body = {key: value for key, value in tampered.items() if key != 'log_item_id'}
+    rebuilt = project.link(
+        {key: value for key, value in body.items() if key != 'previous'},
+        body['previous'],
+    )
+
+    assert rebuilt['log_item_id'] != entries[1]['previous']
+
+
+def test_only_the_manifest_is_replaced_when_recording(created):
+    """The folders, and later the models, survive a history entry."""
+
+    project.record(created, project.EVENT_OPENED, 'jaume', 'install-1')
+
+    with zipfile.ZipFile(created) as archive:
+        assert archive.namelist() == [project.MANIFEST_NAME, *project.FOLDERS]
+
+
+def test_recording_leaves_no_working_file_behind(created, tmp_path):
+    """The archive is rewritten beside the original and moved over it."""
+
+    project.record(created, project.EVENT_OPENED, 'jaume', 'install-1')
+
+    assert [path.name for path in tmp_path.iterdir()] == [created.name]
+
+
+def test_a_failed_rewrite_leaves_the_project_alone(created, monkeypatch):
+    """The move is what makes an interrupted write harmless."""
+
+    before = created.read_bytes()
+    monkeypatch.setattr(
+        'masafi_simtwin.project.os.replace',
+        lambda source, target: (_ for _ in ()).throw(OSError('no')),
+    )
+
+    with pytest.raises(project.ProjectError):
+        project.record(created, project.EVENT_OPENED, 'jaume', 'install-1')
+
+    assert created.read_bytes() == before
+
+
+def test_a_history_cannot_be_recorded_into_something_that_is_not_a_project(tmp_path):
+    """The same refusal as reading one."""
+
+    path = tmp_path / f'nope{project.PROJECT_SUFFIX}'
+    path.write_bytes(b'hello')
+
+    with pytest.raises(project.ProjectError):
+        project.record(path, project.EVENT_OPENED, 'jaume', 'install-1')
