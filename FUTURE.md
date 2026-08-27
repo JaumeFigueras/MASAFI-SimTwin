@@ -165,4 +165,4 @@ of forty over two weeks. And no measure here should rely on secrecy of the *algo
 fingerprint works even when fully understood, because evading it means genuinely building a different
 model.
 
-**Where.** `masafi_simtwin/project.py` — `link()`, `history_entry()`, `record()`.
+**Where.** `masafi_simtwin/project.py` — `link()`, `history_entry()`, `record()`. The auditor is `src/bonus/mfstz-audit/`, which `.gitignore` excludes.
