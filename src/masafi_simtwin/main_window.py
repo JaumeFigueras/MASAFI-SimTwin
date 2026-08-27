@@ -33,6 +33,7 @@ from PyQt6.QtWidgets import (
 from masafi_simtwin import APPLICATION_NAME, icons, project
 from masafi_simtwin.dialogs import (
     AboutDialog,
+    ModelDialog,
     NewProjectDialog,
     SettingsDialog,
     ask_to_restart,
@@ -109,14 +110,18 @@ class MainWindow(QMainWindow):
         self.close_project_action.triggered.connect(self.close_project)
 
         self.new_model_action = QAction(self.tr('New Model…'), self)
-        self.new_model_action.triggered.connect(
-            lambda: self._report(self.tr('Creating a model is not implemented yet'))
-        )
+        self.new_model_action.triggered.connect(self.new_model)
 
         self.new_simulation_action = QAction(self.tr('New Simulation…'), self)
         self.new_simulation_action.triggered.connect(
             lambda: self._report(self.tr('Creating a simulation is not implemented yet'))
         )
+
+        self.model_properties_action = QAction(self.tr('Model Properties…'), self)
+        self.model_properties_action.triggered.connect(self.edit_model)
+
+        self.delete_model_action = QAction(self.tr('Delete Model'), self)
+        self.delete_model_action.triggered.connect(self.delete_model)
 
         self.project_settings_action = QAction(self.tr('Project Settings…'), self)
         self.project_settings_action.triggered.connect(
@@ -359,6 +364,11 @@ class MainWindow(QMainWindow):
             {
                 NodeKind.ROOT: self.project_entries(),
                 NodeKind.MODELS: [self.new_model_action],
+                NodeKind.MODEL: [
+                    self.model_properties_action,
+                    None,
+                    self.delete_model_action,
+                ],
                 NodeKind.SIMULATIONS: [self.new_simulation_action],
             },
             self,
@@ -517,7 +527,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f'{self._project_name} — {APPLICATION_NAME}')
         self.close_project_action.setEnabled(True)
         self._update_menus_for_project()
-        self._project_tree.set_project(name)
+        self._project_tree.set_project(name, project.models_of(path))
         self.show_pane('project')
         self._remember_project(path)
         self.statusBar().showMessage(self.tr('Opened {0}').format(path), 4000)
@@ -725,6 +735,141 @@ class MainWindow(QMainWindow):
 
         self._recent_menu.addSeparator()
         self._recent_menu.addAction(self.clear_recent_projects_action)
+
+    # ------------------------------------------------------------------
+    # Models
+    # ------------------------------------------------------------------
+
+    def new_model(self) -> None:
+        """Ask what model to add to the open project, and add it."""
+
+        if self._project_path is None:
+            return
+        dialog = ModelDialog(self, taken=self._model_names())
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        self._change_models(
+            lambda path: project.add_model(
+                path,
+                dialog.name,
+                dialog.kind,
+                dialog.units(),
+                project.current_user(),
+                install_id(),
+            ),
+            self.tr('The model could not be added'),
+        )
+
+    def edit_model(self) -> None:
+        """Change the name or the units of the model selected in the tree."""
+
+        model = self._selected_model()
+        if model is None or self._project_path is None:
+            return
+        dialog = ModelDialog(
+            self,
+            model=model,
+            taken=[
+                name for name in self._model_names() if name != model.get('name')
+            ],
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        self._change_models(
+            lambda path: project.update_model(
+                path,
+                model['uuid'],
+                dialog.name,
+                dialog.units(),
+                project.current_user(),
+                install_id(),
+            ),
+            self.tr('The model could not be changed'),
+        )
+
+    def delete_model(self) -> None:
+        """Remove the model selected in the tree, having asked first.
+
+        Deleting is the one thing here that cannot be undone, so it is the one
+        thing that asks.
+        """
+
+        model = self._selected_model()
+        if model is None or self._project_path is None:
+            return
+        answer = QMessageBox.question(
+            self,
+            self.tr('Delete the model?'),
+            self.tr('{0} and everything in it will be removed from the project.').format(
+                model.get('name', '')
+            ),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        self._change_models(
+            lambda path: project.remove_model(
+                path, model['uuid'], project.current_user(), install_id()
+            ),
+            self.tr('The model could not be removed'),
+        )
+
+    def _change_models(self, change, failure: str) -> None:
+        """Apply a change to the project's models and show the result.
+
+        Every change is written to the project as it is made — there is no save
+        step — so a failure to write is the only thing that can go wrong, and it
+        is reported rather than raised.
+
+        Parameters
+        ----------
+        change : collections.abc.Callable
+            What to do to the project, given its path.
+        failure : str
+            Translated sentence to show when it cannot be done.
+        """
+
+        try:
+            change(self._project_path)
+        except project.ProjectError as error:
+            QMessageBox.critical(self, failure, str(error))
+            return
+        self._project_tree.set_models(project.models_of(self._project_path))
+
+    def _model_names(self) -> list[str]:
+        """List the names of the open project's models.
+
+        Returns
+        -------
+        list of str
+            The names, so that a dialog can refuse to reuse one.
+        """
+
+        if self._project_path is None:
+            return []
+        return [model.get('name', '') for model in project.models_of(self._project_path)]
+
+    def _selected_model(self) -> dict | None:
+        """Give the model the tree is on, if it is on one.
+
+        Returns
+        -------
+        dict, optional
+            Its entry in the manifest, or ``None`` when no model is selected.
+        """
+
+        identifier = self._project_tree.model_of(self._project_tree.currentItem())
+        if identifier is None or self._project_path is None:
+            return None
+        return next(
+            (
+                model
+                for model in project.models_of(self._project_path)
+                if model.get('uuid') == identifier
+            ),
+            None,
+        )
 
     # ------------------------------------------------------------------
     # Dialogs

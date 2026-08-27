@@ -25,12 +25,16 @@ class NodeKind(Enum):
 
     ROOT = 'root'
     MODELS = 'models'
+    MODEL = 'model'
     SIMULATIONS = 'simulations'
     STATISTICS = 'statistics'
 
 
 #: Where the :class:`NodeKind` of an item is kept, on the item itself.
 KIND_ROLE = Qt.ItemDataRole.UserRole
+
+#: Where the UUID of the model a node stands for is kept.
+MODEL_ROLE = Qt.ItemDataRole.UserRole + 1
 
 
 class ProjectTree(QTreeWidget):
@@ -70,13 +74,15 @@ class ProjectTree(QTreeWidget):
     # What the tree holds
     # ------------------------------------------------------------------
 
-    def set_project(self, name: str) -> QTreeWidgetItem:
+    def set_project(self, name: str, models: list[dict] | None = None) -> QTreeWidgetItem:
         """Show a project, replacing whatever was shown before.
 
         Parameters
         ----------
         name : str
             The name of the project, which is what the root is called.
+        models : list of dict, optional
+            The project's models, as the manifest holds them.
 
         Returns
         -------
@@ -97,8 +103,60 @@ class ProjectTree(QTreeWidget):
             child.setData(0, KIND_ROLE, kind)
 
         root.setExpanded(True)
+        self.set_models(models or [])
         self.setCurrentItem(root)
         return root
+
+    def set_models(self, models: list[dict]) -> None:
+        """Show a project's models under the *Models* node.
+
+        Parameters
+        ----------
+        models : list of dict
+            The models, as the manifest holds them.  Each is shown by its name
+            and remembers its UUID, which is what a context menu acts on: a
+            model renamed is still the same model.
+        """
+
+        parent = self.node(NodeKind.MODELS)
+        if parent is None:
+            return
+        parent.takeChildren()
+        for model in models:
+            item = QTreeWidgetItem(parent, [model.get('name', '')])
+            item.setData(0, KIND_ROLE, NodeKind.MODEL)
+            item.setData(0, MODEL_ROLE, model.get('uuid'))
+        parent.setExpanded(bool(models))
+
+    def model_of(self, item: QTreeWidgetItem | None) -> str | None:
+        """Give the UUID of the model a node stands for.
+
+        Parameters
+        ----------
+        item : PyQt6.QtWidgets.QTreeWidgetItem, optional
+            The node.
+
+        Returns
+        -------
+        str, optional
+            The UUID, or ``None`` when the node is not a model.
+        """
+
+        return None if item is None else item.data(0, MODEL_ROLE)
+
+    def model_items(self) -> list[QTreeWidgetItem]:
+        """List the nodes standing for models.
+
+        Returns
+        -------
+        list of PyQt6.QtWidgets.QTreeWidgetItem
+            The children of the *Models* node, in the order they are shown.
+        """
+
+        parent = self.node(NodeKind.MODELS)
+        if parent is None:
+            return []
+        return [parent.child(position) for position in range(parent.childCount())]
 
     def root(self) -> QTreeWidgetItem | None:
         """Give the root of the tree.
@@ -161,7 +219,9 @@ class ProjectTree(QTreeWidget):
         """Build the context menu of a node.
 
         Kept apart from showing it so that what a node offers can be checked
-        without a menu going up and blocking on its own event loop.
+        without a menu going up and blocking on its own event loop.  The node
+        under the pointer is made current before the menu goes up, so that an
+        action reading the selection acts on what was right-clicked.
 
         Parameters
         ----------
@@ -194,6 +254,9 @@ class ProjectTree(QTreeWidget):
             Where the click landed, in the viewport's coordinates.
         """
 
-        menu = self.menu_for(self.itemAt(position))
+        item = self.itemAt(position)
+        if item is not None:
+            self.setCurrentItem(item)
+        menu = self.menu_for(item)
         if menu is not None:
             menu.exec(self.viewport().mapToGlobal(position))

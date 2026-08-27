@@ -478,3 +478,178 @@ def test_a_history_cannot_be_recorded_into_something_that_is_not_a_project(tmp_p
 
     with pytest.raises(project.ProjectError):
         project.record(path, project.EVENT_OPENED, 'jaume', 'install-1')
+
+
+# ----------------------------------------------------------------------
+# Models
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ('name', 'expected'),
+    [
+        ('Bottling Line', 'Bottling_Line.mfst'),
+        ('  spaced  ', 'spaced.mfst'),
+        ('a/b', 'a_b.mfst'),
+        ('???', 'model.mfst'),
+    ],
+)
+def test_a_model_file_is_named_after_the_model(name, expected):
+    """Spaces become underscores; so does anything that would escape the folder."""
+
+    assert project.file_name_for(name) == expected
+    assert project.file_name_for(name).endswith(project.MODEL_SUFFIX)
+
+
+def test_a_model_is_written_into_the_models_folder(created):
+    """Where an archive tool will show it, under the name it was given."""
+
+    model = project.add_model(
+        created, 'Filling Station', project.ModelKind.PETRI_NET, {'time': 's'}
+    )
+
+    assert model['file'] == 'models/Filling_Station.mfst'
+    with zipfile.ZipFile(created) as archive:
+        document = json.loads(archive.read(model['file']))
+
+    assert document['format'] == project.MODEL_FORMAT_NAME
+    assert document['kind'] == 'petri-net'
+    assert document['units'] == {'time': 's'}
+    assert document['content'] == {}
+
+
+def test_a_model_is_recorded_in_the_manifest(created):
+    """The manifest is what the project pane is built from."""
+
+    model = project.add_model(
+        created, 'Filling Station', project.ModelKind.PETRI_NET, {'time': 's'}
+    )
+    stored = project.models_of(created)
+
+    assert [entry['uuid'] for entry in stored] == [model['uuid']]
+    assert stored[0]['name'] == 'Filling Station'
+    assert uuid.UUID(model['uuid'])
+
+
+def test_two_models_of_one_name_get_files_of_their_own(created):
+    """Two models may share a name; two zip entries may not."""
+
+    first = project.add_model(created, 'Line', project.ModelKind.PETRI_NET, {'time': 's'})
+    second = project.add_model(created, 'Line', project.ModelKind.PETRI_NET, {'time': 's'})
+
+    assert first['file'] != second['file']
+    assert second['file'] == 'models/Line_2.mfst'
+
+
+def test_changing_a_model_changes_its_document_too(created):
+    """The manifest and the file must not drift apart."""
+
+    model = project.add_model(created, 'Line', project.ModelKind.PETRI_NET, {'time': 's'})
+    project.update_model(created, model['uuid'], name='Filling', units={'time': 'h'})
+
+    stored = project.models_of(created)[0]
+    with zipfile.ZipFile(created) as archive:
+        document = json.loads(archive.read(model['file']))
+
+    assert stored['name'] == 'Filling'
+    assert stored['units'] == {'time': 'h'}
+    assert document['name'] == 'Filling'
+    assert document['units'] == {'time': 'h'}
+
+
+def test_a_renamed_model_keeps_its_file_and_its_identity(created):
+    """Its UUID is what it is; the file name is only where it lives."""
+
+    model = project.add_model(created, 'Line', project.ModelKind.PETRI_NET, {'time': 's'})
+    project.update_model(created, model['uuid'], name='Filling')
+
+    assert project.models_of(created)[0]['uuid'] == model['uuid']
+    assert project.models_of(created)[0]['file'] == model['file']
+
+
+def test_removing_a_model_takes_its_file_with_it(created):
+    """Otherwise a project would grow files nothing points at."""
+
+    model = project.add_model(created, 'Line', project.ModelKind.PETRI_NET, {'time': 's'})
+    project.remove_model(created, model['uuid'])
+
+    assert project.models_of(created) == []
+    with zipfile.ZipFile(created) as archive:
+        assert model['file'] not in archive.namelist()
+
+
+def test_removing_one_model_leaves_the_others(created):
+    """The rewrite carries across everything it was not told to drop."""
+
+    first = project.add_model(created, 'One', project.ModelKind.PETRI_NET, {'time': 's'})
+    second = project.add_model(created, 'Two', project.ModelKind.PETRI_NET, {'time': 's'})
+    project.remove_model(created, first['uuid'])
+
+    with zipfile.ZipFile(created) as archive:
+        names = archive.namelist()
+
+    assert [model['uuid'] for model in project.models_of(created)] == [second['uuid']]
+    assert second['file'] in names
+    assert all(folder in names for folder in project.FOLDERS)
+
+
+@pytest.mark.parametrize(
+    ('action', 'event'),
+    [
+        ('add', project.EVENT_MODEL_ADDED),
+        ('update', project.EVENT_MODEL_UPDATED),
+        ('remove', project.EVENT_MODEL_REMOVED),
+    ],
+)
+def test_every_change_to_a_model_is_logged(created, action, event):
+    """Created, updated or deleted, it goes into the project's history."""
+
+    model = project.add_model(created, 'Line', project.ModelKind.PETRI_NET, {'time': 's'})
+    if action == 'update':
+        project.update_model(created, model['uuid'], name='Filling')
+    elif action == 'remove':
+        project.remove_model(created, model['uuid'])
+
+    entry = project.read_manifest(created)['history'][-1]
+
+    assert entry['event'] == event
+    assert entry['model'] == model['uuid']
+    assert 'model_name' in entry
+
+
+def test_the_history_stays_chained_across_model_changes(created):
+    """A model change is one write of the archive, and one link in the chain."""
+
+    model = project.add_model(created, 'Line', project.ModelKind.PETRI_NET, {'time': 's'})
+    project.update_model(created, model['uuid'], name='Filling')
+    project.remove_model(created, model['uuid'])
+
+    entries = project.read_manifest(created)['history']
+
+    assert [entry['previous'] for entry in entries[1:]] == [
+        entry['log_item_id'] for entry in entries[:-1]
+    ]
+
+
+@pytest.mark.parametrize('operation', ['update', 'remove'])
+def test_acting_on_a_model_that_is_not_there_is_refused(created, operation):
+    """A stale selection must not quietly do nothing."""
+
+    act = project.update_model if operation == 'update' else project.remove_model
+    with pytest.raises(project.ProjectError, match='holds no model'):
+        act(created, 'not-a-uuid')
+
+
+def test_a_graph_has_no_distance_unit():
+    """Which kinds are measured in space is the project's business, not the GUI's."""
+
+    assert project.ModelKind.PETRI_NET not in project.KINDS_WITH_DISTANCE
+    assert project.ModelKind.PROCESS_FLOW not in project.KINDS_WITH_DISTANCE
+    assert project.ModelKind.PROCESS_2D in project.KINDS_WITH_DISTANCE
+    assert project.ModelKind.PROCESS_3D in project.KINDS_WITH_DISTANCE
+
+
+def test_only_the_petri_net_can_be_built_yet():
+    """The other three are offered and refused, not hidden."""
+
+    assert project.IMPLEMENTED_KINDS == (project.ModelKind.PETRI_NET,)

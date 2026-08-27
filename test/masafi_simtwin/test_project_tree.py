@@ -194,3 +194,58 @@ def test_the_tree_asks_for_its_own_context_menu(tree):
     """Which is what routes a right click to :meth:`menu_for`."""
 
     assert tree.contextMenuPolicy() == Qt.ContextMenuPolicy.CustomContextMenu
+
+
+# ----------------------------------------------------------------------
+# Models under the Models node
+# ----------------------------------------------------------------------
+
+MODELS = [
+    {'uuid': 'u-1', 'name': 'Filling'},
+    {'uuid': 'u-2', 'name': 'Capping'},
+]
+
+
+def test_a_project_shows_its_models(qtbot):
+    """Under *Models*, in the order the manifest holds them."""
+
+    widget = ProjectTree()
+    qtbot.addWidget(widget)
+    widget.set_project('Bottling Line', MODELS)
+
+    assert [item.text(0) for item in widget.model_items()] == ['Filling', 'Capping']
+    assert widget.node(NodeKind.MODELS).isExpanded()
+
+
+def test_a_model_node_remembers_which_model_it_is(tree):
+    """By UUID, not by name: a model renamed is still the same model."""
+
+    tree.set_models(MODELS)
+
+    assert [tree.model_of(item) for item in tree.model_items()] == ['u-1', 'u-2']
+    assert all(tree.kind_of(item) is NodeKind.MODEL for item in tree.model_items())
+
+
+def test_setting_the_models_replaces_the_ones_shown(tree):
+    """The tree follows the manifest rather than accumulating."""
+
+    tree.set_models(MODELS)
+    tree.set_models([{'uuid': 'u-3', 'name': 'Only'}])
+
+    assert [item.text(0) for item in tree.model_items()] == ['Only']
+
+
+def test_a_project_with_no_models_shows_none(tree):
+    """And leaves the branch closed, since there is nothing under it."""
+
+    tree.set_models([])
+
+    assert tree.model_items() == []
+    assert not tree.node(NodeKind.MODELS).isExpanded()
+
+
+def test_a_node_that_is_not_a_model_has_no_model(tree):
+    """Which is what tells the window whether a selection is one."""
+
+    assert tree.model_of(tree.root()) is None
+    assert tree.model_of(tree.node(NodeKind.MODELS)) is None

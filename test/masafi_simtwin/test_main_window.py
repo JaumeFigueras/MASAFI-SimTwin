@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QDialog, QDockWidget
+from PyQt6.QtWidgets import QDialog, QDockWidget, QMessageBox
 
 from masafi_simtwin import APPLICATION_NAME, project
 from masafi_simtwin.main_window import MAX_RECENT_PROJECTS, MainWindow
@@ -771,15 +771,21 @@ def test_the_statistics_branch_offers_nothing(window, make_project):
     assert tree.menu_for(tree.node(NodeKind.STATISTICS)) is None
 
 
-@pytest.mark.parametrize(
-    'action', ['new_model_action', 'new_simulation_action', 'project_settings_action']
-)
+@pytest.mark.parametrize('action', ['new_simulation_action', 'project_settings_action'])
 def test_the_project_actions_say_they_are_not_written_yet(window, action):
     """They are wired and reachable; what they will do is the next step."""
 
     getattr(window, action).trigger()
 
     assert 'not implemented yet' in window.statusBar().currentMessage()
+
+
+def test_adding_a_model_needs_a_project(window):
+    """The action is only reachable with one open, but it says so anyway."""
+
+    window.new_model_action.trigger()
+
+    assert window._project_path is None
 
 
 # ----------------------------------------------------------------------
@@ -1223,3 +1229,215 @@ def test_a_history_that_cannot_be_written_does_not_stop_the_project_opening(
 
     assert window.windowTitle() == f'Bottling Line — {APPLICATION_NAME}'
     assert 'history' in window.statusBar().currentMessage()
+
+
+# ----------------------------------------------------------------------
+# Models
+# ----------------------------------------------------------------------
+
+
+def stub_model_dialog(monkeypatch, result, name='Filling Station',
+                      kind=None, units=None):
+    """Put a model dialog that neither draws nor blocks in the window's way.
+
+    Parameters
+    ----------
+    monkeypatch : pytest.MonkeyPatch
+        The patcher.
+    result : int
+        What ``exec`` should return.
+    name : str, optional
+        The name the dialog settles on.
+    kind : masafi_simtwin.project.ModelKind, optional
+        The kind it settles on, a Petri net by default.
+    units : dict, optional
+        The units it settles on.
+
+    Returns
+    -------
+    list
+        The models the dialog was opened over, ``None`` for a new one.
+    """
+
+    opened = []
+
+    class StubModelDialog:
+        def __init__(self, parent=None, preferences=None, model=None, taken=None):
+            opened.append(model)
+            self.name = name
+            self.kind = kind or project.ModelKind.PETRI_NET
+            self._units = units or {'time': 's'}
+
+        def units(self):
+            return self._units
+
+        def exec(self):
+            return result
+
+    monkeypatch.setattr('masafi_simtwin.main_window.ModelDialog', StubModelDialog)
+    return opened
+
+
+@pytest.fixture
+def opened(window, make_project):
+    """Open a project and give its path.
+
+    Parameters
+    ----------
+    window : masafi_simtwin.main_window.MainWindow
+        The window.
+    make_project : collections.abc.Callable
+        The project maker.
+
+    Returns
+    -------
+    str
+        The project file.
+    """
+
+    path = make_project('Bottling Line')
+    window.open_project_path(path)
+    return path
+
+
+def test_a_new_model_is_written_and_shown(window, opened, monkeypatch):
+    """From the menu entry to a file in the archive and a node in the tree."""
+
+    stub_model_dialog(monkeypatch, QDialog.DialogCode.Accepted)
+    window.new_model_action.trigger()
+
+    models = project.models_of(opened)
+    assert [model['name'] for model in models] == ['Filling Station']
+    assert models[0]['file'] == 'models/Filling_Station.mfst'
+    assert [item.text(0) for item in window._project_tree.model_items()] == [
+        'Filling Station'
+    ]
+
+
+def test_a_cancelled_model_dialog_writes_nothing(window, opened, monkeypatch):
+    """Nothing is added until the dialog is accepted."""
+
+    stub_model_dialog(monkeypatch, QDialog.DialogCode.Rejected)
+    window.new_model_action.trigger()
+
+    assert project.models_of(opened) == []
+    assert window._project_tree.model_items() == []
+
+
+def test_a_model_is_offered_the_names_it_may_not_reuse(window, opened, monkeypatch):
+    """So the dialog can refuse a duplicate before anything is written."""
+
+    stub_model_dialog(monkeypatch, QDialog.DialogCode.Accepted)
+    window.new_model_action.trigger()
+
+    taken = []
+
+    class Recording:
+        def __init__(self, parent=None, preferences=None, model=None, taken_=None, **kw):
+            taken.append(kw.get('taken'))
+            self.name, self.kind = 'Other', project.ModelKind.PETRI_NET
+
+        def units(self):
+            return {'time': 's'}
+
+        def exec(self):
+            return QDialog.DialogCode.Rejected
+
+    monkeypatch.setattr('masafi_simtwin.main_window.ModelDialog', Recording)
+    window.new_model_action.trigger()
+
+    assert taken == [['Filling Station']]
+
+
+def test_changing_a_model_updates_the_tree(window, opened, monkeypatch):
+    """The pane follows the manifest, which is the one source of truth."""
+
+    stub_model_dialog(monkeypatch, QDialog.DialogCode.Accepted)
+    window.new_model_action.trigger()
+    window._project_tree.setCurrentItem(window._project_tree.model_items()[0])
+
+    stub_model_dialog(monkeypatch, QDialog.DialogCode.Accepted, name='Filling')
+    window.model_properties_action.trigger()
+
+    assert [item.text(0) for item in window._project_tree.model_items()] == ['Filling']
+    assert project.models_of(opened)[0]['name'] == 'Filling'
+
+
+def test_the_properties_dialog_is_opened_over_the_selected_model(
+    window, opened, monkeypatch
+):
+    """Which is what makes it a properties dialog rather than a new-model one."""
+
+    stub_model_dialog(monkeypatch, QDialog.DialogCode.Accepted)
+    window.new_model_action.trigger()
+    window._project_tree.setCurrentItem(window._project_tree.model_items()[0])
+
+    over = stub_model_dialog(monkeypatch, QDialog.DialogCode.Rejected)
+    window.model_properties_action.trigger()
+
+    assert over[0]['name'] == 'Filling Station'
+
+
+def test_deleting_a_model_asks_first(window, opened, monkeypatch):
+    """The one thing here that cannot be undone is the one thing that asks."""
+
+    stub_model_dialog(monkeypatch, QDialog.DialogCode.Accepted)
+    window.new_model_action.trigger()
+    window._project_tree.setCurrentItem(window._project_tree.model_items()[0])
+
+    asked = []
+    monkeypatch.setattr(
+        'masafi_simtwin.main_window.QMessageBox.question',
+        lambda *arguments, **keywords: asked.append(arguments[1])
+        or QMessageBox.StandardButton.No,
+    )
+    window.delete_model_action.trigger()
+
+    assert len(asked) == 1
+    assert len(project.models_of(opened)) == 1
+
+
+def test_deleting_a_model_removes_it_when_confirmed(window, opened, monkeypatch):
+    """From the manifest, the archive and the tree."""
+
+    stub_model_dialog(monkeypatch, QDialog.DialogCode.Accepted)
+    window.new_model_action.trigger()
+    window._project_tree.setCurrentItem(window._project_tree.model_items()[0])
+
+    monkeypatch.setattr(
+        'masafi_simtwin.main_window.QMessageBox.question',
+        lambda *arguments, **keywords: QMessageBox.StandardButton.Yes,
+    )
+    window.delete_model_action.trigger()
+
+    assert project.models_of(opened) == []
+    assert window._project_tree.model_items() == []
+
+
+def test_a_model_node_offers_properties_and_delete(window, opened, monkeypatch):
+    """The two things that can be done to a model."""
+
+    stub_model_dialog(monkeypatch, QDialog.DialogCode.Accepted)
+    window.new_model_action.trigger()
+    tree = window._project_tree
+    menu = tree.menu_for(tree.model_items()[0])
+
+    assert [action for action in menu.actions() if not action.isSeparator()] == [
+        window.model_properties_action,
+        window.delete_model_action,
+    ]
+
+
+def test_reopening_a_project_shows_its_models(window, opened, monkeypatch, qtbot):
+    """The tree is built from the manifest, so a model outlives the session."""
+
+    stub_model_dialog(monkeypatch, QDialog.DialogCode.Accepted)
+    window.new_model_action.trigger()
+
+    reopened = MainWindow()
+    qtbot.addWidget(reopened)
+    reopened.open_project_path(opened)
+
+    assert [item.text(0) for item in reopened._project_tree.model_items()] == [
+        'Filling Station'
+    ]

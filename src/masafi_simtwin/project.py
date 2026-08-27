@@ -26,9 +26,11 @@ import getpass
 import hashlib
 import json
 import os
+import re
 import uuid
 import zipfile
 from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
 
 from masafi_simtwin import __version__
@@ -62,6 +64,44 @@ EVENT_CLOSED = 'closed'
 #: How many characters of the digest a ``log_item_id`` keeps.  Far more than is
 #: forgeable by hand, and short enough to read out over a desk.
 LOG_ITEM_ID_LENGTH = 16
+
+#: Events recorded when a project's models change.
+EVENT_MODEL_ADDED = 'model-added'
+EVENT_MODEL_UPDATED = 'model-updated'
+EVENT_MODEL_REMOVED = 'model-removed'
+
+#: What a model file is called at the end.
+MODEL_SUFFIX = '.mfst'
+
+#: The folder inside a project that models live in.
+MODELS_FOLDER = 'models/'
+
+#: The value of ``format`` in a model file.
+MODEL_FORMAT_NAME = 'masafi-simtwin-model'
+
+#: The version of the layout inside a model file.
+MODEL_FORMAT_VERSION = 1
+
+#: What is put in place of anything that has no business in a file name.
+_UNSAFE = re.compile(r'[^\w.-]+', re.UNICODE)
+
+
+class ModelKind(Enum):
+    """The kinds of model a project can hold."""
+
+    PETRI_NET = 'petri-net'
+    PROCESS_FLOW = 'process-flow'
+    PROCESS_2D = 'process-2d'
+    PROCESS_3D = 'process-3d'
+
+
+#: The kinds that are measured in space as well as in time.  A Petri net and a
+#: process flow are graphs: their blocks have no position that means anything,
+#: so a distance unit would be a setting with nothing to apply to.
+KINDS_WITH_DISTANCE: tuple[ModelKind, ...] = (ModelKind.PROCESS_2D, ModelKind.PROCESS_3D)
+
+#: The kinds that can actually be built yet.
+IMPLEMENTED_KINDS: tuple[ModelKind, ...] = (ModelKind.PETRI_NET,)
 
 
 class ProjectError(Exception):
@@ -141,6 +181,66 @@ def manifest(name: str, author: str | None = None, company: str = '') -> dict:
     }
 
 
+def file_name_for(name: str) -> str:
+    """Give the file a model of this name is kept in.
+
+    Spaces become underscores, as asked; anything else that has no business in
+    a file name — a slash above all — goes the same way, so that a model called
+    ``a/b`` cannot write outside the folder it belongs in.
+
+    Parameters
+    ----------
+    name : str
+        What the model is called.
+
+    Returns
+    -------
+    str
+        The file name, with :data:`MODEL_SUFFIX` on the end.
+    """
+
+    stem = _UNSAFE.sub('_', name.strip()).strip('_.') or 'model'
+    return f'{stem}{MODEL_SUFFIX}'
+
+
+def model_document(name: str, kind: ModelKind, units: dict, identifier: str) -> dict:
+    """Build the contents of a new model file.
+
+    Parameters
+    ----------
+    name : str
+        What the model is called.
+    kind : ModelKind
+        What kind of model it is.
+    units : dict
+        The units it is expressed in, ``time`` and possibly ``distance``.
+    identifier : str
+        The model's UUID, which is also its entry in the manifest.
+
+    Returns
+    -------
+    dict
+        The document, ready to be written as JSON.
+
+    Notes
+    -----
+    ``content`` is empty and its shape is still to be designed — that is the
+    next piece of work.  ``format_version`` is written from the first model
+    onwards so that whatever shape it takes can be recognised later.
+    """
+
+    return {
+        'format': MODEL_FORMAT_NAME,
+        'format_version': MODEL_FORMAT_VERSION,
+        'uuid': identifier,
+        'name': name,
+        'kind': kind.value,
+        'units': dict(units),
+        'created': datetime.now(timezone.utc).isoformat(timespec='seconds'),
+        'content': {},
+    }
+
+
 def _canonical(entry: dict) -> str:
     """Render a history entry so that hashing it is reproducible.
 
@@ -193,6 +293,7 @@ def history_entry(
     author: str,
     install: str,
     duration: int | None = None,
+    details: dict | None = None,
 ) -> dict:
     """Build an unchained history entry.
 
@@ -213,6 +314,8 @@ def history_entry(
         Which installation of the application they were using.
     duration : int, optional
         Seconds the session lasted, on a closing entry.
+    details : dict, optional
+        What the event was about — which model was added, and under what name.
 
     Returns
     -------
@@ -230,6 +333,8 @@ def history_entry(
     }
     if duration is not None:
         entry['duration'] = duration
+    if details:
+        entry.update(details)
     return entry
 
 
@@ -365,13 +470,284 @@ def record(
     return entry
 
 
-def _rewrite_manifest(path: str | Path, content: dict) -> None:
-    """Put a manifest back into a project, leaving everything else alone.
+def models_of(path: str | Path) -> list[dict]:
+    """List the models a project holds.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        The project file.
+
+    Returns
+    -------
+    list of dict
+        The models, in the order they were added.
+    """
+
+    return read_manifest(path).get('models') or []
+
+
+def _free_file_name(name: str, taken: set[str]) -> str:
+    """Give a file name for a model that no other model is using.
+
+    Two models may be called the same thing; two entries of a zip may not.
+
+    Parameters
+    ----------
+    name : str
+        What the model is called.
+    taken : set of str
+        The file names already in use.
+
+    Returns
+    -------
+    str
+        A file name not in ``taken``.
+    """
+
+    candidate = file_name_for(name)
+    if candidate not in taken:
+        return candidate
+    stem = candidate[: -len(MODEL_SUFFIX)]
+    number = 2
+    while f'{stem}_{number}{MODEL_SUFFIX}' in taken:
+        number += 1
+    return f'{stem}_{number}{MODEL_SUFFIX}'
+
+
+def add_model(
+    path: str | Path,
+    name: str,
+    kind: ModelKind,
+    units: dict,
+    author: str = '',
+    install: str = '',
+) -> dict:
+    """Add a model to a project, writing its file and recording it.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        The project file.
+    name : str
+        What the model is called.
+    kind : ModelKind
+        What kind of model it is.
+    units : dict
+        The units it is expressed in.
+    author : str, optional
+        Whoever is adding it, for the history.
+    install : str, optional
+        Which installation they are using, for the history.
+
+    Returns
+    -------
+    dict
+        The model's entry in the manifest.
+
+    Raises
+    ------
+    ProjectError
+        When the project cannot be read or written back.
+    """
+
+    content = read_manifest(path)
+    models = content.get('models') or []
+    model = {
+        'uuid': str(uuid.uuid4()),
+        'name': name,
+        'kind': kind.value,
+        'file': MODELS_FOLDER + _free_file_name(name, {m['file'].rpartition('/')[2] for m in models}),
+        'units': dict(units),
+        'created': datetime.now(timezone.utc).isoformat(timespec='seconds'),
+    }
+    content['models'] = [*models, model]
+    _record_into(content, EVENT_MODEL_ADDED, author, install, model)
+    _rewrite_manifest(
+        path,
+        content,
+        added={model['file']: json.dumps(
+            model_document(name, kind, units, model['uuid']), indent=2
+        )},
+    )
+    return model
+
+
+def update_model(
+    path: str | Path,
+    identifier: str,
+    name: str | None = None,
+    units: dict | None = None,
+    author: str = '',
+    install: str = '',
+) -> dict:
+    """Change a model's name or units, leaving its kind and its file alone.
+
+    The file keeps the name it was created with.  A model's identity is its
+    UUID, and renaming the entry inside the archive on every rename would make
+    a project's history harder to follow, not easier.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        The project file.
+    identifier : str
+        The model's UUID.
+    name : str, optional
+        Its new name, unchanged when omitted.
+    units : dict, optional
+        Its new units, unchanged when omitted.
+    author : str, optional
+        Whoever is changing it, for the history.
+    install : str, optional
+        Which installation they are using, for the history.
+
+    Returns
+    -------
+    dict
+        The model's entry as it now stands.
+
+    Raises
+    ------
+    ProjectError
+        When the project holds no such model, or cannot be written back.
+    """
+
+    content = read_manifest(path)
+    models = content.get('models') or []
+    model = next((m for m in models if m.get('uuid') == identifier), None)
+    if model is None:
+        raise ProjectError(f'{Path(path)} holds no model {identifier}')
+
+    if name is not None:
+        model['name'] = name
+    if units is not None:
+        model['units'] = dict(units)
+
+    document = json.loads(_read_entry(path, model['file']))
+    document['name'] = model['name']
+    document['units'] = dict(model['units'])
+
+    _record_into(content, EVENT_MODEL_UPDATED, author, install, model)
+    _rewrite_manifest(path, content, added={model['file']: json.dumps(document, indent=2)})
+    return model
+
+
+def remove_model(
+    path: str | Path, identifier: str, author: str = '', install: str = ''
+) -> dict:
+    """Take a model out of a project, file and all.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        The project file.
+    identifier : str
+        The model's UUID.
+    author : str, optional
+        Whoever is removing it, for the history.
+    install : str, optional
+        Which installation they are using, for the history.
+
+    Returns
+    -------
+    dict
+        The entry of the model that was removed.
+
+    Raises
+    ------
+    ProjectError
+        When the project holds no such model, or cannot be written back.
+    """
+
+    content = read_manifest(path)
+    models = content.get('models') or []
+    model = next((m for m in models if m.get('uuid') == identifier), None)
+    if model is None:
+        raise ProjectError(f'{Path(path)} holds no model {identifier}')
+
+    content['models'] = [m for m in models if m.get('uuid') != identifier]
+    _record_into(content, EVENT_MODEL_REMOVED, author, install, model)
+    _rewrite_manifest(path, content, dropped={model['file']})
+    return model
+
+
+def _record_into(content: dict, event: str, author: str, install: str, model: dict) -> None:
+    """Append a chained history entry to a manifest already in hand.
+
+    Adding a model is one write of the archive, not two, so the entry is put
+    into the manifest here rather than through :func:`record`.
+
+    Parameters
+    ----------
+    content : dict
+        The manifest, changed in place.
+    event : str
+        What happened.
+    author : str
+        Whoever it was.
+    install : str
+        Which installation they were using.
+    model : dict
+        The model the event is about.
+    """
+
+    history = content.get('history') or []
+    previous = history[-1].get('log_item_id') if history else None
+    entry = link(
+        history_entry(
+            event,
+            content.get('uuid', ''),
+            author,
+            install,
+            details={'model': model['uuid'], 'model_name': model['name']},
+        ),
+        previous,
+    )
+    content['history'] = [*history, entry]
+
+
+def _read_entry(path: str | Path, name: str) -> bytes:
+    """Read one entry out of a project archive.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        The project file.
+    name : str
+        The entry to read.
+
+    Returns
+    -------
+    bytes
+        Its contents.
+
+    Raises
+    ------
+    ProjectError
+        When the entry is not there.
+    """
+
+    try:
+        with zipfile.ZipFile(Path(path)) as archive:
+            return archive.read(name)
+    except (OSError, KeyError, zipfile.BadZipFile) as error:
+        raise ProjectError(f'{Path(path)} has no {name}: {error}') from error
+
+
+def _rewrite_manifest(
+    path: str | Path,
+    content: dict,
+    added: dict[str, str] | None = None,
+    dropped: set[str] | None = None,
+) -> None:
+    """Write a project back with a new manifest, and files added or removed.
 
     A zip entry cannot be replaced where it lies, so the archive is written
     afresh beside the original and moved over it.  The move is what makes this
     safe: an interrupted write leaves the original project untouched rather
-    than half of a new one.
+    than half of a new one.  Everything not named in ``added`` or ``dropped``
+    is carried across as it was.
 
     Parameters
     ----------
@@ -379,6 +755,10 @@ def _rewrite_manifest(path: str | Path, content: dict) -> None:
         The project file.
     content : dict
         The manifest to write in place of the one that is there.
+    added : dict, optional
+        Entries to write, by name; an entry already there is replaced.
+    dropped : set of str, optional
+        Entries to leave out.
 
     Raises
     ------
@@ -386,6 +766,8 @@ def _rewrite_manifest(path: str | Path, content: dict) -> None:
         When the project cannot be written back.
     """
 
+    added = dict(added or {})
+    dropped = set(dropped or ())
     target = Path(path)
     beside = target.with_name(f'{target.name}.writing')
     try:
@@ -393,13 +775,18 @@ def _rewrite_manifest(path: str | Path, content: dict) -> None:
             entries = [
                 (info, b'' if info.is_dir() else source.read(info.filename))
                 for info in source.infolist()
+                if info.filename not in dropped
             ]
         with zipfile.ZipFile(beside, 'w', zipfile.ZIP_DEFLATED) as written:
             for info, data in entries:
                 if info.filename == MANIFEST_NAME:
                     written.writestr(info, json.dumps(content, indent=2))
+                elif info.filename in added:
+                    written.writestr(info, added.pop(info.filename))
                 else:
                     written.writestr(info, data)
+            for name, data in added.items():
+                written.writestr(name, data)
         os.replace(beside, target)
     except (OSError, zipfile.BadZipFile) as error:
         beside.unlink(missing_ok=True)

@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ModelDialog</class>
+ <widget class="QDialog" name="ModelDialog">
+  <property name="geometry">
+   <rect><x>0</x><y>0</y><width>460</width><height>260</height></rect>
+  </property>
+  <property name="windowTitle">
+   <string>New Model</string>
+  </property>
+  <property name="modal">
+   <bool>true</bool>
+  </property>
+  <layout class="QVBoxLayout" name="dialog_layout">
+   <property name="spacing"><number>12</number></property>
+   <item>
+    <layout class="QGridLayout" name="fields_layout">
+     <property name="horizontalSpacing"><number>12</number></property>
+     <property name="verticalSpacing"><number>8</number></property>
+       <item row="0" column="0">
+        <widget class="QLabel" name="name_label">
+         <property name="text">
+          <string extracomment="label of the model name field">Name:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="1">
+        <widget class="QLineEdit" name="name_edit">
+         <property name="placeholderText">
+          <string extracomment="shown in the empty model name field">Untitled</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="0">
+        <widget class="QLabel" name="kind_label">
+         <property name="text">
+          <string extracomment="label of the model type chooser">Type:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="1">
+        <widget class="QComboBox" name="kind_combo">
+         <property name="minimumSize">
+          <size><width>220</width><height>0</height></size>
+         </property>
+         <item>
+          <property name="text">
+           <string extracomment="a kind of model">Petri Net</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string extracomment="a kind of model">Process Flow</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string extracomment="a kind of model">2D Process</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string extracomment="a kind of model">3D Process</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+       <item row="2" column="0">
+        <widget class="QLabel" name="time_label">
+         <property name="text">
+          <string extracomment="label of the time unit chooser in the model dialog">Time unit:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="1">
+        <widget class="QComboBox" name="time_combo">
+         <property name="minimumSize">
+          <size><width>220</width><height>0</height></size>
+         </property>
+         <item>
+          <property name="text">
+           <string extracomment="a unit in the model dialog; the symbol in brackets is not translated">Microseconds (µs)</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string extracomment="a unit in the model dialog; the symbol in brackets is not translated">Milliseconds (ms)</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string extracomment="a unit in the model dialog; the symbol in brackets is not translated">Seconds (s)</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string extracomment="a unit in the model dialog; the symbol in brackets is not translated">Minutes (min)</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string extracomment="a unit in the model dialog; the symbol in brackets is not translated">Hours (h)</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string extracomment="a unit in the model dialog; the symbol in brackets is not translated">Days (d)</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+       <item row="3" column="0">
+        <widget class="QLabel" name="distance_label">
+         <property name="text">
+          <string extracomment="label of the distance unit chooser in the model dialog">Distance unit:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="3" column="1">
+        <widget class="QComboBox" name="distance_combo">
+         <property name="minimumSize">
+          <size><width>220</width><height>0</height></size>
+         </property>
+         <item>
+          <property name="text">
+           <string extracomment="a unit in the model dialog; the symbol in brackets is not translated">Millimetres (mm)</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string extracomment="a unit in the model dialog; the symbol in brackets is not translated">Centimetres (cm)</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string extracomment="a unit in the model dialog; the symbol in brackets is not translated">Metres (m)</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string extracomment="a unit in the model dialog; the symbol in brackets is not translated">Decametres (dam)</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string extracomment="a unit in the model dialog; the symbol in brackets is not translated">Kilometres (km)</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QLabel" name="distance_note">
+     <property name="placeholder" stdset="0"><bool>true</bool></property>
+     <property name="wordWrap"><bool>true</bool></property>
+     <property name="text">
+      <string extracomment="under a disabled distance chooser">A Petri net and a process flow are graphs, so no distance unit applies to them.</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="message_label">
+     <property name="error" stdset="0"><bool>true</bool></property>
+     <property name="wordWrap"><bool>true</bool></property>
+     <property name="text"><string notr="true"/></property>
+    </widget>
+   </item>
+   <item>
+    <spacer name="bottom_spacer">
+     <property name="orientation"><enum>Qt::Orientation::Vertical</enum></property>
+     <property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property>
+    </spacer>
+   </item>
+   <item>
+    <widget class="QDialogButtonBox" name="button_box">
+     <property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property>
+     <property name="standardButtons">
+      <set>QDialogButtonBox::StandardButton::Cancel|QDialogButtonBox::StandardButton::Ok</set>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

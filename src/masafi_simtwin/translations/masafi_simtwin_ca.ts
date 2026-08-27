@@ -40,330 +40,518 @@
 </context><context>
     <name>MainWindow</name>
     <message>
-        <location filename="../main_window.py" line="83" />
+        <location filename="../main_window.py" line="84" />
         <source>Ready</source>
         <translation>A punt</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="96" />
+        <location filename="../main_window.py" line="97" />
         <source>New Project…</source>
         <translation>Projecte nou…</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="100" />
+        <location filename="../main_window.py" line="101" />
         <source>Open Project…</source>
         <translation>Obre un projecte…</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="104" />
+        <location filename="../main_window.py" line="105" />
         <source>Clear Recent Projects</source>
         <translation>Neteja els projectes recents</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="107" />
+        <location filename="../main_window.py" line="108" />
         <source>Close Project</source>
         <translation>Tanca el projecte</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="111" />
+        <location filename="../main_window.py" line="112" />
         <source>New Model…</source>
         <translation>Model nou…</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="113" />
-        <source>Creating a model is not implemented yet</source>
-        <translation>La creació de models encara no està implementada</translation>
-    </message>
-    <message>
-        <location filename="../main_window.py" line="116" />
+        <location filename="../main_window.py" line="115" />
         <source>New Simulation…</source>
         <translation>Simulació nova…</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="118" />
+        <location filename="../main_window.py" line="117" />
         <source>Creating a simulation is not implemented yet</source>
         <translation>La creació de simulacions encara no està implementada</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="121" />
+        <location filename="../main_window.py" line="120" />
+        <source>Model Properties…</source>
+        <translation>Propietats del model…</translation>
+    </message>
+    <message>
+        <location filename="../main_window.py" line="123" />
+        <source>Delete Model</source>
+        <translation>Suprimeix el model</translation>
+    </message>
+    <message>
+        <location filename="../main_window.py" line="126" />
         <source>Project Settings…</source>
         <translation>Configuració del projecte…</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="123" />
+        <location filename="../main_window.py" line="128" />
         <source>The project settings are not implemented yet</source>
         <translation>La configuració del projecte encara no està implementada</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="126" />
+        <location filename="../main_window.py" line="131" />
         <source>Exit</source>
         <translation>Surt</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="131" />
+        <location filename="../main_window.py" line="136" />
         <source>Run</source>
         <translation>Executa</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="132" />
+        <location filename="../main_window.py" line="137" />
         <source>Run the simulation</source>
         <translation>Executa la simulació</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="134" />
+        <location filename="../main_window.py" line="139" />
         <source>Running</source>
         <translation>S'està executant</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="136" />
+        <location filename="../main_window.py" line="141" />
         <source>Stop</source>
         <translation>Atura</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="137" />
+        <location filename="../main_window.py" line="142" />
         <source>Stop the simulation</source>
         <translation>Atura la simulació</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="139" />
+        <location filename="../main_window.py" line="144" />
         <source>Stopped</source>
         <translation>Aturada</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="141" />
+        <location filename="../main_window.py" line="146" />
         <source>Fast Forward</source>
         <translation>Avanç ràpid</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="142" />
+        <location filename="../main_window.py" line="147" />
         <source>Run the simulation without animation</source>
         <translation>Executa la simulació sense animació</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="145" />
+        <location filename="../main_window.py" line="150" />
         <source>Fast forwarding</source>
         <translation>S'està avançant ràpidament</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="148" />
+        <location filename="../main_window.py" line="153" />
         <source>Reset</source>
         <translation>Reinicia</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="149" />
+        <location filename="../main_window.py" line="154" />
         <source>Reset the simulation to its initial state</source>
         <translation>Reinicia la simulació a l'estat inicial</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="408" />
-        <location filename="../main_window.py" line="151" />
+        <location filename="../main_window.py" line="418" />
+        <location filename="../main_window.py" line="156" />
         <source>Idle</source>
         <translation>Inactiva</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="153" />
+        <location filename="../main_window.py" line="158" />
         <source>Search</source>
         <translation>Cerca</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="154" />
+        <location filename="../main_window.py" line="159" />
         <source>Search everywhere</source>
         <translation>Cerca a tot arreu</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="158" />
+        <location filename="../main_window.py" line="163" />
         <source>Search is not implemented yet</source>
         <translation>La cerca encara no està implementada</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="161" />
+        <location filename="../main_window.py" line="166" />
         <source>Settings</source>
         <translation>Configuració</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="162" />
+        <location filename="../main_window.py" line="167" />
         <source>Open the settings</source>
         <translation>Obre la configuració</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="168" />
+        <location filename="../main_window.py" line="173" />
         <source>About {0}</source>
         <translation>Quant a {0}</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="191" />
+        <location filename="../main_window.py" line="196" />
         <source>&amp;File</source>
         <translation>&amp;Fitxer</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="194" />
+        <location filename="../main_window.py" line="199" />
         <source>Open Recent</source>
         <translation>Obre un projecte recent</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="202" />
+        <location filename="../main_window.py" line="207" />
         <source>&amp;Edit</source>
         <translation>&amp;Edita</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="206" />
+        <location filename="../main_window.py" line="211" />
         <source>Undo</source>
         <translation>Desfés</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="207" />
+        <location filename="../main_window.py" line="212" />
         <source>Redo</source>
         <translation>Refés</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="209" />
+        <location filename="../main_window.py" line="214" />
         <source>Cut</source>
         <translation>Retalla</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="210" />
+        <location filename="../main_window.py" line="215" />
         <source>Copy</source>
         <translation>Copia</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="211" />
+        <location filename="../main_window.py" line="216" />
         <source>Paste</source>
         <translation>Enganxa</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="215" />
+        <location filename="../main_window.py" line="220" />
         <source>&amp;View</source>
         <translation>&amp;Visualitza</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="219" />
+        <location filename="../main_window.py" line="224" />
         <source>Tool Windows</source>
         <translation>Finestres d'eines</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="220" />
+        <location filename="../main_window.py" line="225" />
         <source>Appearance</source>
         <translation>Aparença</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="222" />
+        <location filename="../main_window.py" line="227" />
         <source>Zoom In</source>
         <translation>Amplia</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="223" />
+        <location filename="../main_window.py" line="228" />
         <source>Zoom Out</source>
         <translation>Redueix</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="227" />
+        <location filename="../main_window.py" line="232" />
         <source>&amp;Project</source>
         <translation>&amp;Projecte</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="234" />
+        <location filename="../main_window.py" line="239" />
         <source>&amp;Window</source>
         <translation>Fines&amp;tra</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="235" />
+        <location filename="../main_window.py" line="240" />
         <source>Next Tab</source>
         <translation>Pestanya següent</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="235" />
+        <location filename="../main_window.py" line="240" />
         <source>Previous Tab</source>
         <translation>Pestanya anterior</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="237" />
+        <location filename="../main_window.py" line="242" />
         <source>&amp;Help</source>
         <translation>&amp;Ajuda</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="238" />
+        <location filename="../main_window.py" line="243" />
         <source>Documentation</source>
         <translation>Documentació</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="351" />
-        <location filename="../main_window.py" line="324" />
+        <location filename="../main_window.py" line="356" />
+        <location filename="../main_window.py" line="329" />
         <source>Project</source>
         <translation>Projecte</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="351" />
-        <location filename="../main_window.py" line="325" />
+        <location filename="../main_window.py" line="356" />
+        <location filename="../main_window.py" line="330" />
         <source>Libraries</source>
         <translation>Biblioteques</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="353" />
-        <location filename="../main_window.py" line="326" />
+        <location filename="../main_window.py" line="358" />
+        <location filename="../main_window.py" line="331" />
         <source>Python Console</source>
         <translation>Consola de Python</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="354" />
-        <location filename="../main_window.py" line="327" />
+        <location filename="../main_window.py" line="359" />
+        <location filename="../main_window.py" line="332" />
         <source>Problems</source>
         <translation>Problemes</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="879" />
-        <location filename="../main_window.py" line="407" />
+        <location filename="../main_window.py" line="1024" />
+        <location filename="../main_window.py" line="417" />
         <source>No document</source>
         <translation>Cap document</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="473" />
+        <location filename="../main_window.py" line="483" />
         <source>The project could not be created</source>
         <translation>No s'ha pogut crear el projecte</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="484" />
+        <location filename="../main_window.py" line="494" />
         <source>Open Project</source>
         <translation>Obre un projecte</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="486" />
+        <location filename="../main_window.py" line="496" />
         <source>MASAFI-SimTwin projects (*{0})</source>
         <translation>Projectes de MASAFI-SimTwin (*{0})</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="507" />
+        <location filename="../main_window.py" line="517" />
         <source>The project could not be opened</source>
         <translation>No s'ha pogut obrir el projecte</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="523" />
+        <location filename="../main_window.py" line="533" />
         <source>Opened {0}</source>
         <translation>S'ha obert {0}</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="552" />
+        <location filename="../main_window.py" line="562" />
         <source>No Project</source>
         <translation>Cap projecte</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="558" />
+        <location filename="../main_window.py" line="568" />
         <source>Project closed</source>
         <translation>S'ha tancat el projecte</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="580" />
+        <location filename="../main_window.py" line="590" />
         <source>The list of recent projects was cleared</source>
         <translation>S'ha netejat la llista de projectes recents</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="654" />
+        <location filename="../main_window.py" line="664" />
         <source>The project history could not be written</source>
         <translation>No s'ha pogut escriure l'historial del projecte</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="715" />
+        <location filename="../main_window.py" line="725" />
         <source>No Recent Projects</source>
         <translation>Cap projecte recent</translation>
+    </message>
+    <message>
+        <location filename="../main_window.py" line="760" />
+        <source>The model could not be added</source>
+        <translation>No s'ha pogut afegir el model</translation>
+    </message>
+    <message>
+        <location filename="../main_window.py" line="787" />
+        <source>The model could not be changed</source>
+        <translation>No s'ha pogut modificar el model</translation>
+    </message>
+    <message>
+        <location filename="../main_window.py" line="802" />
+        <source>Delete the model?</source>
+        <translation>Voleu suprimir el model?</translation>
+    </message>
+    <message>
+        <location filename="../main_window.py" line="803" />
+        <source>{0} and everything in it will be removed from the project.</source>
+        <translation>{0} i tot el que conté se suprimirà del projecte.</translation>
+    </message>
+    <message>
+        <location filename="../main_window.py" line="815" />
+        <source>The model could not be removed</source>
+        <translation>No s'ha pogut suprimir el model</translation>
+    </message>
+</context><context>
+    <name>ModelDialog</name>
+    <message>
+        <location filename="../dialogs/model.py" line="79" />
+        <source>Model Properties</source>
+        <translation>Propietats del model</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/model.py" line="193" />
+        <source>Give the model a name.</source>
+        <translation>Doneu un nom al model.</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/model.py" line="195" />
+        <source>The project already holds a model called {0}.</source>
+        <translation>El projecte ja conté un model anomenat {0}.</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/model.py" line="234" />
+        <source>Not implemented yet</source>
+        <translation>Encara no està implementat</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/model.py" line="235" />
+        <source>{0} models cannot be built yet.</source>
+        <translation>Encara no es poden construir models de tipus {0}.</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/model.ui" line="0" />
+        <source>New Model</source>
+        <translation>Model nou</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/model.ui" line="0" />
+        <source>Name:</source>
+        <extracomment>label of the model name field</extracomment>
+        <translation>Nom:</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/model.ui" line="0" />
+        <source>Untitled</source>
+        <extracomment>shown in the empty model name field</extracomment>
+        <translation>Sense títol</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/model.ui" line="0" />
+        <source>Type:</source>
+        <extracomment>label of the model type chooser</extracomment>
+        <translation>Tipus:</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/model.ui" line="0" />
+        <source>Petri Net</source>
+        <extracomment>a kind of model</extracomment>
+        <translation>Xarxa de Petri</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/model.ui" line="0" />
+        <source>Process Flow</source>
+        <extracomment>a kind of model</extracomment>
+        <translation>Flux de procés</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/model.ui" line="0" />
+        <source>2D Process</source>
+        <extracomment>a kind of model</extracomment>
+        <translation>Procés 2D</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/model.ui" line="0" />
+        <source>3D Process</source>
+        <extracomment>a kind of model</extracomment>
+        <translation>Procés 3D</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/model.ui" line="0" />
+        <source>Time unit:</source>
+        <extracomment>label of the time unit chooser in the model dialog</extracomment>
+        <translation>Unitat de temps:</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/model.ui" line="0" />
+        <source>Microseconds (µs)</source>
+        <extracomment>a unit in the model dialog; the symbol in brackets is not translated</extracomment>
+        <translation>Microsegons (µs)</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/model.ui" line="0" />
+        <source>Milliseconds (ms)</source>
+        <extracomment>a unit in the model dialog; the symbol in brackets is not translated</extracomment>
+        <translation>Mil·lisegons (ms)</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/model.ui" line="0" />
+        <source>Seconds (s)</source>
+        <extracomment>a unit in the model dialog; the symbol in brackets is not translated</extracomment>
+        <translation>Segons (s)</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/model.ui" line="0" />
+        <source>Minutes (min)</source>
+        <extracomment>a unit in the model dialog; the symbol in brackets is not translated</extracomment>
+        <translation>Minuts (min)</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/model.ui" line="0" />
+        <source>Hours (h)</source>
+        <extracomment>a unit in the model dialog; the symbol in brackets is not translated</extracomment>
+        <translation>Hores (h)</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/model.ui" line="0" />
+        <source>Days (d)</source>
+        <extracomment>a unit in the model dialog; the symbol in brackets is not translated</extracomment>
+        <translation>Dies (d)</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/model.ui" line="0" />
+        <source>Distance unit:</source>
+        <extracomment>label of the distance unit chooser in the model dialog</extracomment>
+        <translation>Unitat de distància:</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/model.ui" line="0" />
+        <source>Millimetres (mm)</source>
+        <extracomment>a unit in the model dialog; the symbol in brackets is not translated</extracomment>
+        <translation>Mil·límetres (mm)</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/model.ui" line="0" />
+        <source>Centimetres (cm)</source>
+        <extracomment>a unit in the model dialog; the symbol in brackets is not translated</extracomment>
+        <translation>Centímetres (cm)</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/model.ui" line="0" />
+        <source>Metres (m)</source>
+        <extracomment>a unit in the model dialog; the symbol in brackets is not translated</extracomment>
+        <translation>Metres (m)</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/model.ui" line="0" />
+        <source>Decametres (dam)</source>
+        <extracomment>a unit in the model dialog; the symbol in brackets is not translated</extracomment>
+        <translation>Decàmetres (dam)</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/model.ui" line="0" />
+        <source>Kilometres (km)</source>
+        <extracomment>a unit in the model dialog; the symbol in brackets is not translated</extracomment>
+        <translation>Quilòmetres (km)</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/model.ui" line="0" />
+        <source>A Petri net and a process flow are graphs, so no distance unit applies to them.</source>
+        <extracomment>under a disabled distance chooser</extracomment>
+        <translation>Una xarxa de Petri i un flux de procés són grafs, de manera que no els aplica cap unitat de distància.</translation>
     </message>
 </context><context>
     <name>NewProjectDialog</name>
@@ -424,17 +612,17 @@
 </context><context>
     <name>ProjectTree</name>
     <message>
-        <location filename="../project_tree.py" line="92" />
+        <location filename="../project_tree.py" line="98" />
         <source>Models</source>
         <translation>Models</translation>
     </message>
     <message>
-        <location filename="../project_tree.py" line="93" />
+        <location filename="../project_tree.py" line="99" />
         <source>Simulations</source>
         <translation>Simulacions</translation>
     </message>
     <message>
-        <location filename="../project_tree.py" line="94" />
+        <location filename="../project_tree.py" line="100" />
         <source>Statistics</source>
         <translation>Estadístiques</translation>
     </message>
