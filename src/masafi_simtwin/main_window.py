@@ -502,8 +502,12 @@ class MainWindow(QMainWindow):
         """Open a project by path.
 
         There is no project model yet, so this reads the name out of the
-        manifest, records the project as open, moves it to the head of the
-        recent list and updates the chrome.
+        manifest, takes the project's lock, records the project as open, moves
+        it to the head of the recent list and updates the chrome.
+
+        A project already open in this window is left alone, and one open in
+        another is refused: nothing may hold the same project twice, because
+        two writers of one archive silently lose each other's work.
 
         Parameters
         ----------
@@ -513,6 +517,24 @@ class MainWindow(QMainWindow):
 
         try:
             name = project.name_of(path)
+        except project.ProjectError as error:
+            QMessageBox.critical(self, self.tr('The project could not be opened'), str(error))
+            return
+
+        if path == self._project_path:
+            return
+
+        try:
+            project.acquire(path)
+        except project.ProjectLocked as error:
+            QMessageBox.warning(
+                self,
+                self.tr('The project is already open'),
+                self.tr('{0} is open in another window, as {1}.').format(
+                    name, error.holder.get('user') or self.tr('another user')
+                ),
+            )
+            return
         except project.ProjectError as error:
             QMessageBox.critical(self, self.tr('The project could not be opened'), str(error))
             return
@@ -631,13 +653,15 @@ class MainWindow(QMainWindow):
 
         A session is a pair of entries rather than one written at the end, so
         that a run cut short by a crash still leaves its opening behind — an
-        unclosed session is itself worth seeing.
+        unclosed session is itself worth seeing.  The project's lock goes with
+        the session, so closing one frees it for another window.
         """
 
         if self._project_path is None:
             return
         duration = int(time.monotonic() - self._session_started)
         self._record(self._project_path, project.EVENT_CLOSED, duration)
+        project.release(self._project_path)
         self._project_path = None
 
     def _record(self, path: str, event: str, duration: int | None = None) -> None:

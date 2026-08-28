@@ -1433,6 +1433,7 @@ def test_reopening_a_project_shows_its_models(window, opened, monkeypatch, qtbot
 
     stub_model_dialog(monkeypatch, QDialog.DialogCode.Accepted)
     window.new_model_action.trigger()
+    window.close_project()
 
     reopened = MainWindow()
     qtbot.addWidget(reopened)
@@ -1441,3 +1442,60 @@ def test_reopening_a_project_shows_its_models(window, opened, monkeypatch, qtbot
     assert [item.text(0) for item in reopened._project_tree.model_items()] == [
         'Filling Station'
     ]
+
+
+def test_a_project_open_elsewhere_is_refused(window, make_project, monkeypatch, qtbot):
+    """Never the same project twice: two writers lose each other's work."""
+
+    path = make_project('Shared')
+    window.open_project_path(path)
+
+    warned = []
+    monkeypatch.setattr(
+        'masafi_simtwin.main_window.QMessageBox.warning',
+        lambda parent, title, text: warned.append(title),
+    )
+    second = MainWindow()
+    qtbot.addWidget(second)
+    second.open_project_path(path)
+
+    assert len(warned) == 1
+    assert second._project_name == ''
+    assert second._project_path is None
+
+
+def test_closing_a_project_frees_it_for_another_window(window, make_project, qtbot):
+    """The lock goes with the session."""
+
+    path = make_project('Shared')
+    window.open_project_path(path)
+    window.close_project()
+
+    second = MainWindow()
+    qtbot.addWidget(second)
+    second.open_project_path(path)
+
+    assert second._project_name == 'Shared'
+
+
+def test_opening_the_project_already_open_does_nothing(window, make_project):
+    """It is already open here, so there is nothing to do and nothing to refuse."""
+
+    path = make_project('Shared')
+    window.open_project_path(path)
+    before = len(project.read_manifest(path)['history'])
+
+    window.open_project_path(path)
+
+    assert window._project_name == 'Shared'
+    assert len(project.read_manifest(path)['history']) == before
+
+
+def test_the_lock_is_freed_when_the_window_closes(window, make_project):
+    """Quitting frees the project as closing it does."""
+
+    path = make_project('Shared')
+    window.open_project_path(path)
+    window.close()
+
+    assert project.holder_of(path) is None

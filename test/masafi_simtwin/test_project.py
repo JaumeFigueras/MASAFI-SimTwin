@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import socket
 import uuid
 import zipfile
 from pathlib import Path
@@ -653,3 +655,80 @@ def test_only_the_petri_net_can_be_built_yet():
     """The other three are offered and refused, not hidden."""
 
     assert project.IMPLEMENTED_KINDS == (project.ModelKind.PETRI_NET,)
+
+
+# ----------------------------------------------------------------------
+# One holder at a time
+# ----------------------------------------------------------------------
+
+
+def test_a_free_project_can_be_taken(created):
+    """The lock sits beside the project, not inside it."""
+
+    held = project.acquire(created)
+
+    assert held['pid'] == os.getpid()
+    assert project.lock_path(created).exists()
+    assert project.lock_path(created).name.endswith('.mfstz.lock')
+
+
+def test_a_project_cannot_be_taken_twice(created):
+    """Two writers of one archive silently lose each other's work."""
+
+    project.acquire(created)
+
+    with pytest.raises(project.ProjectLocked) as raised:
+        project.acquire(created)
+
+    assert raised.value.holder['pid'] == os.getpid()
+
+
+def test_releasing_frees_the_project(created):
+    """So the next window can have it."""
+
+    project.acquire(created)
+    project.release(created)
+
+    assert project.holder_of(created) is None
+    assert project.acquire(created)['pid'] == os.getpid()
+
+
+def test_a_lock_left_by_a_dead_process_is_taken_over(created):
+    """A crash must not make a project unopenable."""
+
+    project.lock_path(created).write_text(
+        json.dumps({'pid': 2**22, 'user': 'x', 'host': socket.gethostname()}),
+        encoding='utf-8',
+    )
+
+    assert project.acquire(created)['pid'] == os.getpid()
+
+
+def test_a_lock_from_another_machine_is_obeyed(created):
+    """Whether that process is alive cannot be told from here."""
+
+    project.lock_path(created).write_text(
+        json.dumps({'pid': 1, 'user': 'someone', 'host': 'elsewhere'}), encoding='utf-8'
+    )
+
+    with pytest.raises(project.ProjectLocked):
+        project.acquire(created)
+
+
+def test_releasing_a_lock_that_is_not_ours_leaves_it_alone(created):
+    """Otherwise one window could free a project another is writing to."""
+
+    project.lock_path(created).write_text(
+        json.dumps({'pid': 1, 'user': 'someone', 'host': 'elsewhere'}), encoding='utf-8'
+    )
+    project.release(created)
+
+    assert project.holder_of(created) is not None
+
+
+def test_a_project_that_is_locked_is_still_a_project(created):
+    """The lock is beside the archive, so it changes nothing about it."""
+
+    project.acquire(created)
+
+    assert project.read_manifest(created)['name'] == 'Bottling Line'

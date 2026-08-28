@@ -315,7 +315,7 @@
         <translation>Problemes</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1024" />
+        <location filename="../main_window.py" line="1048" />
         <location filename="../main_window.py" line="417" />
         <source>No document</source>
         <translation>Cap document</translation>
@@ -336,62 +336,78 @@
         <translation>Projectes de MASAFI-SimTwin (*{0})</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="517" />
+        <location filename="../main_window.py" line="539" />
+        <location filename="../main_window.py" line="521" />
         <source>The project could not be opened</source>
         <translation>No s'ha pogut obrir el projecte</translation>
     </message>
     <message>
+        <location filename="../main_window.py" line="532" />
+        <source>The project is already open</source>
+        <translation>El projecte ja està obert</translation>
+    </message>
+    <message>
         <location filename="../main_window.py" line="533" />
+        <source>{0} is open in another window, as {1}.</source>
+        <translation>{0} està obert en una altra finestra, com a {1}.</translation>
+    </message>
+    <message>
+        <location filename="../main_window.py" line="534" />
+        <source>another user</source>
+        <translation>un altre usuari</translation>
+    </message>
+    <message>
+        <location filename="../main_window.py" line="555" />
         <source>Opened {0}</source>
         <translation>S'ha obert {0}</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="562" />
+        <location filename="../main_window.py" line="584" />
         <source>No Project</source>
         <translation>Cap projecte</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="568" />
+        <location filename="../main_window.py" line="590" />
         <source>Project closed</source>
         <translation>S'ha tancat el projecte</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="590" />
+        <location filename="../main_window.py" line="612" />
         <source>The list of recent projects was cleared</source>
         <translation>S'ha netejat la llista de projectes recents</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="664" />
+        <location filename="../main_window.py" line="688" />
         <source>The project history could not be written</source>
         <translation>No s'ha pogut escriure l'historial del projecte</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="725" />
+        <location filename="../main_window.py" line="749" />
         <source>No Recent Projects</source>
         <translation>Cap projecte recent</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="760" />
+        <location filename="../main_window.py" line="784" />
         <source>The model could not be added</source>
         <translation>No s'ha pogut afegir el model</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="787" />
+        <location filename="../main_window.py" line="811" />
         <source>The model could not be changed</source>
         <translation>No s'ha pogut modificar el model</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="802" />
+        <location filename="../main_window.py" line="826" />
         <source>Delete the model?</source>
         <translation>Voleu suprimir el model?</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="803" />
+        <location filename="../main_window.py" line="827" />
         <source>{0} and everything in it will be removed from the project.</source>
         <translation>{0} i tot el que conté se suprimirà del projecte.</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="815" />
+        <location filename="../main_window.py" line="839" />
         <source>The model could not be removed</source>
         <translation>No s'ha pogut suprimir el model</translation>
     </message>

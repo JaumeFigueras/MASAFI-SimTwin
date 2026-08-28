@@ -27,6 +27,7 @@ import hashlib
 import json
 import os
 import re
+import socket
 import uuid
 import zipfile
 from datetime import datetime, timezone
@@ -76,6 +77,9 @@ MODEL_SUFFIX = '.mfst'
 #: The folder inside a project that models live in.
 MODELS_FOLDER = 'models/'
 
+#: What is appended to a project's name to make the file that holds its lock.
+LOCK_SUFFIX = '.lock'
+
 #: The value of ``format`` in a model file.
 MODEL_FORMAT_NAME = 'masafi-simtwin-model'
 
@@ -106,6 +110,20 @@ IMPLEMENTED_KINDS: tuple[ModelKind, ...] = (ModelKind.PETRI_NET,)
 
 class ProjectError(Exception):
     """Raised when a file is not a project, or cannot be made into one."""
+
+
+class ProjectLocked(ProjectError):
+    """Raised when a project is already open somewhere else.
+
+    Attributes
+    ----------
+    holder : dict
+        Who has it: their ``pid``, ``user``, ``host`` and when they took it.
+    """
+
+    def __init__(self, message: str, holder: dict) -> None:
+        super().__init__(message)
+        self.holder = holder
 
 
 def path_for(directory: str | Path, name: str) -> Path:
@@ -179,6 +197,141 @@ def manifest(name: str, author: str | None = None, company: str = '') -> dict:
         'created': datetime.now(timezone.utc).isoformat(timespec='seconds'),
         'created_by': __version__,
     }
+
+
+def lock_path(path: str | Path) -> Path:
+    """Give the file that holds a project's lock.
+
+    Beside the project rather than inside it: a lock written into the archive
+    would mean rewriting the archive to take one, and a crash would leave a
+    lock that cannot be cleared without opening the project it is blocking.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        The project file.
+
+    Returns
+    -------
+    pathlib.Path
+        The lock file, which need not exist.
+    """
+
+    target = Path(path)
+    return target.with_name(f'{target.name}{LOCK_SUFFIX}')
+
+
+def _alive(pid: int) -> bool:
+    """Say whether a process is still running.
+
+    Only asked on POSIX.  On Windows ``os.kill`` with signal 0 terminates the
+    process rather than testing it, so a lock left behind by a crash is cleared
+    by hand there — which is what the message says.
+
+    Parameters
+    ----------
+    pid : int
+        The process to ask about.
+
+    Returns
+    -------
+    bool
+        Whether it is running, and ``True`` whenever that cannot be told.
+    """
+
+    if os.name != 'posix':
+        return True
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return True
+    return True
+
+
+def holder_of(path: str | Path) -> dict | None:
+    """Say who has a project open, if anyone.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        The project file.
+
+    Returns
+    -------
+    dict, optional
+        The lock's contents, or ``None`` when the project is free.
+    """
+
+    lock = lock_path(path)
+    try:
+        return json.loads(lock.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return None
+
+
+def acquire(path: str | Path) -> dict:
+    """Take a project's lock, so that nothing else can open it.
+
+    A lock left behind by a process that is no longer running is taken over
+    rather than obeyed, so a crash does not make a project unopenable.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        The project file.
+
+    Returns
+    -------
+    dict
+        What was written into the lock.
+
+    Raises
+    ------
+    ProjectLocked
+        When the project is open somewhere else.
+    ProjectError
+        When the lock cannot be written at all.
+    """
+
+    lock = lock_path(path)
+    mine = {
+        'pid': os.getpid(),
+        'user': current_user(),
+        'host': socket.gethostname(),
+        'at': datetime.now(timezone.utc).isoformat(timespec='seconds'),
+    }
+    for attempt in (1, 2):
+        try:
+            handle = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            held = holder_of(path) or {}
+            stale = held.get('host') == mine['host'] and not _alive(held.get('pid', -1))
+            if stale and attempt == 1:
+                lock.unlink(missing_ok=True)
+                continue
+            raise ProjectLocked(f'{Path(path)} is already open', held) from None
+        except OSError as error:
+            raise ProjectError(f'{lock} could not be written: {error}') from error
+        with os.fdopen(handle, 'w', encoding='utf-8') as written:
+            json.dump(mine, written)
+        return mine
+    raise ProjectLocked(f'{Path(path)} is already open', holder_of(path) or {})
+
+
+def release(path: str | Path) -> None:
+    """Give up a project's lock, if it is ours to give up.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        The project file.
+    """
+
+    held = holder_of(path)
+    if held is not None and held.get('pid') == os.getpid():
+        lock_path(path).unlink(missing_ok=True)
 
 
 def file_name_for(name: str) -> str:

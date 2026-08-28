@@ -166,3 +166,104 @@ fingerprint works even when fully understood, because evading it means genuinely
 model.
 
 **Where.** `masafi_simtwin/project.py` — `link()`, `history_entry()`, `record()`. The auditor is `src/bonus/mfstz-audit/`, which `.gitignore` excludes.
+
+---
+
+## Saving is write-through, and will not stay that way
+
+**Now.** Every change to a project is written as it is made: adding, renaming or deleting a model
+rewrites the whole archive at once. There is no Save, and none is wanted.
+
+**Why it will not last.** The cost is not that saving is slow — it is that **a zip must be rewritten
+whole**. A single entry cannot be updated in place. Adding a model is a rare, deliberate act, so
+paying a full-archive write for it is right. Dragging a place three pixels is not, and once a model
+canvas exists there will be hundreds of small mutations a minute against an archive that may be tens
+of megabytes.
+
+**The decided shape**, in the order it should be built:
+
+1. **The document lives in memory.** Full writes happen on a timer *and* at boundaries — closing the
+   project, quitting, before a simulation run, and on an explicit save. Keep `Ctrl+S` as "write now"
+   even though nothing needs it; people reach for it. The interval is a preference.
+2. **Journal every mutation.** An append-only side record, one small entry per edit — O(1) rather
+   than O(project). Replayed on open if it is there, and deleted after a successful full write. This
+   is what makes a crash lose nothing while keeping writes proportionate; simply lengthening the
+   autosave interval widens the loss window without fixing the granularity.
+3. **The undo stack stays in memory only.** Recovering *to* the crash point is enough — nobody needs
+   to undo past it, and persisting undo is a great deal of machinery for almost none.
+
+**Build it with the editor, not before.** The journal records *operations* and undo inverts them, and
+neither exists until the Petri net canvas does. Undo needs `(operation, inverse)` records; the
+journal needs `(operation)` — so building undo properly makes journalling one line per push, while
+building the journal first means writing the operation representation twice.
+
+**Two things that must not be buffered.** The **authorship history** is tiny and rare — session
+open/close, model added/updated/removed — so it was never the cost, but buffering it puts gaps in the
+chain, which is exactly the evidence that matters. It goes in the journal instead, folded into the
+manifest at the next full write, ordered because the journal is append-only. **Simulation output**
+streams straight into `logs/` as it is produced; it is large, write-once, and a crashed run is re-run
+rather than recovered.
+
+---
+
+## Project files are not versioned
+
+**Now.** A project has exactly one state on disk. A mistake survives the next write.
+
+**The decided shape.** Keep numbered versions after each save and autosave, in the manner of VMS's
+`NAME.EXT;n`:
+
+- **In a sibling folder**, `Bottling Line.mfstz.versions/0007.mfstz`, rather than as sibling files.
+  Loose siblings would be listed by the Open dialog's `*.mfstz` filter and could fill the recent
+  projects list; a folder is just as visible and restorable by hand, and deletes as one unit.
+- **Ascending numbers, newest highest** — true VMS, and not only for nostalgia: logrotate-style
+  descending numbering renames every file on every save, which is N copies of a multi-megabyte
+  archive per autosave. Ascending writes exactly one new file and touches nothing else.
+- **A purge limit is not optional.** VMS had `/VERSION_LIMIT` for the same reason: an autosave every
+  two minutes on a 50 MB project is about 1.5 GB an hour. Note that the limit and the interval
+  interact — "keep the last ten" with a two-minute autosave is twenty minutes of history. Thinning
+  (everything from the last hour, then hourly, then daily) beats a flat count, but a count is the
+  place to start.
+- **Skip the backup when nothing changed.** An autosave tick on an untouched project writes nothing.
+
+**A side effect worth knowing.** Versions help the copy detection above — a real backup chain is more
+evidence — but they also let a student restore an old state and shed inconvenient history. The chain
+would then be conspicuously short beside their classmates', which is the same signal as deleting the
+log outright.
+
+---
+
+## There is no tool to clear a lock by hand
+
+**Now.** A project is locked while it is open, by a file beside it holding the pid, user, host and
+time. `project.acquire()` already takes over a lock left by a process that is **no longer running on
+this host**, so an ordinary crash clears itself. What has no answer is the rest: a lock left by a
+process that is *hung* rather than gone, a lock written from another machine over a shared
+directory, and a lock on a platform where liveness cannot be tested — Windows, where `os.kill(pid, 0)`
+terminates a process rather than asking after it.
+
+**What is wanted.** A `src/tools/` directory for utilities that ship with the application but are not
+the application, and in it a lock tool that can say who holds a project, and release it.
+
+**Design notes for whoever builds it.**
+
+- **Killing by pid is the dangerous part, and it needs guarding.** Pids are recycled: a lock written
+  by a crashed instance names a number that may since have been given to the user's browser. The
+  tool must confirm the process really is a MASAFI-SimTwin instance — by its executable and command
+  line, not by its pid existing — before it offers to end it, and it should default to *reporting*
+  rather than killing.
+- **Releasing the lock and ending the process are two different jobs.** Most of the time only the
+  first is wanted: the holder is gone, or is on another machine, and the file is simply in the way.
+  Ending a live instance is the rarer, more dangerous one and should have to be asked for.
+- **Identifying a process across platforms is the awkward part.** `psutil` makes it easy and is a new
+  dependency; the standard library makes it possible and platform-specific. Decide that before
+  starting, not halfway through.
+- **The name will collide.** The repository already has a top-level `tools/` for *development*
+  tooling — `build_forms.py`, `update_translations.py` — and `src/bonus/` for tooling that must not
+  ship at all. A third directory called `tools` under `src/` is a third meaning of the word. Either
+  name it for what it is, or expect to explain the difference every time.
+- **It has to be packaged to be of any use.** `src/tools` matches none of the `include` patterns in
+  `pyproject.toml`, so it would not ship; a user-facing utility also wants a console entry point
+  beside `masafi-simtwin`.
+
+**Where.** `masafi_simtwin/project.py` — `lock_path()`, `holder_of()`, `acquire()`, `release()`.
