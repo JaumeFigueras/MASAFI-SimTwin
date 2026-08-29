@@ -5,15 +5,19 @@ from __future__ import annotations
 import uuid
 
 import pytest
-from PyQt6.QtCore import QSettings
+from PyQt6.QtCore import QSettings, QSizeF
 
+from masafi_simtwin import paper
 from masafi_simtwin.preferences import (
     BY_KEY,
     INSTALL_KEY,
+    PAGE_KEYS,
     PREFERENCES,
     install_id,
     needs_restart,
+    page,
     SYSTEM_LANGUAGE,
+    SYSTEM_PAGE_SIZE,
     SYSTEM_THEME,
     Preference,
     Preferences,
@@ -90,6 +94,8 @@ def test_the_keys_are_grouped_like_the_settings_tree():
     assert KEYS == [
         'appearance/language',
         'appearance/theme',
+        'appearance/page_size',
+        'appearance/page_orientation',
         'units/time',
         'units/distance',
         'units/surface',
@@ -313,3 +319,58 @@ def test_the_identifier_is_not_a_preference():
     """Nobody chooses it, so it has no page and no default worth naming."""
 
     assert INSTALL_KEY not in BY_KEY
+
+
+# ----------------------------------------------------------------------
+# The page
+# ----------------------------------------------------------------------
+
+
+def test_the_page_size_defaults_to_whatever_the_machine_prints_on():
+    """Unset means *ask this machine*, so a laptop and a print room differ."""
+
+    assert BY_KEY['appearance/page_size'].default == SYSTEM_PAGE_SIZE
+    assert SYSTEM_PAGE_SIZE == ''
+    assert BY_KEY['appearance/page_size'].choices == ()
+
+
+def test_the_orientation_defaults_to_portrait():
+    """And it is one of two things, so a hand-edited file cannot invent a third."""
+
+    declared = BY_KEY['appearance/page_orientation']
+
+    assert declared.default == paper.PORTRAIT
+    assert declared.choices == paper.ORIENTATIONS
+
+
+def test_neither_page_preference_asks_for_a_restart():
+    """A sheet can be ruled again where it stands, so it is ruled again at once."""
+
+    assert not BY_KEY['appearance/page_size'].restart
+    assert not BY_KEY['appearance/page_orientation'].restart
+    assert not needs_restart(PAGE_KEYS)
+
+
+def test_the_page_is_resolved_from_the_two_preferences(preferences):
+    """One question — what page is this? — out of two stored answers."""
+
+    edit = preferences.edit()
+    edit.set_value('appearance/page_size', 'A3')
+    edit.set_value('appearance/page_orientation', paper.LANDSCAPE)
+    edit.commit()
+
+    assert page(preferences) == QSizeF(420.0, 297.0)
+
+
+def test_an_unset_page_size_is_the_machine_s_own(preferences):
+    """Which is what the default means, rather than a size written down here."""
+
+    assert page(preferences) == paper.dimensions(paper.default_key(), paper.PORTRAIT)
+
+
+def test_a_page_size_that_names_nothing_falls_back(preferences):
+    """A settings file edited by hand cannot leave the sheet without a page."""
+
+    preferences.settings.setValue('appearance/page_size', 'Papyrus')
+
+    assert page(preferences) == paper.dimensions(paper.default_key(), paper.PORTRAIT)

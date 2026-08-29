@@ -32,6 +32,12 @@ one of them, rather than carrying a bad value into the application.
 Nothing here belongs to :mod:`simtwin_core`: ``QSettings`` is Qt, and the
 protocol the adapters implement stays free of it.  When a backend needs a
 preference the shell reads it and passes the plain value down.
+
+One preference is not a value but a question put to the machine:
+``appearance/page_size`` is unset by default, and unset means *whatever this
+machine prints on*.  :func:`page` is where the two page preferences and the
+machine's own answer are resolved into the one thing every caller wants — a
+page in millimetres, the right way round.
 """
 
 from __future__ import annotations
@@ -40,8 +46,9 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
-from PyQt6.QtCore import QSettings
+from PyQt6.QtCore import QSettings, QSizeF
 
+from masafi_simtwin import paper
 from masafi_simtwin.theme import ColorScheme
 from masafi_simtwin.translations import LANGUAGES
 
@@ -50,6 +57,11 @@ SYSTEM_LANGUAGE = ''
 
 #: The value of ``appearance/theme`` that means "follow the desktop".
 SYSTEM_THEME = 'system'
+
+#: The value of ``appearance/page_size`` that means "whatever this machine
+#: prints on".  It is the default, so a machine that has never been told keeps
+#: following its own printer rather than a size written down here once.
+SYSTEM_PAGE_SIZE = ''
 
 
 @dataclass(frozen=True)
@@ -130,6 +142,10 @@ PREFERENCES: tuple[Preference, ...] = (
         (SYSTEM_THEME, *(scheme.value for scheme in ColorScheme)),
         restart=True,
     ),
+    Preference('appearance/page_size', SYSTEM_PAGE_SIZE, str),
+    Preference(
+        'appearance/page_orientation', paper.PORTRAIT, str, paper.ORIENTATIONS
+    ),
     Preference('units/time', 's', str, TIME_UNITS),
     Preference('units/distance', 'm', str, DISTANCE_UNITS),
     Preference('units/surface', 'm2', str, SURFACE_UNITS),
@@ -163,6 +179,38 @@ def preference(key: str) -> Preference:
         return BY_KEY[key]
     except KeyError:
         raise KeyError(f'{key!r} is not a preference of this application') from None
+
+
+def page(settings: Preferences | None = None) -> QSizeF:
+    """Give the page a sheet is ruled into, in millimetres and already oriented.
+
+    Two preferences and the machine's own answer come together here, so that
+    everything wanting a page asks one question.  An unset size — the default —
+    means the one this machine prints on, and a size stored that names nothing
+    falls back the same way, because a settings file can be edited by hand.
+
+    Parameters
+    ----------
+    settings : Preferences, optional
+        Where to read them from.  The application's own are used when it is
+        omitted.
+
+    Returns
+    -------
+    PyQt6.QtCore.QSizeF
+        The width and height of the page, in millimetres.
+    """
+
+    store = settings if settings is not None else Preferences()
+    return paper.dimensions(
+        store.value('appearance/page_size') or paper.default_key(),
+        store.value('appearance/page_orientation'),
+    )
+
+
+#: The preferences that decide what :func:`page` gives back, so that a caller
+#: watching for a change knows which keys to watch.
+PAGE_KEYS: tuple[str, ...] = ('appearance/page_size', 'appearance/page_orientation')
 
 
 #: Where the identifier of this installation is kept.  It is not a

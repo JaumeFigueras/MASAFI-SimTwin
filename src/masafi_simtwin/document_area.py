@@ -191,6 +191,12 @@ class DocumentArea(QWidget):
     # Finding what is open
     # ------------------------------------------------------------------
 
+    @property
+    def documents(self) -> list[QWidget]:
+        """list: Every open document, in the order the tabs are in."""
+
+        return [self._tabs.widget(index) for index in range(self._tabs.count())]
+
     def document(self, key: str) -> QWidget | None:
         """Give the document opened under a key.
 

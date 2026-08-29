@@ -34,6 +34,7 @@ from PyQt6.QtWidgets import (
 )
 
 from masafi_simtwin import icons
+from masafi_simtwin.menus import clear_menu
 
 #: Side, in pixels, of the logo drawn at the far left of the bar.
 LOGO_SIZE = 24
@@ -270,6 +271,10 @@ class TopBar(QWidget):
         name.  Naming them is the window's business, not the bar's — see
         :func:`masafi_simtwin.project.labels_for`.
 
+        The menu is emptied with :func:`~masafi_simtwin.menus.clear_menu` rather
+        than ``QMenu.clear()``, because this is reached from the ``triggered``
+        handler of one of the entries it is about to remove.
+
         Parameters
         ----------
         projects : list of tuple of str
@@ -279,7 +284,7 @@ class TopBar(QWidget):
 
         self._recent_projects = list(projects)
         menu = self._project_button.menu()
-        menu.clear()
+        clear_menu(menu)
         menu.addAction(self._open_project_action)
         menu.addSeparator()
 

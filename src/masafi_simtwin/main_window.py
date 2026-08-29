@@ -38,6 +38,9 @@ from masafi_simtwin.dialogs import (
     SettingsDialog,
     ask_to_restart,
 )
+from masafi_simtwin import preferences
+from masafi_simtwin.documents import Canvas
+from masafi_simtwin.menus import clear_menu
 from masafi_simtwin.preferences import install_id, needs_restart
 from masafi_simtwin.project_tree import NodeKind, ProjectTree
 from masafi_simtwin.document_area import DocumentArea
@@ -739,13 +742,17 @@ class MainWindow(QMainWindow):
         is always there, disabled when there is nothing to clear, so that the
         menu keeps the same shape whatever the history holds.
 
+        It is emptied with :func:`~masafi_simtwin.menus.clear_menu` rather than
+        ``QMenu.clear()``, and that is not a nicety: this runs from inside the
+        ``triggered`` handler of one of the very actions it is about to remove.
+
         Parameters
         ----------
         projects : list of tuple of str
             The history as ``(label, path)`` pairs, most recent first.
         """
 
-        self._recent_menu.clear()
+        clear_menu(self._recent_menu)
         if not projects:
             empty = self._recent_menu.addAction(self.tr('No Recent Projects'))
             empty.setEnabled(False)
@@ -999,10 +1006,33 @@ class MainWindow(QMainWindow):
         dialog = SettingsDialog(self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
+        self._apply_page(dialog.written)
         if needs_restart(dialog.written) and ask_to_restart(self):
             application = QApplication.instance()
             if application is not None:
                 application.restart()
+
+    def _apply_page(self, written: tuple[str, ...]) -> None:
+        """Rule every open sheet into the page that has just been chosen.
+
+        The page is not a preference that waits for a restart: a sheet can be
+        ruled again where it stands, and a setting whose effect can be seen at
+        once is a setting the user can judge.  The documents opened afterwards
+        read it for themselves.
+
+        Parameters
+        ----------
+        written : tuple of str
+            The keys the settings dialog wrote, so that nothing is touched when
+            the page was not among them.
+        """
+
+        if not any(key in written for key in preferences.PAGE_KEYS):
+            return
+        page = preferences.page()
+        for document in self._document_area.documents:
+            if isinstance(document, Canvas):
+                document.set_page(page)
 
     # ------------------------------------------------------------------
     # Slots

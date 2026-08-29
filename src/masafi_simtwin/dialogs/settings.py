@@ -5,9 +5,9 @@ The layout is :mod:`~masafi_simtwin.dialogs.forms.settings`, compiled from
 on the right, in the arrangement of the settings dialog of an IDE.
 
 Both halves live in the form, and they are paired **by order**.  Walking the
-tree depth first gives ``Appearance, Language, Themes, Default Units, Time,
-Space``, and the pages of the stack are in exactly that order, so the *n*-th
-item shows the *n*-th page.  Adding a category therefore means adding both, in
+tree depth first gives ``Appearance, Language, Themes, Page, Default Units,
+Time, Space``, and the pages of the stack are in exactly that order, so the
+*n*-th item shows the *n*-th page.  Adding a category therefore means adding both, in
 the same place; :mod:`test.masafi_simtwin.dialogs.test_settings` fails when the
 two lists stop lining up, so the pairing cannot drift unnoticed.
 
@@ -43,11 +43,13 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QDialog,
     QLabel,
+    QRadioButton,
     QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
+from masafi_simtwin import paper
 from masafi_simtwin.dialogs.forms.ui_settings import Ui_SettingsDialog
 from masafi_simtwin.dialogs.restart import warn_restart_needed
 from masafi_simtwin.preferences import (
@@ -114,6 +116,8 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
         self._pair_tree_with_pages()
         self._fill_pages()
         self._bind_language()
+        self._bind_paper()
+        self._bind_orientation()
         for combo, key, values in (
             (self.theme_combo, 'appearance/theme', THEME_VALUES),
             (self.time_combo, 'units/time', TIME_UNITS),
@@ -329,6 +333,83 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
         combo.currentIndexChanged.connect(
             lambda index: self._on_choice('appearance/language', combo, index)
         )
+
+    def _bind_paper(self) -> None:
+        """Fill the paper combo box from the machine, and follow it from there.
+
+        The entries are built here rather than in the form for the same reason
+        the languages are: they are not layout.  What paper there is to choose
+        from is what this machine prints on — a different list on a different
+        desk — and the names come from Qt, which is where their translations
+        are.  The form therefore has to leave the combo empty.
+
+        The entry shown when nothing has been chosen is the size this machine
+        prints on by default, which is what ``appearance/page_size`` being unset
+        means.  A size stored that this machine does not offer — a settings file
+        carried from another desk — is added rather than dropped, so that the
+        dialog shows what is actually in force.
+
+        Raises
+        ------
+        RuntimeError
+            When the form already holds entries, which would be duplicated by
+            the ones added here.
+        """
+
+        combo: QComboBox = self.paper_combo
+        if combo.count():
+            raise RuntimeError(
+                'paper_combo is filled from the sizes this machine offers, so it '
+                f'has to be left empty in settings.ui; it holds {combo.count()} '
+                f'entries.'
+            )
+        for size in paper.installed_sizes():
+            combo.addItem(size.name(), size.key())
+
+        chosen = self.edit.value('appearance/page_size') or paper.default_key()
+        if combo.findData(chosen) < 0:
+            combo.addItem(paper.name_of(chosen), chosen)
+        combo.setCurrentIndex(combo.findData(chosen))
+        combo.currentIndexChanged.connect(
+            lambda index: self._on_choice('appearance/page_size', combo, index)
+        )
+
+    def _bind_orientation(self) -> None:
+        """Set the orientation radio buttons, and follow them from there.
+
+        Two of them are a choice of one thing, so they are read as one: the
+        button that is on says what is stored.  Radio buttons in one layout are
+        exclusive of their own accord, so turning one on turns the other off and
+        only the one turning *on* is worth listening to.
+        """
+
+        buttons: tuple[tuple[QRadioButton, str], ...] = (
+            (self.portrait_radio, paper.PORTRAIT),
+            (self.landscape_radio, paper.LANDSCAPE),
+        )
+        stored = self.edit.value('appearance/page_orientation')
+        for button, orientation in buttons:
+            button.setChecked(orientation == stored)
+            button.toggled.connect(
+                lambda checked, value=orientation: self._on_orientation(checked, value)
+            )
+
+    def _on_orientation(self, checked: bool, orientation: str) -> None:
+        """Hold the orientation that has just been turned on.
+
+        Parameters
+        ----------
+        checked : bool
+            Whether this is the button that came on rather than the one that
+            went off.
+        orientation : str
+            What that button stands for.
+        """
+
+        if not checked:
+            return
+        self.edit.set_value('appearance/page_orientation', orientation)
+        self._warn_once_about_restart()
 
     def _bind_choice(
         self, combo: QComboBox, key: str, values: tuple[str, ...]

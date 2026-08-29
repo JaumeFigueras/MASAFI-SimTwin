@@ -19,6 +19,19 @@ rather than the screen's, deliberately: a zoom means the same thing on every
 machine, and Qt's high-DPI scaling already puts the right number of physical
 pixels behind a logical one.
 
+The sheet is **ruled into pages**: it is a whole number of them —
+:data:`PAGES_ACROSS` by :data:`PAGES_DOWN` — and the boundary of every one is
+drawn, so that what falls on which sheet of paper can be seen without printing
+anything.  Which page that is, and which way round, are the two preferences
+:func:`masafi_simtwin.preferences.page` resolves — by default the size this
+machine prints on, upright.  The lines are drawn like the grid and belong with it: the
+paper the drawing is measured against rather than anything in the drawing.
+
+The **origin is the sheet's top left corner**, not its middle.  Both rulers read
+nought there and count right and down, the way a page is read, so nothing on the
+sheet is at a negative coordinate and the first page is the one a new document
+opens on.
+
 Guides are pulled out of the rulers and dropped on the sheet, and they snap as
 they go — always to the millimetre, and to the millimetre at every zoom.  A snap
 that changed with the zoom would mean the same drag put a guide in a different
@@ -31,7 +44,7 @@ from __future__ import annotations
 
 import math
 
-from PyQt6.QtCore import QLineF, QPointF, QRectF, Qt, pyqtSignal
+from PyQt6.QtCore import QLineF, QPointF, QRectF, QSizeF, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QPainter, QPalette, QPen
 from PyQt6.QtWidgets import (
     QGraphicsScene,
@@ -41,6 +54,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from masafi_simtwin import preferences
 from masafi_simtwin.documents.guide import Guide
 from masafi_simtwin.documents.ruler import MILLIMETRES, Ruler, RulerCorner, RulerUnit
 
@@ -74,8 +88,34 @@ ZOOM_STEP = 1.15
 MIN_ZOOM = 0.1
 MAX_ZOOM = 8.0
 
-#: The sheet, in millimetres, centred on the origin: four metres by three.
-SCENE_RECT = QRectF(-2000.0, -1500.0, 4000.0, 3000.0)
+#: How many pages the sheet is, across and down.  The sheet is a whole number
+#: of pages so that the tiling comes out even: a part-page along the right or
+#: the bottom would be a page nothing could be printed on.
+PAGES_ACROSS = 20
+PAGES_DOWN = 10
+
+
+def sheet_rect(page: QSizeF) -> QRectF:
+    """Give the sheet a page of this size makes.
+
+    The sheet's origin is its **top left corner**: both rulers read nought there
+    and count right and down from it, which is the way a page is read and the
+    way a printed sheet is laid out.  Nothing on the sheet is at a negative
+    coordinate, so a position is a position on the paper.
+
+    Parameters
+    ----------
+    page : PyQt6.QtCore.QSizeF
+        The page, in millimetres, the way round it is used.
+
+    Returns
+    -------
+    PyQt6.QtCore.QRectF
+        :data:`PAGES_ACROSS` by :data:`PAGES_DOWN` of them — four metres by
+        three, for an upright A4.
+    """
+
+    return QRectF(0.0, 0.0, page.width() * PAGES_ACROSS, page.height() * PAGES_DOWN)
 
 #: What a position is snapped to, in millimetres.  It does not follow the zoom:
 #: the sheet is in millimetres, so a millimetre is where things go, whether or
@@ -83,7 +123,7 @@ SCENE_RECT = QRectF(-2000.0, -1500.0, 4000.0, 3000.0)
 SNAP_STEP = 1.0
 
 
-def _multiples_of(spacing: int, first: float, last: float) -> list[float]:
+def _multiples_of(spacing: float, first: float, last: float) -> list[float]:
     """List the multiples of a spacing that fall inside a stretch of the scene.
 
     The stretch is a *float* one — the rectangle a view hands to
@@ -94,7 +134,7 @@ def _multiples_of(spacing: int, first: float, last: float) -> list[float]:
 
     Parameters
     ----------
-    spacing : int
+    spacing : float
         The step, in scene millimetres.
     first : float
         Where the stretch begins.
@@ -118,6 +158,10 @@ class CanvasView(QGraphicsView):
 
     Parameters
     ----------
+    page : PyQt6.QtCore.QSizeF, optional
+        The page the sheet is ruled into, in millimetres and the way round it
+        is used.  The one the preferences ask for is taken when it is omitted,
+        which is what every document does; passing one is for the tests.
     parent : PyQt6.QtWidgets.QWidget, optional
         Parent widget.
 
@@ -142,13 +186,14 @@ class CanvasView(QGraphicsView):
     pointer_moved = pyqtSignal(QPointF)
     pointer_left = pyqtSignal()
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, page: QSizeF | None = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName('CanvasView')
         self.empty_note = ''
+        self._page = QSizeF(page) if page is not None else preferences.page()
 
         scene = QGraphicsScene(self)
-        scene.setSceneRect(SCENE_RECT)
+        scene.setSceneRect(sheet_rect(self._page))
         self.setScene(scene)
 
         self.setFrameShape(QGraphicsView.Shape.NoFrame)
@@ -161,10 +206,53 @@ class CanvasView(QGraphicsView):
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.viewport().setMouseTracking(True)
+        self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
 
         self._panning_from: QPointF | None = None
         self.scale(PIXELS_PER_MM, PIXELS_PER_MM)
-        self.centerOn(0.0, 0.0)
+        self.scroll_to_origin()
+
+    @property
+    def page(self) -> QSizeF:
+        """PyQt6.QtCore.QSizeF: The page the sheet is ruled into, in millimetres."""
+
+        return QSizeF(self._page)
+
+    def set_page(self, page: QSizeF) -> None:
+        """Rule the sheet into a page of a different size.
+
+        The sheet is a whole number of pages, so changing the page changes the
+        sheet, and the guides drawn across it have to be told: a guide runs the
+        length of the sheet and its geometry belongs to the scene.
+
+        Parameters
+        ----------
+        page : PyQt6.QtCore.QSizeF
+            The page, in millimetres, the way round it is used.
+        """
+
+        if page == self._page:
+            return
+
+        self._page = QSizeF(page)
+        sheet = sheet_rect(self._page)
+        self.scene().setSceneRect(sheet)
+        for guide in self.guides:
+            guide.set_sheet(sheet)
+        self.viewport().update()
+        self.view_changed.emit()
+
+    def scroll_to_origin(self) -> None:
+        """Show the top left corner of the sheet, where the first page is.
+
+        A view of its own accord opens on the middle of its scene, which on a
+        sheet four metres wide is a blank stretch a long way from anything.  The
+        corner is where the rulers read nought and where the first page is, so
+        it is where a sheet is opened.
+        """
+
+        self.horizontalScrollBar().setValue(self.horizontalScrollBar().minimum())
+        self.verticalScrollBar().setValue(self.verticalScrollBar().minimum())
 
     # ------------------------------------------------------------------
     # Zoom
@@ -561,6 +649,48 @@ class CanvasView(QGraphicsView):
                     continue
                 painter.drawLine(QLineF(rect.left(), y, rect.right(), y))
 
+        self._draw_pages(painter, rect, major)
+
+    def _draw_pages(self, painter, rect, colour: QColor) -> None:
+        """Rule the sheet into pages, so that every one of them can be seen.
+
+        The lines fall every page from the origin, dashed, in the
+        colour of the grid's own heavier lines: they are a thing to measure
+        against rather than a thing on the sheet, so they belong to the paper
+        and not to the drawing.  They are drawn at every zoom — the squares of
+        the grid are dropped when they crowd, but where a page ends is worth
+        knowing however far away the sheet is held.
+
+        They are held to the sheet rather than to the exposed rectangle: the
+        sheet is a whole number of pages, and a page line beyond its edge would
+        be the edge of a page that does not exist.
+
+        The pen is width nought, Qt's cosmetic hairline, so the dashes are the
+        same length on the screen at any zoom rather than growing with it.
+
+        Parameters
+        ----------
+        painter : PyQt6.QtGui.QPainter
+            The painter of the view.
+        rect : PyQt6.QtCore.QRectF
+            The part of the scene that needs painting.
+        colour : PyQt6.QtGui.QColor
+            The colour of the grid's heavier lines.
+        """
+
+        area = rect.intersected(self.sceneRect())
+        if area.isEmpty():
+            return
+
+        pen = QPen(colour, 0)
+        pen.setStyle(Qt.PenStyle.DashLine)
+        painter.setPen(pen)
+
+        for x in _multiples_of(self._page.width(), area.left(), area.right()):
+            painter.drawLine(QLineF(x, area.top(), x, area.bottom()))
+        for y in _multiples_of(self._page.height(), area.top(), area.bottom()):
+            painter.drawLine(QLineF(area.left(), y, area.right(), y))
+
     def drawForeground(self, painter, rect) -> None:  # noqa: N802  (Qt naming)
         """Say what an empty sheet is for, while it is empty.
 
@@ -614,6 +744,9 @@ class Canvas(QWidget):
     ----------
     unit : masafi_simtwin.documents.ruler.RulerUnit, optional
         What the rulers count in, millimetres by default.
+    page : PyQt6.QtCore.QSizeF, optional
+        The page the sheet is ruled into.  The preferences answer when it is
+        omitted.
     parent : PyQt6.QtWidgets.QWidget, optional
         Parent widget.
 
@@ -636,11 +769,16 @@ class Canvas(QWidget):
     without leaving the ruler is a click on a ruler and leaves nothing behind.
     """
 
-    def __init__(self, unit: RulerUnit = MILLIMETRES, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        unit: RulerUnit = MILLIMETRES,
+        page: QSizeF | None = None,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
         self.setObjectName('Canvas')
 
-        self.view = CanvasView(self)
+        self.view = CanvasView(page, self)
         self.horizontal_ruler = Ruler(Qt.Orientation.Horizontal, self.view, unit, self)
         self.vertical_ruler = Ruler(Qt.Orientation.Vertical, self.view, unit, self)
         self.corner = RulerCorner(unit, self)
@@ -678,6 +816,23 @@ class Canvas(QWidget):
         """
 
         return self.view.scene()
+
+    @property
+    def page(self) -> QSizeF:
+        """PyQt6.QtCore.QSizeF: The page the sheet is ruled into, in millimetres."""
+
+        return self.view.page
+
+    def set_page(self, page: QSizeF) -> None:
+        """Rule the sheet into a page of a different size.
+
+        Parameters
+        ----------
+        page : PyQt6.QtCore.QSizeF
+            The page, in millimetres, the way round it is used.
+        """
+
+        self.view.set_page(page)
 
     @property
     def zoom(self) -> float:

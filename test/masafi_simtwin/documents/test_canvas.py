@@ -3,19 +3,28 @@
 from __future__ import annotations
 
 import pytest
-from PyQt6.QtCore import QEvent, QPoint, QPointF, QRectF, Qt
-from PyQt6.QtGui import QImage, QMouseEvent, QPainter, QWheelEvent
+from PyQt6.QtCore import QEvent, QPoint, QPointF, QRectF, QSizeF, Qt
+from PyQt6.QtGui import QImage, QMouseEvent, QPainter, QPalette, QWheelEvent
 from PyQt6.QtWidgets import QGraphicsView
 
+from masafi_simtwin import paper
 from masafi_simtwin.documents.canvas import (
+    GRID_MAJOR_ALPHA,
     MAX_ZOOM,
     MIN_ZOOM,
+    PAGES_ACROSS,
+    PAGES_DOWN,
     PIXELS_PER_MM,
-    SCENE_RECT,
     ZOOM_STEP,
     Canvas,
     _multiples_of,
+    sheet_rect,
 )
+
+
+#: The page the tests are run against, so that they say the same thing on a
+#: machine whose printer prints on something else.
+A4 = QSizeF(210.0, 297.0)
 
 
 @pytest.fixture
@@ -33,7 +42,7 @@ def canvas(qtbot):
         The canvas.
     """
 
-    widget = Canvas()
+    widget = Canvas(page=A4)
     qtbot.addWidget(widget)
     widget.resize(600, 400)
     widget.show()
@@ -48,8 +57,31 @@ def canvas(qtbot):
 def test_the_sheet_is_measured_in_millimetres(canvas):
     """One scene unit is one millimetre, which is what makes a ruler possible."""
 
-    assert canvas.scene().sceneRect() == SCENE_RECT
-    assert SCENE_RECT.width() == 4000.0
+    assert canvas.scene().sceneRect() == sheet_rect(A4)
+    assert canvas.scene().sceneRect().width() == A4.width() * PAGES_ACROSS
+
+
+def test_the_origin_is_the_top_left_corner_of_the_sheet(canvas):
+    """So the rulers count right and down and nothing is at a negative place."""
+
+    assert sheet_rect(A4).topLeft() == QPointF(0.0, 0.0)
+
+
+def test_a_sheet_is_a_whole_number_of_pages(canvas):
+    """A part-page along the right or the bottom is a page nothing prints on."""
+
+    assert sheet_rect(A4).width() % A4.width() == 0.0
+    assert sheet_rect(A4).height() % A4.height() == 0.0
+
+
+def test_a_sheet_opens_on_its_first_page(canvas):
+    """Not in the middle of four metres of blank paper, which is where a view
+    of its own accord would open."""
+
+    corner = canvas.view.mapToScene(0, 0)
+
+    assert corner.x() == pytest.approx(0.0, abs=1.0)
+    assert corner.y() == pytest.approx(0.0, abs=1.0)
 
 
 def test_life_size_is_the_zoom_of_one(canvas):
@@ -320,17 +352,39 @@ class RecordingPainter:
     """A stand-in for the painter, which keeps what it was asked to draw.
 
     ``drawBackground`` is handed a painter and a rectangle and asks nothing of
-    the painter but to fill, to take a pen and to draw lines, so the lines it
-    would put down can be read off without a screen to put them on.
+    the painter but to fill, to take a pen and a brush, and to draw lines and a
+    rectangle — so what it would put down can be read off without a screen to
+    put it on.
 
     Attributes
     ----------
-    lines : list of PyQt6.QtCore.QLineF
-        What was drawn, in scene coordinates.
+    strokes : list of tuple
+        Every line drawn, with the pen it was drawn with — which is what tells
+        the grid from the page boundaries, the one being solid and the other
+        dashed.
     """
 
     def __init__(self) -> None:
-        self.lines = []
+        self.strokes = []
+        self._pen = None
+
+    @property
+    def lines(self):
+        """list: Every line drawn, whatever its pen."""
+
+        return [line for line, _ in self.strokes]
+
+    @property
+    def grid_lines(self):
+        """list: The lines of the grid, which are the solid ones."""
+
+        return [line for line, pen in self.strokes if pen.style() == Qt.PenStyle.SolidLine]
+
+    @property
+    def page_lines(self):
+        """list: The boundaries between pages, which are the dashed ones."""
+
+        return [line for line, pen in self.strokes if pen.style() == Qt.PenStyle.DashLine]
 
     def fillRect(self, *arguments) -> None:  # noqa: N802  (Qt naming)
         """Ignore the fill.
@@ -341,17 +395,19 @@ class RecordingPainter:
             Whatever the caller passes.
         """
 
-    def setPen(self, *arguments) -> None:  # noqa: N802  (Qt naming)
-        """Ignore the pen.
+    def setPen(self, pen) -> None:  # noqa: N802  (Qt naming)
+        """Take the pen the next shapes are drawn with.
 
         Parameters
         ----------
-        *arguments
-            Whatever the caller passes.
+        pen : PyQt6.QtGui.QPen
+            The pen.
         """
 
+        self._pen = pen
+
     def drawLine(self, line) -> None:  # noqa: N802  (Qt naming)
-        """Keep a line.
+        """Keep a line, and the pen it would be drawn with.
 
         Parameters
         ----------
@@ -359,7 +415,7 @@ class RecordingPainter:
             The line that would be drawn.
         """
 
-        self.lines.append(line)
+        self.strokes.append((line, self._pen))
 
 
 def grid_of(canvas, strip: QRectF) -> RecordingPainter:
@@ -392,8 +448,8 @@ def test_the_grid_is_drawn_across_the_whole_of_the_exposed_rect(canvas):
     neither.
     """
 
-    strip = QRectF(-12.5, 52.1, 40.0, 1.8)
-    lines = grid_of(canvas, strip).lines
+    strip = QRectF(100.0, 52.1, 40.0, 1.8)
+    lines = grid_of(canvas, strip).grid_lines
 
     assert lines
     for line in lines:
@@ -406,11 +462,11 @@ def test_the_grid_is_drawn_across_the_whole_of_the_exposed_rect(canvas):
 def test_two_strips_meeting_leave_no_sliver_between_them(canvas):
     """What one strip stops drawing at is where the next starts."""
 
-    above = QRectF(-12.5, 52.1, 40.0, 1.8)
-    below = QRectF(-12.5, 53.9, 40.0, 1.8)
+    above = QRectF(100.0, 52.1, 40.0, 1.8)
+    below = QRectF(100.0, 53.9, 40.0, 1.8)
 
-    ends = [line.y2() for line in grid_of(canvas, above).lines if line.x1() == line.x2()]
-    starts = [line.y1() for line in grid_of(canvas, below).lines if line.x1() == line.x2()]
+    ends = [line.y2() for line in grid_of(canvas, above).grid_lines if line.x1() == line.x2()]
+    starts = [line.y1() for line in grid_of(canvas, below).grid_lines if line.x1() == line.x2()]
 
     assert ends and starts
     assert max(ends) == min(starts) == below.top()
@@ -419,7 +475,7 @@ def test_two_strips_meeting_leave_no_sliver_between_them(canvas):
 def test_a_strip_holding_no_grid_line_draws_none_across_it(canvas):
     """The lines are the multiples of the step, not one per strip."""
 
-    lines = grid_of(canvas, QRectF(11.1, 52.1, 1.2, 1.8)).lines
+    lines = grid_of(canvas, QRectF(111.1, 52.1, 1.2, 1.8)).grid_lines
 
     assert lines == []
 
@@ -432,3 +488,128 @@ def test_the_multiples_of_a_step_are_those_inside_the_stretch(canvas):
     assert _multiples_of(5, -12.5, -2.0) == [-10, -5]
     assert _multiples_of(5, -7.0, 7.0) == [-5, 0, 5]
     assert _multiples_of(50, -60.0, 60.0) == [-50, 0, 50]
+
+
+# ----------------------------------------------------------------------
+# The page
+# ----------------------------------------------------------------------
+
+
+def test_the_page_is_the_one_the_preferences_ask_for(qtbot):
+    """A canvas built without one takes the page the application settled on."""
+
+    from masafi_simtwin import preferences
+
+    widget = Canvas()
+    qtbot.addWidget(widget)
+
+    assert widget.page == preferences.page()
+
+
+def test_the_page_can_be_changed_under_the_sheet(canvas):
+    """Which is what a change in the settings comes to, without reopening.
+
+    The sheet is a whole number of pages, so a different page is a different
+    sheet, and the guides drawn across it run the new length.
+    """
+
+    guide = canvas.add_guide(Qt.Orientation.Horizontal, 20.0)
+    landscape = QSizeF(paper.dimensions('A4', paper.LANDSCAPE))
+    canvas.set_page(landscape)
+
+    assert canvas.page == landscape
+    assert canvas.scene().sceneRect() == sheet_rect(landscape)
+    assert guide.boundingRect().width() == sheet_rect(landscape).width()
+
+
+def test_changing_the_page_tells_the_rulers(canvas, qtbot):
+    """They measure the sheet, and the sheet is a different size now."""
+
+    with qtbot.waitSignal(canvas.view.view_changed, timeout=1000):
+        canvas.set_page(QSizeF(paper.dimensions('A3')))
+
+
+def test_setting_the_same_page_changes_nothing(canvas):
+    """A settings dialog closed on OK with nothing moved moves nothing here."""
+
+    told = []
+    canvas.view.view_changed.connect(lambda: told.append(True))
+    canvas.set_page(QSizeF(A4))
+
+    assert told == []
+
+
+def test_the_pages_are_ruled_across_the_whole_sheet(canvas):
+    """Every page boundary, not only the first page's."""
+
+    strip = QRectF(0.0, 0.0, canvas.scene().sceneRect().width(), 4.0)
+    upright = [
+        line.x1() for line in grid_of(canvas, strip).page_lines if line.x1() == line.x2()
+    ]
+
+    assert upright == [page * A4.width() for page in range(PAGES_ACROSS + 1)]
+
+
+def test_the_pages_are_ruled_down_the_whole_sheet(canvas):
+    """The other way as well, which is what makes them pages rather than columns."""
+
+    strip = QRectF(0.0, 0.0, 4.0, canvas.scene().sceneRect().height())
+    across = [
+        line.y1() for line in grid_of(canvas, strip).page_lines if line.y1() == line.y2()
+    ]
+
+    assert across == [page * A4.height() for page in range(PAGES_DOWN + 1)]
+
+
+def test_a_page_boundary_is_dashed_and_in_the_grid_colour(canvas):
+    """It is the paper the drawing is measured against, so it is drawn like it."""
+
+    strip = QRectF(200.0, 0.0, 40.0, 400.0)
+    strokes = [
+        (line, pen)
+        for line, pen in grid_of(canvas, strip).strokes
+        if pen.style() == Qt.PenStyle.DashLine
+    ]
+
+    assert strokes
+    for _line, pen in strokes:
+        assert pen.widthF() == 0.0
+        assert pen.color().alpha() == GRID_MAJOR_ALPHA
+        assert pen.color().rgb() == canvas.palette().color(QPalette.ColorRole.Text).rgb()
+
+
+def test_a_page_boundary_spans_the_strip_it_is_drawn_in(canvas):
+    """Like the grid: a line drawn to a rounded edge leaves the sheet in dashes
+    of its own, which is not the kind of dash that was asked for."""
+
+    strip = QRectF(200.0, 52.1, 40.0, 1.8)
+    lines = grid_of(canvas, strip).page_lines
+
+    assert lines
+    for line in lines:
+        assert (line.y1(), line.y2()) == (strip.top(), strip.bottom())
+
+
+def test_the_pages_are_ruled_even_when_the_squares_are_dropped(canvas):
+    """Where a page ends is worth knowing however far away the sheet is held.
+
+    Far enough out the grid gives up its squares and keeps its heavier lines;
+    the pages are ruled the same at either end of the zoom.
+    """
+
+    strip = QRectF(0.0, 0.0, 1000.0, 800.0)
+    close = grid_of(canvas, strip)
+    for _ in range(60):
+        canvas.zoom_out()
+    far = grid_of(canvas, strip)
+
+    assert len(far.grid_lines) < len(close.grid_lines)
+    assert len(far.page_lines) == len(close.page_lines) > 0
+
+
+def test_no_page_is_ruled_off_the_sheet(canvas):
+    """The sheet is a whole number of pages; there is no page beyond its edge."""
+
+    beyond = QRectF(canvas.scene().sceneRect().right() + 10.0, 0.0, 400.0, 400.0)
+
+    assert grid_of(canvas, beyond).page_lines == []

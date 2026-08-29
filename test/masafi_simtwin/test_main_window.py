@@ -8,10 +8,11 @@ import sys
 from pathlib import Path
 
 import pytest
-from PyQt6.QtCore import Qt
+from PyQt6 import sip
+from PyQt6.QtCore import QSizeF, Qt
 from PyQt6.QtWidgets import QDialog, QDockWidget, QMessageBox, QTabBar
 
-from masafi_simtwin import APPLICATION_NAME, project
+from masafi_simtwin import APPLICATION_NAME, paper, project
 from masafi_simtwin.documents import PetriNetEditor
 from masafi_simtwin.main_window import MAX_RECENT_PROJECTS, MainWindow
 from masafi_simtwin.preferences import install_id
@@ -1730,3 +1731,74 @@ def test_a_window_that_opened_a_project_is_torn_down_without_a_crash(tmp_path):
 
     assert finished.returncode == 0, finished.stderr
     assert 'survived' in finished.stdout
+
+
+def test_a_new_page_reaches_the_documents_that_are_open(window, opened, monkeypatch):
+    """The page is not a preference that waits for a restart.
+
+    A sheet can be ruled again where it stands, and a setting whose effect can
+    be seen at once is a setting the user can judge.
+    """
+
+    add_model(window, monkeypatch)
+    editor = window.document_area.tabs.currentWidget()
+    before = editor.page
+
+    landscape = QSizeF(paper.dimensions('A3', paper.LANDSCAPE))
+    monkeypatch.setattr('masafi_simtwin.main_window.preferences.page', lambda: landscape)
+    window._apply_page(('appearance/page_size',))
+
+    assert before != landscape
+    assert editor.page == landscape
+
+
+def test_a_settings_change_that_is_not_the_page_leaves_the_sheets_alone(
+    window, opened, monkeypatch
+):
+    """Which is every other preference there is."""
+
+    add_model(window, monkeypatch)
+    editor = window.document_area.tabs.currentWidget()
+    before = editor.page
+
+    monkeypatch.setattr(
+        'masafi_simtwin.main_window.preferences.page',
+        lambda: QSizeF(paper.dimensions('A3', paper.LANDSCAPE)),
+    )
+    window._apply_page(('units/time',))
+
+    assert editor.page == before
+
+
+@pytest.mark.parametrize('which', ['recent menu', 'top bar'])
+def test_a_recent_project_survives_being_clicked(window, make_project, which):
+    """Opening a project rebuilds the very menus the click came from.
+
+    Qt is still inside ``QAction::activate()`` while our handler runs, so an
+    entry destroyed there leaves Qt using freed memory once the handler returns
+    — a segmentation fault in the event loop, with no Python traceback, and only
+    when the freed memory has been reused. Hence the pixel-precise assertion
+    here: the entry has to still be alive when its own trigger returns.
+    """
+
+    path = make_project('Bottling Line')
+    window._publish_recent_projects([path])
+    menu = window._recent_menu if which == 'recent menu' else window.top_bar._project_button.menu()
+    entry = next(action for action in menu.actions() if action.data() == path)
+
+    entry.trigger()
+
+    assert not sip.isdeleted(entry)
+    assert window._project_name == 'Bottling Line'
+
+
+def test_the_recent_menus_still_hold_the_project_afterwards(window, make_project, qtbot):
+    """The deferred deletion empties the menus; the rebuild fills them again."""
+
+    path = make_project('Bottling Line')
+    window._publish_recent_projects([path])
+    next(a for a in window._recent_menu.actions() if a.data() == path).trigger()
+    qtbot.wait(50)
+
+    for menu in (window._recent_menu, window.top_bar._project_button.menu()):
+        assert [action.data() for action in menu.actions() if action.data()] == [path]

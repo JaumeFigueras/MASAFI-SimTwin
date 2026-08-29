@@ -28,12 +28,12 @@
 </context><context>
     <name>CanvasView</name>
     <message>
-        <location filename="../documents/canvas.py" line="389" />
+        <location filename="../documents/canvas.py" line="491" />
         <source>Delete Guide</source>
         <translation>Suprimeix la guia</translation>
     </message>
     <message>
-        <location filename="../documents/canvas.py" line="391" />
+        <location filename="../documents/canvas.py" line="493" />
         <source>Delete All Guides</source>
         <translation>Suprimeix totes les guies</translation>
     </message>
@@ -52,282 +52,282 @@
 </context><context>
     <name>MainWindow</name>
     <message>
-        <location filename="../main_window.py" line="84" />
+        <location filename="../main_window.py" line="86" />
         <source>Ready</source>
         <translation>A punt</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="97" />
+        <location filename="../main_window.py" line="99" />
         <source>New Project…</source>
         <translation>Projecte nou…</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="101" />
+        <location filename="../main_window.py" line="103" />
         <source>Open Project…</source>
         <translation>Obre un projecte…</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="105" />
+        <location filename="../main_window.py" line="107" />
         <source>Clear Recent Projects</source>
         <translation>Neteja els projectes recents</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="108" />
+        <location filename="../main_window.py" line="110" />
         <source>Close Project</source>
         <translation>Tanca el projecte</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="112" />
+        <location filename="../main_window.py" line="114" />
         <source>New Model…</source>
         <translation>Model nou…</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="115" />
+        <location filename="../main_window.py" line="117" />
         <source>New Simulation…</source>
         <translation>Simulació nova…</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="117" />
+        <location filename="../main_window.py" line="119" />
         <source>Creating a simulation is not implemented yet</source>
         <translation>La creació de simulacions encara no està implementada</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="120" />
+        <location filename="../main_window.py" line="122" />
         <source>Model Properties…</source>
         <translation>Propietats del model…</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="123" />
+        <location filename="../main_window.py" line="125" />
         <source>Delete Model</source>
         <translation>Suprimeix el model</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="126" />
+        <location filename="../main_window.py" line="128" />
         <source>Project Settings…</source>
         <translation>Configuració del projecte…</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="128" />
+        <location filename="../main_window.py" line="130" />
         <source>The project settings are not implemented yet</source>
         <translation>La configuració del projecte encara no està implementada</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="131" />
+        <location filename="../main_window.py" line="133" />
         <source>Exit</source>
         <translation>Surt</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="136" />
+        <location filename="../main_window.py" line="138" />
         <source>Run</source>
         <translation>Executa</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="137" />
+        <location filename="../main_window.py" line="139" />
         <source>Run the simulation</source>
         <translation>Executa la simulació</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="139" />
+        <location filename="../main_window.py" line="141" />
         <source>Running</source>
         <translation>S'està executant</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="141" />
+        <location filename="../main_window.py" line="143" />
         <source>Stop</source>
         <translation>Atura</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="142" />
+        <location filename="../main_window.py" line="144" />
         <source>Stop the simulation</source>
         <translation>Atura la simulació</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="144" />
+        <location filename="../main_window.py" line="146" />
         <source>Stopped</source>
         <translation>Aturada</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="146" />
+        <location filename="../main_window.py" line="148" />
         <source>Fast Forward</source>
         <translation>Avanç ràpid</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="147" />
+        <location filename="../main_window.py" line="149" />
         <source>Run the simulation without animation</source>
         <translation>Executa la simulació sense animació</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="150" />
+        <location filename="../main_window.py" line="152" />
         <source>Fast forwarding</source>
         <translation>S'està avançant ràpidament</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="153" />
+        <location filename="../main_window.py" line="155" />
         <source>Reset</source>
         <translation>Reinicia</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="154" />
+        <location filename="../main_window.py" line="156" />
         <source>Reset the simulation to its initial state</source>
         <translation>Reinicia la simulació a l'estat inicial</translation>
     </message>
     <message>
         <location filename="../main_window.py" line="419" />
-        <location filename="../main_window.py" line="156" />
+        <location filename="../main_window.py" line="158" />
         <source>Idle</source>
         <translation>Inactiva</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="158" />
+        <location filename="../main_window.py" line="160" />
         <source>Search</source>
         <translation>Cerca</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="159" />
+        <location filename="../main_window.py" line="161" />
         <source>Search everywhere</source>
         <translation>Cerca a tot arreu</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="163" />
+        <location filename="../main_window.py" line="165" />
         <source>Search is not implemented yet</source>
         <translation>La cerca encara no està implementada</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="166" />
+        <location filename="../main_window.py" line="168" />
         <source>Settings</source>
         <translation>Configuració</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="167" />
+        <location filename="../main_window.py" line="169" />
         <source>Open the settings</source>
         <translation>Obre la configuració</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="173" />
+        <location filename="../main_window.py" line="175" />
         <source>About {0}</source>
         <translation>Quant a {0}</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="196" />
+        <location filename="../main_window.py" line="198" />
         <source>&amp;File</source>
         <translation>&amp;Fitxer</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="199" />
+        <location filename="../main_window.py" line="201" />
         <source>Open Recent</source>
         <translation>Obre un projecte recent</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="207" />
+        <location filename="../main_window.py" line="209" />
         <source>&amp;Edit</source>
         <translation>&amp;Edita</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="211" />
+        <location filename="../main_window.py" line="213" />
         <source>Undo</source>
         <translation>Desfés</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="212" />
+        <location filename="../main_window.py" line="214" />
         <source>Redo</source>
         <translation>Refés</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="214" />
+        <location filename="../main_window.py" line="216" />
         <source>Cut</source>
         <translation>Retalla</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="215" />
+        <location filename="../main_window.py" line="217" />
         <source>Copy</source>
         <translation>Copia</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="216" />
+        <location filename="../main_window.py" line="218" />
         <source>Paste</source>
         <translation>Enganxa</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="220" />
+        <location filename="../main_window.py" line="222" />
         <source>&amp;View</source>
         <translation>&amp;Visualitza</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="224" />
+        <location filename="../main_window.py" line="226" />
         <source>Tool Windows</source>
         <translation>Finestres d'eines</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="225" />
+        <location filename="../main_window.py" line="227" />
         <source>Appearance</source>
         <translation>Aparença</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="227" />
+        <location filename="../main_window.py" line="229" />
         <source>Zoom In</source>
         <translation>Amplia</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="228" />
+        <location filename="../main_window.py" line="230" />
         <source>Zoom Out</source>
         <translation>Redueix</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="232" />
+        <location filename="../main_window.py" line="234" />
         <source>&amp;Project</source>
         <translation>&amp;Projecte</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="239" />
+        <location filename="../main_window.py" line="241" />
         <source>&amp;Window</source>
         <translation>Fines&amp;tra</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="240" />
+        <location filename="../main_window.py" line="242" />
         <source>Next Tab</source>
         <translation>Pestanya següent</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="240" />
+        <location filename="../main_window.py" line="242" />
         <source>Previous Tab</source>
         <translation>Pestanya anterior</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="242" />
+        <location filename="../main_window.py" line="244" />
         <source>&amp;Help</source>
         <translation>&amp;Ajuda</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="243" />
+        <location filename="../main_window.py" line="245" />
         <source>Documentation</source>
         <translation>Documentació</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="356" />
-        <location filename="../main_window.py" line="329" />
+        <location filename="../main_window.py" line="358" />
+        <location filename="../main_window.py" line="331" />
         <source>Project</source>
         <translation>Projecte</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="356" />
-        <location filename="../main_window.py" line="330" />
+        <location filename="../main_window.py" line="358" />
+        <location filename="../main_window.py" line="332" />
         <source>Libraries</source>
         <translation>Biblioteques</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="358" />
-        <location filename="../main_window.py" line="331" />
+        <location filename="../main_window.py" line="360" />
+        <location filename="../main_window.py" line="333" />
         <source>Python Console</source>
         <translation>Consola de Python</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="359" />
-        <location filename="../main_window.py" line="332" />
+        <location filename="../main_window.py" line="361" />
+        <location filename="../main_window.py" line="334" />
         <source>Problems</source>
         <translation>Problemes</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1135" />
+        <location filename="../main_window.py" line="1158" />
         <location filename="../main_window.py" line="418" />
         <source>No document</source>
         <translation>Cap document</translation>
@@ -712,7 +712,7 @@
 </context><context>
     <name>SettingsDialog</name>
     <message>
-        <location filename="../dialogs/settings.py" line="324" />
+        <location filename="../dialogs/settings.py" line="328" />
         <source>System default</source>
         <comment>language, not theme</comment>
         <translation>Predeterminat del sistema</translation>
@@ -736,6 +736,12 @@
         <location filename="../dialogs/forms/settings.ui" line="0" />
         <source>Themes</source>
         <translation>Temes</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>Page</source>
+        <extracomment>settings category: the paper a model is drawn on</extracomment>
+        <translation>Pàgina</translation>
     </message>
     <message>
         <location filename="../dialogs/forms/settings.ui" line="0" />
@@ -793,6 +799,36 @@
         <source>The theme is applied when the application starts.</source>
         <extracomment>under the theme chooser, so the restart is not a surprise</extracomment>
         <translation>El tema s'aplica quan s'inicia l'aplicació.</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>Paper size:</source>
+        <extracomment>label of the paper size chooser in the settings</extracomment>
+        <translation>Mida del paper:</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>Orientation:</source>
+        <extracomment>label of the page orientation choice in the settings</extracomment>
+        <translation>Orientació:</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>Portrait</source>
+        <extracomment>page orientation: taller than it is wide</extracomment>
+        <translation>Vertical</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>Landscape</source>
+        <extracomment>page orientation: wider than it is tall</extracomment>
+        <translation>Apaïsada</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>The sizes offered are the ones this machine prints on. A model is drawn on a sheet ruled into pages of the size chosen here.</source>
+        <extracomment>under the paper chooser, saying where the list of sizes comes from</extracomment>
+        <translation>Les mides que s'ofereixen són les que imprimeix aquesta màquina. Un model es dibuixa sobre un full dividit en pàgines de la mida triada aquí.</translation>
     </message>
     <message>
         <location filename="../dialogs/forms/settings.ui" line="0" />
@@ -923,12 +959,12 @@
 </context><context>
     <name>ToolPane</name>
     <message>
-        <location filename="../tool_pane.py" line="179" />
+        <location filename="../tool_pane.py" line="217" />
         <source>Hide</source>
         <translation>Amaga</translation>
     </message>
     <message>
-        <location filename="../tool_pane.py" line="193" />
+        <location filename="../tool_pane.py" line="231" />
         <source>Not implemented yet</source>
         <translation>Encara no està implementat</translation>
     </message>

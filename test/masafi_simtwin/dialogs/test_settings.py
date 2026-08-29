@@ -6,6 +6,7 @@ import pytest
 from PyQt6.QtCore import QSettings, Qt
 from PyQt6.QtWidgets import QDialogButtonBox, QLabel
 
+from masafi_simtwin import paper
 from masafi_simtwin.dialogs.settings import THEME_VALUES, SettingsDialog
 from masafi_simtwin.preferences import (
     DISTANCE_UNITS,
@@ -15,12 +16,13 @@ from masafi_simtwin.preferences import (
     TIME_UNITS,
     BY_KEY,
     Preferences,
+    needs_restart,
 )
 from masafi_simtwin.translations import LANGUAGE_NAMES, LANGUAGES
 
 #: The tree the form declares, parents with their children.
 CATEGORIES = {
-    'Appearance': ['Language', 'Themes'],
+    'Appearance': ['Language', 'Themes', 'Page'],
     'Default Units': ['Time', 'Space'],
 }
 
@@ -519,3 +521,109 @@ def test_the_space_page_says_what_the_surface_unit_is_for(dialog):
     note = dialog.space_note
     assert 'statistics' in note.text()
     assert note.property('placeholder') is True
+
+
+# ----------------------------------------------------------------------
+# The page
+# ----------------------------------------------------------------------
+
+
+def test_the_paper_combo_holds_what_this_machine_prints_on(dialog):
+    """Built here rather than in the form: a different desk, a different list."""
+
+    keys = [dialog.paper_combo.itemData(index) for index in range(dialog.paper_combo.count())]
+
+    assert keys
+    assert keys[: len(paper.installed_sizes())] == [
+        size.key() for size in paper.installed_sizes()
+    ]
+
+
+def test_the_paper_combo_opens_on_what_the_machine_prints_on_by_default(dialog):
+    """Which is what leaving ``appearance/page_size`` unset means."""
+
+    assert dialog.paper_combo.currentData() == paper.default_key()
+
+
+def test_a_stored_paper_size_this_machine_does_not_offer_is_still_shown(
+    qtbot, preferences
+):
+    """A settings file carried from another desk says what is in force."""
+
+    edit = preferences.edit()
+    edit.set_value('appearance/page_size', 'JisB4')
+    edit.commit()
+
+    dialog = SettingsDialog(preferences=preferences)
+    qtbot.addWidget(dialog)
+
+    assert dialog.paper_combo.currentData() == 'JisB4'
+
+
+def test_a_form_that_fills_the_paper_combo_is_refused(qtbot, preferences, monkeypatch):
+    """The entries come from the machine, so the form has to leave it empty."""
+
+    original = SettingsDialog._bind_paper
+
+    def fill_it_first(self):
+        self.paper_combo.addItem('A4', 'A4')
+        original(self)
+
+    monkeypatch.setattr(SettingsDialog, '_bind_paper', fill_it_first)
+
+    with pytest.raises(RuntimeError, match='paper_combo'):
+        SettingsDialog(preferences=preferences)
+
+
+def test_choosing_a_paper_size_writes_it(qtbot, preferences):
+    """On OK, and not before."""
+
+    dialog = SettingsDialog(preferences=preferences)
+    qtbot.addWidget(dialog)
+    dialog.paper_combo.setCurrentIndex(dialog.paper_combo.findData('A3'))
+
+    assert preferences.value('appearance/page_size') != 'A3'
+
+    dialog.accept()
+
+    assert preferences.value('appearance/page_size') == 'A3'
+    assert 'appearance/page_size' in dialog.written
+
+
+def test_the_orientation_is_a_pair_of_radio_buttons(dialog):
+    """Portrait by default, and only one of them on."""
+
+    assert dialog.portrait_radio.isChecked()
+    assert not dialog.landscape_radio.isChecked()
+
+
+def test_choosing_landscape_writes_it_and_turns_portrait_off(qtbot, preferences):
+    """Two buttons are one choice, so the one turning on is the one that counts."""
+
+    dialog = SettingsDialog(preferences=preferences)
+    qtbot.addWidget(dialog)
+    dialog.landscape_radio.setChecked(True)
+
+    assert not dialog.portrait_radio.isChecked()
+
+    dialog.accept()
+
+    assert preferences.value('appearance/page_orientation') == paper.LANDSCAPE
+
+
+def test_the_page_asks_for_no_restart(qtbot, preferences, monkeypatch):
+    """A sheet is ruled again where it stands, so nothing is said about restarting."""
+
+    warned = []
+    monkeypatch.setattr(
+        'masafi_simtwin.dialogs.settings.warn_restart_needed',
+        lambda parent: warned.append(parent),
+    )
+    dialog = SettingsDialog(preferences=preferences)
+    qtbot.addWidget(dialog)
+    dialog.paper_combo.setCurrentIndex(dialog.paper_combo.findData('A3'))
+    dialog.landscape_radio.setChecked(True)
+    dialog.accept()
+
+    assert warned == []
+    assert not needs_restart(dialog.written)

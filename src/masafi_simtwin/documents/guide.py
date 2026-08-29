@@ -82,6 +82,23 @@ class Guide(QGraphicsItem):
         )
         self.position = position
 
+    def set_sheet(self, sheet: QRectF) -> None:
+        """Draw across a sheet of a different size from now on.
+
+        The sheet changes size when the page it is ruled into does.  A guide
+        runs the length of it, so its geometry changes with it — and the scene
+        has to be told before it does, or it goes on looking for the guide where
+        the guide no longer is.
+
+        Parameters
+        ----------
+        sheet : PyQt6.QtCore.QRectF
+            The sheet as it now stands.
+        """
+
+        self.prepareGeometryChange()
+        self._sheet = QRectF(sheet)
+
     @property
     def horizontal(self) -> bool:
         """bool: Whether the guide lies across the sheet rather than up it."""

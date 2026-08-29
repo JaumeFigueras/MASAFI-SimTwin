@@ -325,3 +325,32 @@ rubber-band over.
 
 The second is the one to reach for first; the first is worth having only if the editor wants
 enclosing selection anyway.
+
+---
+
+## The page is the application's, not the model's
+
+**Now.** What paper a model is drawn on is two preferences of this installation —
+`appearance/page_size` and `appearance/page_orientation` — so every model opened on this machine is
+ruled into the same page, and the same model opened on another machine may be ruled into another. A
+model carries its `units` in the manifest; it carries nothing about paper.
+
+**Why it was done this way.** It is what was asked for, and it is the right default: the paper a
+person prints on is a fact about their desk rather than about their model, and the machine already
+knows it. The tiling is a guide to the eye, and nothing is written into a project by it — so
+disagreeing machines disagree about a drawn line and about nothing else.
+
+**When it will not be enough.** The moment a model is printed or exported to a fixed size, or the
+moment two people share a project and want the same page breaks in it. Then the page belongs in the
+model document, beside `units`, with the preference as the default for a *new* model rather than the
+answer for every model.
+
+**Options.**
+
+- `page_size` and `page_orientation` in the model's manifest entry, defaulted from the preferences
+  when the model is created, and shown in the Model Properties dialog beside the units. The
+  preference becomes what a new model starts with.
+- The same, but with an explicit *follow the application* value, so a model can be left to whatever
+  the reader's desk prints on. That keeps the current behaviour available and makes it a choice.
+- Leave it here and put the page in the export dialog instead, when there is one. That is the
+  smallest change, and it says the tiling is only ever a hint.
