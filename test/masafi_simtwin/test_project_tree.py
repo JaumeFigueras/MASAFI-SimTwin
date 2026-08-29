@@ -249,3 +249,27 @@ def test_a_node_that_is_not_a_model_has_no_model(tree):
 
     assert tree.model_of(tree.root()) is None
     assert tree.model_of(tree.node(NodeKind.MODELS)) is None
+
+
+def test_double_clicking_a_model_asks_for_it(tree, qtbot):
+    """Which is how a model already made is opened again."""
+
+    tree.set_models(MODELS)
+
+    with qtbot.waitSignal(tree.model_activated, timeout=1000) as blocker:
+        tree.itemDoubleClicked.emit(tree.model_items()[1], 0)
+
+    assert blocker.args == ['u-2']
+
+
+def test_double_clicking_anything_else_asks_for_nothing(tree, qtbot):
+    """A double click on a group node is Qt's own way of folding it."""
+
+    tree.set_models(MODELS)
+    asked = []
+    tree.model_activated.connect(asked.append)
+
+    tree.itemDoubleClicked.emit(tree.root(), 0)
+    tree.itemDoubleClicked.emit(tree.node(NodeKind.MODELS), 0)
+
+    assert asked == []

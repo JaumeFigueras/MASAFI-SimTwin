@@ -47,9 +47,13 @@ install: venv  ## Install the dependencies from requirements.txt
 # Application
 # ----------------------------------------------------------------------------
 
+# PYTHONFAULTHANDLER makes the interpreter print the Python stack it died on
+# when it is killed by a fatal signal.  A crash inside Qt — a signal delivered
+# to an object whose C++ side has gone, most often — leaves nothing behind
+# otherwise: no traceback, no exception, just "Segmentation fault".
 .PHONY: run
 run:  ## Launch the application
-	PYTHONPATH=$(SRC_DIR) $(PYTHON) -m masafi_simtwin
+	PYTHONFAULTHANDLER=1 PYTHONPATH=$(SRC_DIR) $(PYTHON) -m masafi_simtwin
 
 # ----------------------------------------------------------------------------
 # Tests

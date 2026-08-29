@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QDialog, QDockWidget, QMessageBox
+from PyQt6.QtWidgets import QDialog, QDockWidget, QMessageBox, QTabBar
 
 from masafi_simtwin import APPLICATION_NAME, project
+from masafi_simtwin.documents import PetriNetEditor
 from masafi_simtwin.main_window import MAX_RECENT_PROJECTS, MainWindow
 from masafi_simtwin.preferences import install_id
 from masafi_simtwin.project_tree import NodeKind
@@ -1499,3 +1503,230 @@ def test_the_lock_is_freed_when_the_window_closes(window, make_project):
     window.close()
 
     assert project.holder_of(path) is None
+
+
+# ----------------------------------------------------------------------
+# Documents
+# ----------------------------------------------------------------------
+
+
+def add_model(window, monkeypatch, name: str = 'Filling Station') -> dict:
+    """Add a model to the open project through the window's own action.
+
+    Parameters
+    ----------
+    window : masafi_simtwin.main_window.MainWindow
+        The window, with a project open.
+    monkeypatch : pytest.MonkeyPatch
+        The patcher, for the model dialog.
+    name : str, optional
+        What the model is called.
+
+    Returns
+    -------
+    dict
+        The model's entry in the manifest.
+    """
+
+    stub_model_dialog(monkeypatch, QDialog.DialogCode.Accepted, name=name)
+    window.new_model_action.trigger()
+    return [
+        model
+        for model in project.models_of(window._project_path)
+        if model['name'] == name
+    ][0]
+
+
+def test_a_new_model_opens_in_a_tab(window, opened, monkeypatch):
+    """A model made is a model being worked on, so it opens where it is edited."""
+
+    model = add_model(window, monkeypatch)
+    area = window.document_area
+
+    assert area.document_count == 1
+    assert area.tabs.tabText(0) == 'Filling Station'
+    assert area.document(model['uuid']) is not None
+
+
+def test_a_model_opens_on_its_own_canvas(window, opened, monkeypatch):
+    """A Petri net opens on the Petri net editor, not on a placeholder."""
+
+    model = add_model(window, monkeypatch)
+
+    assert isinstance(window.document_area.document(model['uuid']), PetriNetEditor)
+
+
+def test_a_tab_is_closed_by_its_own_button(window, opened, monkeypatch):
+    """Every document carries one, which is the only way one is closed by hand."""
+
+    add_model(window, monkeypatch)
+    area = window.document_area
+    button = area.tabs.tabBar().tabButton(0, QTabBar.ButtonPosition.RightSide)
+    button.click()
+
+    assert area.document_count == 0
+    assert area.showing_placeholder
+
+
+def test_double_clicking_a_model_opens_it_again(window, opened, monkeypatch):
+    """The project pane is where a closed model is reached from."""
+
+    model = add_model(window, monkeypatch)
+    tree = window._project_tree
+    window.document_area.close_all_documents()
+
+    tree.itemDoubleClicked.emit(tree.model_items()[0], 0)
+
+    assert window.document_area.document_count == 1
+    assert window.document_area.document(model['uuid']) is not None
+
+
+def test_a_model_already_open_is_raised_rather_than_opened_twice(
+    window, opened, monkeypatch
+):
+    """Two tabs of one model would be two views of one file, unaware of each other."""
+
+    first = add_model(window, monkeypatch, 'Filling Station')
+    add_model(window, monkeypatch, 'Capping')
+    area = window.document_area
+    editor = area.document(first['uuid'])
+
+    window.open_model(first['uuid'])
+
+    assert area.document_count == 2
+    assert area.document(first['uuid']) is editor
+    assert area.tabs.currentWidget() is editor
+
+
+def test_renaming_a_model_retitles_its_tab(window, opened, monkeypatch):
+    """A model's identity is its UUID, so the tab it is in survives the rename."""
+
+    model = add_model(window, monkeypatch)
+    editor = window.document_area.document(model['uuid'])
+    window._project_tree.setCurrentItem(window._project_tree.model_items()[0])
+
+    stub_model_dialog(monkeypatch, QDialog.DialogCode.Accepted, name='Filling')
+    window.model_properties_action.trigger()
+
+    assert window.document_area.tabs.tabText(0) == 'Filling'
+    assert window.document_area.document(model['uuid']) is editor
+
+
+def test_deleting_a_model_closes_its_tab(window, opened, monkeypatch):
+    """A document of something that no longer exists cannot be left open."""
+
+    add_model(window, monkeypatch)
+    window._project_tree.setCurrentItem(window._project_tree.model_items()[0])
+
+    monkeypatch.setattr(
+        'masafi_simtwin.main_window.QMessageBox.question',
+        lambda *arguments, **keywords: QMessageBox.StandardButton.Yes,
+    )
+    window.delete_model_action.trigger()
+
+    assert window.document_area.document_count == 0
+
+
+def test_closing_a_project_closes_its_documents(window, opened, monkeypatch):
+    """The documents belong to the project, as the project pane does."""
+
+    add_model(window, monkeypatch)
+    window.close_project()
+
+    assert window.document_area.document_count == 0
+    assert window.document_area.showing_placeholder
+
+
+def test_opening_another_project_closes_the_documents_of_the_first(
+    window, opened, make_project, monkeypatch
+):
+    """Otherwise a tab would outlive the project whose file it is written in."""
+
+    add_model(window, monkeypatch)
+    window.open_project_path(make_project('Packing Line'))
+
+    assert window.document_area.document_count == 0
+
+
+def test_a_model_of_a_kind_that_is_not_built_is_not_opened(window, opened):
+    """It is reported instead, which is what an unimplemented kind deserves."""
+
+    model = project.add_model(
+        opened, 'Flow', project.ModelKind.PROCESS_FLOW, {'time': 's'}
+    )
+    window.open_model(model['uuid'])
+
+    assert window.document_area.document_count == 0
+    assert 'Flow' in window.statusBar().currentMessage()
+
+
+def test_opening_a_model_the_project_does_not_hold_does_nothing(window, opened):
+    """A tree left behind by a change made elsewhere asks for exactly that."""
+
+    window.open_model('no-such-model')
+
+    assert window.document_area.document_count == 0
+
+
+# ----------------------------------------------------------------------
+# Teardown
+# ----------------------------------------------------------------------
+
+#: A whole session, run in a process of its own: build the window, open a
+#: project in it, and let go of both it and the application at once, which is
+#: what happens when ``main()`` returns.
+#:
+#: It cannot be done in this process.  What went wrong here did not raise, it
+#: killed the interpreter — Qt hides every dock widget as the window is torn
+#: down, and the pane's *visibility* signal reached a window whose C++ side had
+#: already gone.  A test for that has to be able to survive it, so it watches
+#: from outside and reads the exit code.
+TEARDOWN_SESSION = '''
+import gc, sys
+from PyQt6.QtCore import QSettings, QTimer, QEventLoop
+from masafi_simtwin.application import SimTwinApplication
+from masafi_simtwin.main_window import MainWindow
+from masafi_simtwin import project
+
+QSettings.setDefaultFormat(QSettings.Format.IniFormat)
+
+def session(path):
+    application = SimTwinApplication([sys.argv[0]])
+    window = MainWindow()
+    window.show()
+    loop = QEventLoop()
+    QTimer.singleShot(50, loop.quit)
+    loop.exec()
+    window.open_project_path(path)
+
+session(sys.argv[1])
+gc.collect()
+print('survived')
+'''
+
+
+def test_a_window_that_opened_a_project_is_torn_down_without_a_crash(tmp_path):
+    """Opening a project shows a pane, and a pane shown is a pane hidden later.
+
+    Qt hides every dock widget as the window is destroyed, so the pane reports
+    it — and until the pane carried its own signal, that report was a lambda
+    belonging to the dock, which Qt keeps until the *dock* goes.  By then the
+    window's C++ side is gone, and calling a method on it took the interpreter
+    down with it rather than raising anything a test could catch.
+    """
+
+    path = str(project.create(project.path_for(tmp_path, 'Bottling Line'), 'Bottling Line'))
+    environment = dict(os.environ)
+    environment['QT_QPA_PLATFORM'] = 'offscreen'
+    environment['XDG_CONFIG_HOME'] = str(tmp_path / 'config')
+
+    finished = subprocess.run(
+        [sys.executable, '-c', TEARDOWN_SESSION, path],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env=environment,
+    )
+
+    assert finished.returncode == 0, finished.stderr
+    assert 'survived' in finished.stdout

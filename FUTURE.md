@@ -267,3 +267,61 @@ the application, and in it a lock tool that can say who holds a project, and rel
   beside `masafi-simtwin`.
 
 **Where.** `masafi_simtwin/project.py` — `lock_path()`, `holder_of()`, `acquire()`, `release()`.
+
+---
+
+## The canvas is ruled in millimetres and in nothing else
+
+**Now.** A canvas is a sheet whose scene unit is one millimetre, and the rulers along its top and
+left count in millimetres. `RulerUnit` names what a ruler counts in — a symbol, how many scene units
+one of them is, and the ladder of spacings its labelled ticks may take — and `MILLIMETRES` is the
+only one there is. Nothing chooses between them, so there is nothing to choose from.
+
+**Why it is not the `units/distance` preference.** That preference is what a *model* measures in, and
+only the two kinds of `KINDS_WITH_DISTANCE` have one at all: a Petri net's places have no position
+that means anything to the simulation. The ruler is about the *drawing* — how big the picture is on
+the sheet, which is the same question a printed page asks — and every kind of model has one of those.
+Wiring the ruler to `units/distance` would tie the size of a picture to the units of the thing it is
+a picture of, and would leave a Petri net's rulers with nothing to read.
+
+**Options,** when a second unit is wanted.
+
+- Add it to the table: `CENTIMETRES`, `INCHES` with their own step ladders. That part is one line
+  each, and the grid would want a matching step so that the ticks keep falling on it.
+- Choose it in the corner box, which is where the symbol already is: a click, a small menu, one
+  canvas at a time. That is what drawing programs do, and it needs no preference at all.
+- Or declare it a preference — `appearance/ruler` — so that every canvas opens in the same unit. It
+  would be the first preference about a document rather than about the application, and it should
+  not be `restart=True`: a ruler can change unit while it is on screen.
+
+Inches would be the first unit whose ladder is not decimal (⅛, ¼, ½, 1, 3, 6, 12), which is the one
+thing here that is more than a table entry.
+
+---
+
+## A rubber band picks up guides along with what it was aimed at
+
+**Now.** A `Guide` is a scene item with `ItemIsSelectable`, and its shape runs the length of the
+sheet. A rubber-band drag anywhere that crosses a guide therefore selects the guide too, and a
+*Delete* after it takes the guide away with whatever else was caught. With no net items on the sheet
+yet nothing is actually lost by this, which is why it is left.
+
+**Why guides are scene items at all.** Because selecting one, dragging one, drawing one at any zoom
+and picking one out from under the pointer are then the scene's work rather than hit-testing,
+dragging and z-ordering written again by hand over the view. That is worth a great deal more than
+the rubber band is worth, and the trade only bites once there is something else on the sheet to
+rubber-band over.
+
+**Options,** when the net's items arrive.
+
+- `QGraphicsView.setRubberBandSelectionMode(ContainsItemShape)`. One line, and a guide can then never
+  be caught, since no rubber band contains a line that runs off the sheet. It also changes how the
+  net's own items are selected — they would have to be enclosed rather than touched — which is a
+  decision about the editor, not about guides.
+- Deselect the guides at the end of a rubber-band drag, leaving a click on a guide as the only way to
+  select one. Small, and it keeps both selections behaving the way each should.
+- Take the guides off the selection model altogether and keep them in a layer of their own, selected
+  by hand. Most control, most code, and it gives back the reason they are scene items.
+
+The second is the one to reach for first; the first is worth having only if the editor wants
+enclosing selection anyway.

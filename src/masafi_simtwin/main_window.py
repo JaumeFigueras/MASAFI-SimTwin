@@ -30,7 +30,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from masafi_simtwin import APPLICATION_NAME, icons, project
+from masafi_simtwin import APPLICATION_NAME, documents, icons, project
 from masafi_simtwin.dialogs import (
     AboutDialog,
     ModelDialog,
@@ -373,18 +373,17 @@ class MainWindow(QMainWindow):
             },
             self,
         )
+        self._project_tree.model_activated.connect(self.open_model)
         contents: dict[str, QWidget] = {'project': self._project_tree}
 
         self._tool_panes: dict[str, ToolPane] = {}
         for group in groups:
             panes = []
             for key, title, area in group:
-                pane = ToolPane(title, contents.get(key), area=area, parent=self)
+                pane = ToolPane(title, contents.get(key), area=area, key=key, parent=self)
                 self.addDockWidget(area, pane)
                 pane.hide()
-                pane.visibilityChanged.connect(
-                    lambda visible, name=key: self._on_pane_visibility_changed(name, visible)
-                )
+                pane.pane_visibility_changed.connect(self._on_pane_visibility_changed)
                 self._tool_panes[key] = pane
                 panes.append(pane)
 
@@ -540,6 +539,7 @@ class MainWindow(QMainWindow):
             return
 
         self._end_session()
+        self._document_area.close_all_documents()
         self._project_path = path
         self._session_started = time.monotonic()
         self._record(path, project.EVENT_OPENED)
@@ -579,6 +579,7 @@ class MainWindow(QMainWindow):
         """
 
         self._end_session()
+        self._document_area.close_all_documents()
 
         self._project_name = ''
         self._top_bar.set_project_name(self.tr('No Project'))
@@ -772,7 +773,7 @@ class MainWindow(QMainWindow):
         dialog = ModelDialog(self, taken=self._model_names())
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
-        self._change_models(
+        model = self._change_models(
             lambda path: project.add_model(
                 path,
                 dialog.name,
@@ -783,6 +784,8 @@ class MainWindow(QMainWindow):
             ),
             self.tr('The model could not be added'),
         )
+        if model is not None:
+            self.open_model(model['uuid'])
 
     def edit_model(self) -> None:
         """Change the name or the units of the model selected in the tree."""
@@ -799,7 +802,7 @@ class MainWindow(QMainWindow):
         )
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
-        self._change_models(
+        changed = self._change_models(
             lambda path: project.update_model(
                 path,
                 model['uuid'],
@@ -810,6 +813,8 @@ class MainWindow(QMainWindow):
             ),
             self.tr('The model could not be changed'),
         )
+        if changed is not None:
+            self._retitle_document(changed)
 
     def delete_model(self) -> None:
         """Remove the model selected in the tree, having asked first.
@@ -832,14 +837,16 @@ class MainWindow(QMainWindow):
         )
         if answer != QMessageBox.StandardButton.Yes:
             return
-        self._change_models(
+        removed = self._change_models(
             lambda path: project.remove_model(
                 path, model['uuid'], project.current_user(), install_id()
             ),
             self.tr('The model could not be removed'),
         )
+        if removed is not None:
+            self._document_area.close_document_for(removed['uuid'])
 
-    def _change_models(self, change, failure: str) -> None:
+    def _change_models(self, change, failure: str) -> dict | None:
         """Apply a change to the project's models and show the result.
 
         Every change is written to the project as it is made — there is no save
@@ -852,14 +859,21 @@ class MainWindow(QMainWindow):
             What to do to the project, given its path.
         failure : str
             Translated sentence to show when it cannot be done.
+
+        Returns
+        -------
+        dict, optional
+            The model entry the change worked on, so that the caller can open,
+            retitle or close its tab, and ``None`` when nothing was changed.
         """
 
         try:
-            change(self._project_path)
+            model = change(self._project_path)
         except project.ProjectError as error:
             QMessageBox.critical(self, failure, str(error))
-            return
+            return None
         self._project_tree.set_models(project.models_of(self._project_path))
+        return model
 
     def _model_names(self) -> list[str]:
         """List the names of the open project's models.
@@ -883,8 +897,25 @@ class MainWindow(QMainWindow):
             Its entry in the manifest, or ``None`` when no model is selected.
         """
 
-        identifier = self._project_tree.model_of(self._project_tree.currentItem())
-        if identifier is None or self._project_path is None:
+        return self._model(self._project_tree.model_of(self._project_tree.currentItem()))
+
+    def _model(self, identifier: str | None) -> dict | None:
+        """Find a model of the open project by its UUID.
+
+        Parameters
+        ----------
+        identifier : str, optional
+            The model's UUID.
+
+        Returns
+        -------
+        dict, optional
+            Its entry in the manifest, or ``None`` when the project holds no
+            such model — which is what a tree left behind by a change made
+            elsewhere would ask for.
+        """
+
+        if not identifier or self._project_path is None:
             return None
         return next(
             (
@@ -893,6 +924,60 @@ class MainWindow(QMainWindow):
                 if model.get('uuid') == identifier
             ),
             None,
+        )
+
+    # ------------------------------------------------------------------
+    # Documents
+    # ------------------------------------------------------------------
+
+    def open_model(self, identifier: str) -> None:
+        """Open a model in the document area, or raise the tab it is already in.
+
+        A model is one document however often it is asked for: opening it twice
+        would be two views of one file, each unaware of the other's edits.  The
+        tab is keyed by the model's UUID rather than by its name, so a model
+        renamed while it is open keeps the tab it is in.
+
+        Parameters
+        ----------
+        identifier : str
+            The model's UUID.
+        """
+
+        if self._document_area.show_document(identifier):
+            return
+
+        model = self._model(identifier)
+        if model is None:
+            return
+
+        editor = documents.editor_for(model)
+        if editor is None:
+            self._report(
+                self.tr('{0} cannot be opened yet: that kind of model is not built.').format(
+                    model.get('name', '')
+                )
+            )
+            return
+
+        self._document_area.add_document(
+            editor,
+            model.get('name', ''),
+            key=identifier,
+            tool_tip=model.get('file', ''),
+        )
+
+    def _retitle_document(self, model: dict) -> None:
+        """Put a model's new name on its tab, if it is open.
+
+        Parameters
+        ----------
+        model : dict
+            The model's entry in the manifest, as it now stands.
+        """
+
+        self._document_area.set_document_title(
+            model.get('uuid', ''), model.get('name', ''), model.get('file', '')
         )
 
     # ------------------------------------------------------------------

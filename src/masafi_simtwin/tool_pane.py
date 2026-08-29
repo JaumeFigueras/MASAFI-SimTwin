@@ -19,7 +19,7 @@ its own title, its area and the widget it holds.
 
 from __future__ import annotations
 
-from PyQt6.QtCore import QSize, Qt
+from PyQt6.QtCore import QSize, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QDockWidget,
     QFrame,
@@ -70,21 +70,48 @@ class ToolPane(QDockWidget):
         The dock area the pane belongs to, the left one by default.  It is the
         only area the pane is allowed in, and it decides which of the two
         smallest sizes applies.
+    key : str, optional
+        What the window calls this pane, carried so that the pane can say which
+        one it is when it is shown or hidden.
     parent : PyQt6.QtWidgets.QWidget, optional
         Parent widget.
+
+    Attributes
+    ----------
+    key : str
+        What the window calls this pane.
+    pane_visibility_changed : PyQt6.QtCore.pyqtSignal
+        Emitted with :attr:`key` and whether the pane is now visible.
+
+        This exists rather than the window watching ``visibilityChanged``
+        itself, and it matters more than it looks.  Qt hides every dock widget
+        as the window is torn down, so that signal is emitted *while the window
+        is being destroyed*.  A connection made with a lambda belongs to the
+        dock alone, and Qt keeps it until the dock goes — which is after the
+        window's own destructor has run — so the lambda would then call a method
+        on a window whose C++ side no longer exists, and the interpreter dies on
+        the spot.  A signal the window connects with a plain bound method is
+        held against the window as well, and ``QObject``'s destructor drops
+        every such connection *before* it deletes its children.  So the pane can
+        say what it likes on the way out and nobody is listening.
     """
+
+    pane_visibility_changed = pyqtSignal(str, bool)
 
     def __init__(
         self,
         title: str,
         content: QWidget | None = None,
         area: Qt.DockWidgetArea = Qt.DockWidgetArea.LeftDockWidgetArea,
+        key: str = '',
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(title, parent)
         self.setObjectName(f'ToolPane_{title}')
         self.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetClosable)
         self.setAllowedAreas(area)
+        self.key = key
+        self.visibilityChanged.connect(self._on_visibility_changed)
 
         self._area = area
         if area in _HORIZONTAL_AREAS:
@@ -100,6 +127,17 @@ class ToolPane(QDockWidget):
         self.setWidget(
             self._build_card(content if content is not None else self._build_placeholder())
         )
+
+    def _on_visibility_changed(self, visible: bool) -> None:
+        """Say which pane it is that has been shown or hidden.
+
+        Parameters
+        ----------
+        visible : bool
+            Whether the pane is now visible.
+        """
+
+        self.pane_visibility_changed.emit(self.key, visible)
 
     @property
     def header(self) -> QWidget:

@@ -9,13 +9,18 @@ hands this widget the ones each kind of node offers, so that an entry of the
 *Project* menu and the same entry in a context menu are one action rather than
 two that have to be kept in step.  Which node offers what is
 :data:`ProjectTree.menus`, given when the tree is built.
+
+What the tree does say is that a model was asked for: a double click on a model
+is how one is opened, and :attr:`ProjectTree.model_activated` reports it.  That
+is a fact about the tree rather than an action of it — what opening a model
+means is the window's to decide.
 """
 
 from __future__ import annotations
 
 from enum import Enum
 
-from PyQt6.QtCore import QPoint, Qt
+from PyQt6.QtCore import QPoint, Qt, pyqtSignal
 from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import QMenu, QTreeWidget, QTreeWidgetItem, QWidget
 
@@ -54,7 +59,12 @@ class ProjectTree(QTreeWidget):
     ----------
     menus : dict
         The mapping the tree was built with.
+    model_activated : PyQt6.QtCore.pyqtSignal
+        Emitted with the UUID of a model when its node is double clicked, which
+        is how a model is opened in the document area.
     """
+
+    model_activated = pyqtSignal(str)
 
     def __init__(
         self,
@@ -69,6 +79,7 @@ class ProjectTree(QTreeWidget):
         self.setColumnCount(1)
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._on_context_menu)
+        self.itemDoubleClicked.connect(self._on_item_activated)
 
     # ------------------------------------------------------------------
     # What the tree holds
@@ -244,6 +255,24 @@ class ProjectTree(QTreeWidget):
             else:
                 menu.addAction(entry)
         return menu
+
+    def _on_item_activated(self, item: QTreeWidgetItem, _column: int) -> None:
+        """Report a double click on a model, and let every other node be.
+
+        A double click on a group node is Qt's own way of folding it, which is
+        left alone.
+
+        Parameters
+        ----------
+        item : PyQt6.QtWidgets.QTreeWidgetItem
+            The node that was double clicked.
+        _column : int
+            Which column it was, of the one this tree has.
+        """
+
+        identifier = self.model_of(item)
+        if identifier:
+            self.model_activated.emit(identifier)
 
     def _on_context_menu(self, position: QPoint) -> None:
         """Put the context menu of the node under the pointer up.
