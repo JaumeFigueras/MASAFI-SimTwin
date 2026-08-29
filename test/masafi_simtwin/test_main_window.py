@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import QDialog, QDockWidget, QMessageBox, QTabBar
 
 from masafi_simtwin import APPLICATION_NAME, paper, project
 from masafi_simtwin.documents import PetriNetEditor
+from masafi_simtwin.library_tree import LibraryTree
 from masafi_simtwin.main_window import MAX_RECENT_PROJECTS, MainWindow
 from masafi_simtwin.preferences import install_id
 from masafi_simtwin.project_tree import NodeKind
@@ -1802,3 +1803,12 @@ def test_the_recent_menus_still_hold_the_project_afterwards(window, make_project
 
     for menu in (window._recent_menu, window.top_bar._project_button.menu()):
         assert [action.data() for action in menu.actions() if action.data()] == [path]
+
+
+def test_the_libraries_pane_holds_the_library_tree(window):
+    """The palette a model is drawn from, where the stripe button opens it."""
+
+    pane = window.tool_pane('libraries')
+
+    assert pane is not None
+    assert pane.findChild(LibraryTree) is window._library_tree

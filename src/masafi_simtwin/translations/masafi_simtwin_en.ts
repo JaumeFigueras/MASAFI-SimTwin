@@ -50,381 +50,428 @@
         <translation>Close</translation>
     </message>
 </context><context>
+    <name>LibraryTree</name>
+    <message>
+        <location filename="../library_tree.py" line="129" />
+        <source>Place</source>
+        <translation>Place</translation>
+    </message>
+    <message>
+        <location filename="../library_tree.py" line="130" />
+        <source>Transition</source>
+        <translation>Transition</translation>
+    </message>
+    <message>
+        <location filename="../library_tree.py" line="132" />
+        <source>Timed Transition</source>
+        <translation>Timed Transition</translation>
+    </message>
+    <message>
+        <location filename="../library_tree.py" line="134" />
+        <source>Attribute</source>
+        <translation>Attribute</translation>
+    </message>
+    <message>
+        <location filename="../library_tree.py" line="139" />
+        <source>P/T Petri Net</source>
+        <translation>P/T Petri Net</translation>
+    </message>
+    <message>
+        <location filename="../library_tree.py" line="145" />
+        <source>Timed Petri Net</source>
+        <translation>Timed Petri Net</translation>
+    </message>
+    <message>
+        <location filename="../library_tree.py" line="151" />
+        <source>Attributed Timed Petri Net</source>
+        <translation>Attributed Timed Petri Net</translation>
+    </message>
+    <message>
+        <location filename="../library_tree.py" line="157" />
+        <source>Process Flow</source>
+        <translation>Process Flow</translation>
+    </message>
+    <message>
+        <location filename="../library_tree.py" line="162" />
+        <source>Unimplemented</source>
+        <translation>Unimplemented</translation>
+    </message>
+</context><context>
     <name>MainWindow</name>
     <message>
-        <location filename="../main_window.py" line="86" />
+        <location filename="../main_window.py" line="88" />
         <source>Ready</source>
         <translation>Ready</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="99" />
+        <location filename="../main_window.py" line="101" />
         <source>New Project…</source>
         <translation>New Project…</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="103" />
+        <location filename="../main_window.py" line="105" />
         <source>Open Project…</source>
         <translation>Open Project…</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="107" />
+        <location filename="../main_window.py" line="109" />
         <source>Clear Recent Projects</source>
         <translation>Clear Recent Projects</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="110" />
+        <location filename="../main_window.py" line="112" />
         <source>Close Project</source>
         <translation>Close Project</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="114" />
+        <location filename="../main_window.py" line="116" />
         <source>New Model…</source>
         <translation>New Model…</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="117" />
+        <location filename="../main_window.py" line="119" />
         <source>New Simulation…</source>
         <translation>New Simulation…</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="119" />
+        <location filename="../main_window.py" line="121" />
         <source>Creating a simulation is not implemented yet</source>
         <translation>Creating a simulation is not implemented yet</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="122" />
+        <location filename="../main_window.py" line="124" />
         <source>Model Properties…</source>
         <translation>Model Properties…</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="125" />
+        <location filename="../main_window.py" line="127" />
         <source>Delete Model</source>
         <translation>Delete Model</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="128" />
+        <location filename="../main_window.py" line="130" />
         <source>Project Settings…</source>
         <translation>Project Settings…</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="130" />
+        <location filename="../main_window.py" line="132" />
         <source>The project settings are not implemented yet</source>
         <translation>The project settings are not implemented yet</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="133" />
+        <location filename="../main_window.py" line="135" />
         <source>Exit</source>
         <translation>Exit</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="138" />
+        <location filename="../main_window.py" line="140" />
         <source>Run</source>
         <translation>Run</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="139" />
+        <location filename="../main_window.py" line="141" />
         <source>Run the simulation</source>
         <translation>Run the simulation</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="141" />
+        <location filename="../main_window.py" line="143" />
         <source>Running</source>
         <translation>Running</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="143" />
+        <location filename="../main_window.py" line="145" />
         <source>Stop</source>
         <translation>Stop</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="144" />
+        <location filename="../main_window.py" line="146" />
         <source>Stop the simulation</source>
         <translation>Stop the simulation</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="146" />
+        <location filename="../main_window.py" line="148" />
         <source>Stopped</source>
         <translation>Stopped</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="148" />
+        <location filename="../main_window.py" line="150" />
         <source>Fast Forward</source>
         <translation>Fast Forward</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="149" />
+        <location filename="../main_window.py" line="151" />
         <source>Run the simulation without animation</source>
         <translation>Run the simulation without animation</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="152" />
+        <location filename="../main_window.py" line="154" />
         <source>Fast forwarding</source>
         <translation>Fast forwarding</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="155" />
+        <location filename="../main_window.py" line="157" />
         <source>Reset</source>
         <translation>Reset</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="156" />
+        <location filename="../main_window.py" line="158" />
         <source>Reset the simulation to its initial state</source>
         <translation>Reset the simulation to its initial state</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="419" />
-        <location filename="../main_window.py" line="158" />
+        <location filename="../main_window.py" line="425" />
+        <location filename="../main_window.py" line="160" />
         <source>Idle</source>
         <translation>Idle</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="160" />
+        <location filename="../main_window.py" line="162" />
         <source>Search</source>
         <translation>Search</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="161" />
+        <location filename="../main_window.py" line="163" />
         <source>Search everywhere</source>
         <translation>Search everywhere</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="165" />
+        <location filename="../main_window.py" line="167" />
         <source>Search is not implemented yet</source>
         <translation>Search is not implemented yet</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="168" />
+        <location filename="../main_window.py" line="170" />
         <source>Settings</source>
         <translation>Settings</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="169" />
+        <location filename="../main_window.py" line="171" />
         <source>Open the settings</source>
         <translation>Open the settings</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="175" />
+        <location filename="../main_window.py" line="177" />
         <source>About {0}</source>
         <translation>About {0}</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="198" />
+        <location filename="../main_window.py" line="200" />
         <source>&amp;File</source>
         <translation>&amp;File</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="201" />
+        <location filename="../main_window.py" line="203" />
         <source>Open Recent</source>
         <translation>Open Recent</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="209" />
+        <location filename="../main_window.py" line="211" />
         <source>&amp;Edit</source>
         <translation>&amp;Edit</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="213" />
+        <location filename="../main_window.py" line="215" />
         <source>Undo</source>
         <translation>Undo</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="214" />
+        <location filename="../main_window.py" line="216" />
         <source>Redo</source>
         <translation>Redo</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="216" />
+        <location filename="../main_window.py" line="218" />
         <source>Cut</source>
         <translation>Cut</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="217" />
+        <location filename="../main_window.py" line="219" />
         <source>Copy</source>
         <translation>Copy</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="218" />
+        <location filename="../main_window.py" line="220" />
         <source>Paste</source>
         <translation>Paste</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="222" />
+        <location filename="../main_window.py" line="224" />
         <source>&amp;View</source>
         <translation>&amp;View</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="226" />
+        <location filename="../main_window.py" line="228" />
         <source>Tool Windows</source>
         <translation>Tool Windows</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="227" />
+        <location filename="../main_window.py" line="229" />
         <source>Appearance</source>
         <translation>Appearance</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="229" />
+        <location filename="../main_window.py" line="231" />
         <source>Zoom In</source>
         <translation>Zoom In</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="230" />
+        <location filename="../main_window.py" line="232" />
         <source>Zoom Out</source>
         <translation>Zoom Out</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="234" />
+        <location filename="../main_window.py" line="236" />
         <source>&amp;Project</source>
         <translation>&amp;Project</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="241" />
+        <location filename="../main_window.py" line="243" />
         <source>&amp;Window</source>
         <translation>&amp;Window</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="242" />
+        <location filename="../main_window.py" line="244" />
         <source>Next Tab</source>
         <translation>Next Tab</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="242" />
+        <location filename="../main_window.py" line="244" />
         <source>Previous Tab</source>
         <translation>Previous Tab</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="244" />
+        <location filename="../main_window.py" line="246" />
         <source>&amp;Help</source>
         <translation>&amp;Help</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="245" />
+        <location filename="../main_window.py" line="247" />
         <source>Documentation</source>
         <translation>Documentation</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="358" />
-        <location filename="../main_window.py" line="331" />
+        <location filename="../main_window.py" line="360" />
+        <location filename="../main_window.py" line="333" />
         <source>Project</source>
         <translation>Project</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="358" />
-        <location filename="../main_window.py" line="332" />
+        <location filename="../main_window.py" line="360" />
+        <location filename="../main_window.py" line="334" />
         <source>Libraries</source>
         <translation>Libraries</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="360" />
-        <location filename="../main_window.py" line="333" />
+        <location filename="../main_window.py" line="362" />
+        <location filename="../main_window.py" line="335" />
         <source>Python Console</source>
         <translation>Python Console</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="361" />
-        <location filename="../main_window.py" line="334" />
+        <location filename="../main_window.py" line="363" />
+        <location filename="../main_window.py" line="336" />
         <source>Problems</source>
         <translation>Problems</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1158" />
-        <location filename="../main_window.py" line="418" />
+        <location filename="../main_window.py" line="1168" />
+        <location filename="../main_window.py" line="424" />
         <source>No document</source>
         <translation>No document</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="484" />
+        <location filename="../main_window.py" line="490" />
         <source>The project could not be created</source>
         <translation>The project could not be created</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="495" />
+        <location filename="../main_window.py" line="501" />
         <source>Open Project</source>
         <translation>Open Project</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="497" />
+        <location filename="../main_window.py" line="503" />
         <source>MASAFI-SimTwin projects (*{0})</source>
         <translation>MASAFI-SimTwin projects (*{0})</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="540" />
-        <location filename="../main_window.py" line="522" />
+        <location filename="../main_window.py" line="546" />
+        <location filename="../main_window.py" line="528" />
         <source>The project could not be opened</source>
         <translation>The project could not be opened</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="533" />
+        <location filename="../main_window.py" line="539" />
         <source>The project is already open</source>
         <translation>The project is already open</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="534" />
+        <location filename="../main_window.py" line="540" />
         <source>{0} is open in another window, as {1}.</source>
         <translation>{0} is open in another window, as {1}.</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="535" />
+        <location filename="../main_window.py" line="541" />
         <source>another user</source>
         <translation>another user</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="557" />
+        <location filename="../main_window.py" line="563" />
         <source>Opened {0}</source>
         <translation>Opened {0}</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="587" />
+        <location filename="../main_window.py" line="593" />
         <source>No Project</source>
         <translation>No Project</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="593" />
+        <location filename="../main_window.py" line="599" />
         <source>Project closed</source>
         <translation>Project closed</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="615" />
+        <location filename="../main_window.py" line="621" />
         <source>The list of recent projects was cleared</source>
         <translation>The list of recent projects was cleared</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="691" />
+        <location filename="../main_window.py" line="697" />
         <source>The project history could not be written</source>
         <translation>The project history could not be written</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="752" />
+        <location filename="../main_window.py" line="762" />
         <source>No Recent Projects</source>
         <translation>No Recent Projects</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="787" />
+        <location filename="../main_window.py" line="797" />
         <source>The model could not be added</source>
         <translation>The model could not be added</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="816" />
+        <location filename="../main_window.py" line="826" />
         <source>The model could not be changed</source>
         <translation>The model could not be changed</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="833" />
+        <location filename="../main_window.py" line="843" />
         <source>Delete the model?</source>
         <translation>Delete the model?</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="834" />
+        <location filename="../main_window.py" line="844" />
         <source>{0} and everything in it will be removed from the project.</source>
         <translation>{0} and everything in it will be removed from the project.</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="846" />
+        <location filename="../main_window.py" line="856" />
         <source>The model could not be removed</source>
         <translation>The model could not be removed</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="959" />
+        <location filename="../main_window.py" line="969" />
         <source>{0} cannot be opened yet: that kind of model is not built.</source>
         <translation>{0} cannot be opened yet: that kind of model is not built.</translation>
     </message>
@@ -971,17 +1018,17 @@
 </context><context>
     <name>TopBar</name>
     <message>
-        <location filename="../top_bar.py" line="178" />
+        <location filename="../top_bar.py" line="179" />
         <source>No Project</source>
         <translation>No Project</translation>
     </message>
     <message>
-        <location filename="../top_bar.py" line="198" />
+        <location filename="../top_bar.py" line="199" />
         <source>Main Menu</source>
         <translation>Main Menu</translation>
     </message>
     <message>
-        <location filename="../top_bar.py" line="287" />
+        <location filename="../top_bar.py" line="292" />
         <source>No Recent Projects</source>
         <translation>No Recent Projects</translation>
     </message>

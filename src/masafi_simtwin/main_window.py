@@ -42,6 +42,7 @@ from masafi_simtwin import preferences
 from masafi_simtwin.documents import Canvas
 from masafi_simtwin.menus import clear_menu
 from masafi_simtwin.preferences import install_id, needs_restart
+from masafi_simtwin.library_tree import LibraryTree
 from masafi_simtwin.project_tree import NodeKind, ProjectTree
 from masafi_simtwin.document_area import DocumentArea
 from masafi_simtwin.side_bar import SideBar
@@ -377,7 +378,11 @@ class MainWindow(QMainWindow):
             self,
         )
         self._project_tree.model_activated.connect(self.open_model)
-        contents: dict[str, QWidget] = {'project': self._project_tree}
+        self._library_tree = LibraryTree(self)
+        contents: dict[str, QWidget] = {
+            'project': self._project_tree,
+            'libraries': self._library_tree,
+        }
 
         self._tool_panes: dict[str, ToolPane] = {}
         for group in groups:
