@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import pytest
+from PyQt6.QtCore import QMimeData, Qt
 from PyQt6.QtGui import QColor, QPalette
 
 from masafi_simtwin.library_tree import (
     ELEMENT_ICON_SIZE,
+    ELEMENT_MIME,
     LibraryTree,
+    element_from_mime,
+    element_mime_data,
 )
 
 #: What the pane holds, as a shape: a library and the keys of its elements.
@@ -158,3 +162,82 @@ def test_the_icons_are_built_again_when_the_theme_changes(tree, qapp):
         qapp.setPalette(original)
 
     assert after != before
+
+
+# ----------------------------------------------------------------------
+# Taking an element out of the pane
+# ----------------------------------------------------------------------
+
+
+def node(tree, library: str, element: str):
+    """Find one element's row.
+
+    Parameters
+    ----------
+    tree : masafi_simtwin.library_tree.LibraryTree
+        The tree.
+    library : str
+        The key of the library it is in.
+    element : str
+        The key of the element.
+
+    Returns
+    -------
+    PyQt6.QtWidgets.QTreeWidgetItem
+        The row.
+    """
+
+    for item in tree.nodes():
+        if tree.library_of(item) == library and tree.element_of(item) == element:
+            return item
+    raise AssertionError(f'no {element} in {library}')
+
+
+def test_the_pane_offers_its_elements_and_nothing_else(tree):
+    """Not the text of a row: a place dropped in a text field means nothing."""
+
+    assert tree.mimeTypes() == [ELEMENT_MIME]
+    assert tree.dragEnabled()
+
+
+def test_a_dragged_element_carries_its_library_and_its_key(tree):
+    """An element is named by both together, a place in a timed net not being
+    a place in a plain one."""
+
+    data = tree.mimeData([node(tree, 'timed-petri-net', 'place')])
+
+    assert element_from_mime(data) == ('timed-petri-net', 'place')
+
+
+def test_a_library_cannot_be_dragged(tree):
+    """A family of elements is not a thing to put on a sheet."""
+
+    root = tree.topLevelItem(0)
+
+    assert not root.flags() & Qt.ItemFlag.ItemIsDragEnabled
+    assert tree.mimeData([root]) is None
+
+
+def test_an_element_that_is_not_built_cannot_be_dragged(tree):
+    """The shape of what is coming stays visible without pretending it works."""
+
+    item = node(tree, 'process-flow', 'unimplemented')
+
+    assert not item.flags() & Qt.ItemFlag.ItemIsDragEnabled
+
+
+def test_the_payload_reads_back_the_way_it_was_written(tree):
+    """The two halves of the format are declared together so they cannot drift."""
+
+    assert element_from_mime(element_mime_data('a', 'b')) == ('a', 'b')
+    assert element_from_mime(None) is None
+    assert element_from_mime(QMimeData()) is None
+
+
+def test_a_payload_that_names_only_half_an_element_is_no_element(tree):
+    """A key without a library is a name of nothing in particular."""
+
+    half = QMimeData()
+    half.setData(ELEMENT_MIME, b'place')
+
+    assert element_from_mime(half) is None

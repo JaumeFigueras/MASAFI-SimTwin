@@ -57,6 +57,7 @@ from PyQt6.QtWidgets import (
 from masafi_simtwin import preferences
 from masafi_simtwin.documents.guide import Guide
 from masafi_simtwin.documents.ruler import MILLIMETRES, Ruler, RulerCorner, RulerUnit
+from masafi_simtwin.library_tree import element_from_mime
 
 #: Millimetres to an inch, which is what makes a scene in millimetres a scene.
 MM_PER_INCH = 25.4
@@ -180,11 +181,18 @@ class CanvasView(QGraphicsView):
     pointer_left : PyQt6.QtCore.pyqtSignal
         Emitted when the pointer leaves the sheet, which takes the mark off
         again.
+    element_dropped : PyQt6.QtCore.pyqtSignal
+        Emitted with the keys of the library and of the element dragged out of
+        the Libraries pane, and the snapped scene position it was let go over.
+        The view takes the drop and says so; what an element *becomes* is the
+        document's to decide, a canvas being the sheet rather than the drawing
+        on it.
     """
 
     view_changed = pyqtSignal()
     pointer_moved = pyqtSignal(QPointF)
     pointer_left = pyqtSignal()
+    element_dropped = pyqtSignal(str, str, QPointF)
 
     def __init__(self, page: QSizeF | None = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -207,6 +215,7 @@ class CanvasView(QGraphicsView):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.viewport().setMouseTracking(True)
         self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        self.setAcceptDrops(True)
 
         self._panning_from: QPointF | None = None
         self.scale(PIXELS_PER_MM, PIXELS_PER_MM)
@@ -493,6 +502,87 @@ class CanvasView(QGraphicsView):
         clear = menu.addAction(self.tr('Delete All Guides'))
         clear.triggered.connect(self.clear_guides)
         return menu
+
+    # ------------------------------------------------------------------
+    # What is dropped on the sheet
+    # ------------------------------------------------------------------
+
+    def _dragged_element(self, event) -> tuple[str, str] | None:
+        """Read the element a drag carries, and take the drag if it is one.
+
+        The three drag events answer the same question and have to answer it the
+        same way, or a drag is welcomed on the way in and refused on the way
+        down.
+
+        Parameters
+        ----------
+        event : PyQt6.QtGui.QDropEvent
+            The drag or drop event.
+
+        Returns
+        -------
+        tuple of str, optional
+            The keys of the library and of the element, or ``None`` when the
+            drag is not one — in which case the event is left alone for whatever
+            else might want it.
+        """
+
+        element = element_from_mime(event.mimeData())
+        if element is None:
+            event.ignore()
+            return None
+        event.setDropAction(Qt.DropAction.CopyAction)
+        event.accept()
+        return element
+
+    def dragEnterEvent(self, event) -> None:  # noqa: N802  (Qt naming)
+        """Take a drag of an element onto the sheet.
+
+        Parameters
+        ----------
+        event : PyQt6.QtGui.QDragEnterEvent
+            The event.
+        """
+
+        if self._dragged_element(event) is None:
+            super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event) -> None:  # noqa: N802  (Qt naming)
+        """Keep taking it while it is over the sheet.
+
+        Parameters
+        ----------
+        event : PyQt6.QtGui.QDragMoveEvent
+            The event.
+        """
+
+        if self._dragged_element(event) is None:
+            super().dragMoveEvent(event)
+
+    def dropEvent(self, event) -> None:  # noqa: N802  (Qt naming)
+        """Say what was dropped and where, in scene millimetres.
+
+        The position is snapped like every other position on the sheet, so an
+        element dropped by hand lands on the same millimetre grid the guides do
+        and can be moved off it afterwards no more freely than it was put there.
+
+        Parameters
+        ----------
+        event : PyQt6.QtGui.QDropEvent
+            The event.
+        """
+
+        element = self._dragged_element(event)
+        if element is None:
+            super().dropEvent(event)
+            return
+
+        position = self.mapToScene(event.position().toPoint())
+        self.element_dropped.emit(
+            element[0],
+            element[1],
+            QPointF(self.snap(position.x()), self.snap(position.y())),
+        )
 
     # ------------------------------------------------------------------
     # Panning, and where the pointer is

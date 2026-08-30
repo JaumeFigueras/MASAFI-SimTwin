@@ -28,12 +28,12 @@
 </context><context>
     <name>CanvasView</name>
     <message>
-        <location filename="../documents/canvas.py" line="491" />
+        <location filename="../documents/canvas.py" line="500" />
         <source>Delete Guide</source>
         <translation>Delete Guide</translation>
     </message>
     <message>
-        <location filename="../documents/canvas.py" line="493" />
+        <location filename="../documents/canvas.py" line="502" />
         <source>Delete All Guides</source>
         <translation>Delete All Guides</translation>
     </message>
@@ -52,47 +52,47 @@
 </context><context>
     <name>LibraryTree</name>
     <message>
-        <location filename="../library_tree.py" line="129" />
+        <location filename="../library_tree.py" line="195" />
         <source>Place</source>
         <translation>Place</translation>
     </message>
     <message>
-        <location filename="../library_tree.py" line="130" />
+        <location filename="../library_tree.py" line="196" />
         <source>Transition</source>
         <translation>Transition</translation>
     </message>
     <message>
-        <location filename="../library_tree.py" line="132" />
+        <location filename="../library_tree.py" line="198" />
         <source>Timed Transition</source>
         <translation>Timed Transition</translation>
     </message>
     <message>
-        <location filename="../library_tree.py" line="134" />
+        <location filename="../library_tree.py" line="200" />
         <source>Attribute</source>
         <translation>Attribute</translation>
     </message>
     <message>
-        <location filename="../library_tree.py" line="139" />
+        <location filename="../library_tree.py" line="205" />
         <source>P/T Petri Net</source>
         <translation>P/T Petri Net</translation>
     </message>
     <message>
-        <location filename="../library_tree.py" line="145" />
+        <location filename="../library_tree.py" line="211" />
         <source>Timed Petri Net</source>
         <translation>Timed Petri Net</translation>
     </message>
     <message>
-        <location filename="../library_tree.py" line="151" />
+        <location filename="../library_tree.py" line="217" />
         <source>Attributed Timed Petri Net</source>
         <translation>Attributed Timed Petri Net</translation>
     </message>
     <message>
-        <location filename="../library_tree.py" line="157" />
+        <location filename="../library_tree.py" line="223" />
         <source>Process Flow</source>
         <translation>Process Flow</translation>
     </message>
     <message>
-        <location filename="../library_tree.py" line="162" />
+        <location filename="../library_tree.py" line="228" />
         <source>Unimplemented</source>
         <translation>Unimplemented</translation>
     </message>
@@ -692,9 +692,9 @@
 </context><context>
     <name>PetriNetEditor</name>
     <message>
-        <location filename="../documents/petri_net.py" line="51" />
-        <source>The Petri net canvas is not built yet</source>
-        <translation>The Petri net canvas is not built yet</translation>
+        <location filename="../documents/petri_net.py" line="74" />
+        <source>Drag an element out of the Libraries pane</source>
+        <translation>Drag an element out of the Libraries pane</translation>
     </message>
 </context><context>
     <name>ProjectTree</name>

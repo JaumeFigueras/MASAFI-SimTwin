@@ -354,3 +354,144 @@ answer for every model.
   the reader's desk prints on. That keeps the current behaviour available and makes it a choice.
 - Leave it here and put the page in the export dialog instead, when there is one. That is the
   smallest change, and it says the tiling is only ever a hint.
+
+---
+
+## An item can be put down and moved, but not deleted
+
+**Now.** A place or a transition is dragged out of the Libraries pane, dropped on the sheet and moved
+about it. Nothing removes one. `CanvasView.keyPressEvent` deletes the selected *guides* on *Delete* and
+*Backspace*, and `delete_selected_guides()` says so in its name; a selected place is passed over.
+There is no *Edit → Delete* either — the menu bar has no *Delete* at all, which is why the guides
+carry their own context menu.
+
+**Why it was done this way.** Putting a place down and moving it is what was asked for, and deleting
+one is a different decision from placing one: what *Delete* means on a sheet — the selection
+whatever it holds, guides included, or only the drawing — is the shape of the editor's Edit menu, and
+that has not been designed. Guessing it here would put the answer in a key handler rather than in the
+menu where the rest of it will live.
+
+**When it will not be enough.** At once, for anyone who drops an item by accident: the only way back
+is to close the tab, and nothing is persisted yet so that is a way back. It stops being tolerable the
+moment a net is worth keeping.
+
+**Options.**
+
+- Generalise `delete_selected_guides()` into `delete_selection()` over every removable item, and give
+  the sheet a context menu over an item the way it has one over a guide. Smallest, and it settles
+  *Delete acts on the selection* without waiting for the menu bar.
+- Wait for *Edit* to grow *Undo*, *Cut*, *Copy*, *Paste* and *Delete*, and build all of it at once
+  against a command stack, so that deleting an item is undoable from the first day it is possible.
+- Both, in that order: the key handler now, the command stack when the model document exists and
+  there is something for an undo to restore.
+
+---
+
+## Nothing on the sheet is saved
+
+**Now.** A place or a transition dropped on a Petri net document lives on the `QGraphicsScene` and
+nowhere else.
+Closing the tab loses it; there is no `content` in the `.mfst` model document for it to be written
+to, and `PetriNetEditor` does not mark the model as changed, because there is nothing to change.
+Guides are in the same position, and for the same reason.
+
+**Why it was done this way.** The document format is the piece that has not been designed, and a
+drawing written into a format chosen in passing is a format that has to be migrated later. The
+drawing layer can be built and looked at without it, which is what this is.
+
+**When it will not be enough.** The moment a net is worth more than the session it was drawn in.
+
+**Options.**
+
+- Give the model document a `content` holding the net — the places and transitions with their UUIDs
+  and their positions in millimetres, then the arcs — and the guides beside it, since a guide is part
+  of the drawing even though it is not part of the net. Write-through, like the rest of
+  the project (see *Saving is write-through*).
+- Put the drawing in `simtwin_core` from the start, as the document the adapters will read, so that
+  the editor is given a document rather than being one. That is where a document format belongs and
+  it is where `project.py` is going anyway.
+
+---
+
+## The connecting points are shown by hovering, and nothing else uses them
+
+**Now.** Every item of a net carries connecting points — twelve round a place, twenty round a
+transition — and `NetItem.ports_visible` decides whether they are drawn. Nothing turns it on but the pointer:
+`hoverEnterEvent` shows them and `hoverLeaveEvent` hides them again. `NetItem.port_at()` finds the one
+under a scene position and nothing calls it.
+
+**Why it was done this way.** The points are there for arcs, and there are no arcs. Hovering is what
+every diagram editor reveals its anchors with, so it makes the points visible to a person without
+inventing a tool; the property is the whole of the interface an arc tool will need, so the tool
+decides the rest rather than inheriting a guess.
+
+**When it will not be enough.** When arcs are drawn. Then the points want to be up for the whole of a
+drag rather than only over the place under the pointer — the far end of an arc has to be aimed at a
+place the pointer has not reached yet — and one of them wants to be marked as the one an arc would
+snap to.
+
+**Options.**
+
+- The arc tool sets `ports_visible` on every place while a drag is on, and clears it after. One line
+  either side, and the hover behaviour stays as the resting state.
+- A `highlighted_port` on the item beside `ports_visible`, drawn larger, so that where an arc will
+  attach can be seen before the button is let go.
+- Drop the fixed points and attach an arc wherever the line from the other end crosses the item.
+  A circle and a bar can both answer that, and `ports()` is already each shape's own — so this is a
+  change to what one shape returns rather than to the shape of the code.
+
+---
+
+## Two connecting points close together are one target
+
+**Now.** `NetItem.port_at()` walks the points in order and returns the first within `PORT_RADIUS` —
+0.7 mm — of the position it was given. On a place the twelve points are 2.6 mm apart and no two
+circles overlap. On a transition the nine along a long edge are `PORT_SPACING` apart, which is 1.6 mm,
+so neighbours are 0.2 mm clear of one another: nothing overlaps, but the gap is a fifth of a
+millimetre.
+
+**Why it was done this way.** The layout is what was asked for, and `port_at()` was written when the
+only shape was a place, where first-within-a-radius and nearest-centre are the same answer. Nothing
+calls it yet, so nothing has been wrong.
+
+**When it will not be enough.** When arcs are drawn. Aiming at a point on a bar means landing inside
+one 1.4 mm circle rather than the one beside it, which at any zoom showing the whole transition is a
+target a pointer cannot hit reliably — and a miss is silent, since the arc simply attaches to the
+neighbour.
+
+**Options.**
+
+- Give a point a drawn size and a *grabbed* size separately: keep the ring at `PORT_RADIUS` and pick
+  the point whose centre is nearest the position, within some larger reach. Every position near the
+  edge then resolves to exactly one point, the aiming gets easier rather than harder as they crowd,
+  and nothing looks different. `port_at()` is the only place it goes.
+- Snap along the edge instead of to a point, and let the arc attach anywhere on the boundary — which
+  is the same change as dropping the fixed points altogether; see the entry above.
+- Fewer points along an edge, which is a change to what was asked for and so is Jaume's to make.
+
+---
+
+## A transition always lies across the sheet
+
+**Now.** A transition is 16 mm by 2 mm and drawn that way round, always. There is no rotation, no
+*stand it up*, and `TRANSITION_LENGTH` and `TRANSITION_HEIGHT` are module constants rather than
+anything the item carries.
+
+**Why it was done this way.** It is the size and the orientation that were asked for, and rotation is
+not one question but three — what turns (an item, or a selection), by how much (ninety degrees, or
+freely), and what happens to the connecting points and to the snapping when it does. Answering those
+by adding a `rotation` to the item would settle them in passing.
+
+**When it will not be enough.** As soon as a net is laid out vertically, which is how a great many of
+them are drawn: a horizontal bar between two places stacked above one another is the wrong way round.
+
+**Options.**
+
+- A `vertical` flag on the transition, swapping the two half-sizes, with *Rotate* on its context menu.
+  Smallest, and it covers the case that actually comes up; the connecting points follow of their own
+  accord, `port_offset()` being computed from the half-sizes.
+- Qt's own `setRotation()` on the item, which rotates the drawing and the connecting points together
+  and costs nothing to implement — but it rotates the snapping with it, so a turned item no longer
+  lands on the millimetre grid the way an unturned one does.
+- A free rotation with a handle, when there is a selection model and a properties pane to show the
+  angle in. That is an editor feature rather than an item feature.

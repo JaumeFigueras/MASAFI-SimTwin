@@ -2,9 +2,13 @@
 
 A library is a family of elements that go together — the plain place-transition
 net, the timed one, the attributed timed one — and the pane is the tree of them.
-It is the palette a model is drawn from: dragging an element onto a canvas is
-what it is for, and that is the next piece of work.  What is here is the tree
-itself, its shape and its icons.
+It is the palette a model is drawn from: an element is **dragged out of the
+pane and dropped on a canvas**, which is what the tree is for.  A drag carries
+:data:`ELEMENT_MIME` and nothing else, so a canvas can tell an element from any
+other thing that might be dropped on it, and it carries the library and the
+element together, which is what names one.  What becomes of it where it lands is
+the document's to say — the tree knows nothing about documents and owns no
+actions.
 
 The elements repeat across the libraries on purpose.  A *Place* in a P/T net and
 a *Place* in a timed net are the same idea and are shown the same way, and which
@@ -23,8 +27,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QTreeWidget, QTreeWidgetItem, QWidget
+from PyQt6.QtCore import QMimeData, Qt
+from PyQt6.QtWidgets import QAbstractItemView, QTreeWidget, QTreeWidgetItem, QWidget
 
 from masafi_simtwin import icons
 
@@ -91,6 +95,65 @@ ICON_ROLE = Qt.ItemDataRole.UserRole + 2
 #: Side, in pixels, of the icons in the tree.
 ELEMENT_ICON_SIZE = 20
 
+#: What a dragged element is carried as.  It is a type of this application's
+#: own, so that a canvas can tell an element of a library from every other thing
+#: that might be dropped on it — a file, a piece of text — and refuse those
+#: without having to look inside them.
+ELEMENT_MIME = 'application/x-masafi-element'
+
+#: What separates the two halves of the payload.  An element is named by its
+#: library and its key together, and neither of them may contain this.
+MIME_SEPARATOR = '/'
+
+
+def element_mime_data(library: str, element: str) -> QMimeData:
+    """Wrap the name of an element for a drag.
+
+    Parameters
+    ----------
+    library : str
+        The key of the library it was taken from.
+    element : str
+        The key of the element.
+
+    Returns
+    -------
+    PyQt6.QtCore.QMimeData
+        The payload, under :data:`ELEMENT_MIME`.
+    """
+
+    data = QMimeData()
+    payload = f'{library}{MIME_SEPARATOR}{element}'
+    data.setData(ELEMENT_MIME, payload.encode('utf-8'))
+    return data
+
+
+def element_from_mime(data: QMimeData | None) -> tuple[str, str] | None:
+    """Read the element out of a drag, if that is what it carries.
+
+    This is the other half of :func:`element_mime_data`, and it is here rather
+    than where a drop is received so that the two cannot drift apart.
+
+    Parameters
+    ----------
+    data : PyQt6.QtCore.QMimeData, optional
+        What is being dragged.
+
+    Returns
+    -------
+    tuple of str, optional
+        The keys of the library and of the element, or ``None`` when the drag is
+        not an element of a library or does not name both halves.
+    """
+
+    if data is None or not data.hasFormat(ELEMENT_MIME):
+        return None
+    payload = bytes(data.data(ELEMENT_MIME)).decode('utf-8', errors='replace')
+    library, separator, element = payload.partition(MIME_SEPARATOR)
+    if not separator or not library or not element:
+        return None
+    return library, element
+
 
 class LibraryTree(QTreeWidget):
     """The tree of libraries and the elements in them.
@@ -106,6 +169,9 @@ class LibraryTree(QTreeWidget):
         self.setObjectName('LibraryTree')
         self.setHeaderHidden(True)
         self.setColumnCount(1)
+        self.setDragEnabled(True)
+        self.setDragDropMode(QAbstractItemView.DragDropMode.DragOnly)
+        self.setDefaultDropAction(Qt.DropAction.CopyAction)
 
         self._fill(self.libraries())
 
@@ -181,6 +247,7 @@ class LibraryTree(QTreeWidget):
             parent = QTreeWidgetItem(self, [library.name])
             parent.setData(0, LIBRARY_ROLE, library.key)
             parent.setData(0, ICON_ROLE, library.icon)
+            parent.setFlags(parent.flags() & ~Qt.ItemFlag.ItemIsDragEnabled)
             for element in library.elements:
                 item = QTreeWidgetItem(parent, [element.name])
                 item.setData(0, LIBRARY_ROLE, library.key)
@@ -188,6 +255,7 @@ class LibraryTree(QTreeWidget):
                 item.setData(0, ICON_ROLE, element.icon)
                 if not element.enabled:
                     item.setDisabled(True)
+                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsDragEnabled)
             parent.setExpanded(True)
         self._apply_icons()
 
@@ -243,6 +311,49 @@ class LibraryTree(QTreeWidget):
         """
 
         return None if item is None else item.data(0, ELEMENT_ROLE)
+
+    # ------------------------------------------------------------------
+    # Taking an element out of the pane
+    # ------------------------------------------------------------------
+
+    def mimeTypes(self) -> list[str]:  # noqa: N802  (Qt naming)
+        """Say what a drag out of the tree carries.
+
+        Returns
+        -------
+        list of str
+            :data:`ELEMENT_MIME` alone.  The tree offers its elements and
+            nothing else — not the text of a row, which would let one be dropped
+            into any text field on the desktop and mean nothing there.
+        """
+
+        return [ELEMENT_MIME]
+
+    def mimeData(self, items) -> QMimeData | None:  # noqa: N802  (Qt naming)
+        """Wrap the element being dragged.
+
+        An element is named by its library and its key together, so both go into
+        the payload; a library node names no element and cannot be dragged at
+        all, which is what its cleared ``ItemIsDragEnabled`` says.
+
+        Parameters
+        ----------
+        items : list of PyQt6.QtWidgets.QTreeWidgetItem
+            What is being dragged, which here is one row.
+
+        Returns
+        -------
+        PyQt6.QtCore.QMimeData, optional
+            The payload, or ``None`` when what is being dragged is not an
+            element.
+        """
+
+        item = items[0] if items else None
+        library = self.library_of(item)
+        element = self.element_of(item)
+        if not library or not element:
+            return None
+        return element_mime_data(library, element)
 
     # ------------------------------------------------------------------
     # Following the theme

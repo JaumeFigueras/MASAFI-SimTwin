@@ -20,6 +20,8 @@ from PyQt6.QtWidgets import QWidget
 
 from masafi_simtwin.documents.canvas import Canvas
 from masafi_simtwin.documents.petri_net import PetriNetEditor
+from masafi_simtwin.documents.place import Place
+from masafi_simtwin.documents.transition import Transition
 from masafi_simtwin.project import ModelKind
 
 #: The editor each kind of model opens as.  A kind that is absent cannot be
@@ -29,7 +31,7 @@ EDITORS: dict[ModelKind, type[QWidget]] = {
     ModelKind.PETRI_NET: PetriNetEditor,
 }
 
-__all__ = ['EDITORS', 'Canvas', 'PetriNetEditor', 'editor_for']
+__all__ = ['EDITORS', 'Canvas', 'PetriNetEditor', 'Place', 'Transition', 'editor_for']
 
 
 def editor_for(model: dict, parent: QWidget | None = None) -> QWidget | None:

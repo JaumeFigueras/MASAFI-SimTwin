@@ -28,12 +28,12 @@
 </context><context>
     <name>CanvasView</name>
     <message>
-        <location filename="../documents/canvas.py" line="491" />
+        <location filename="../documents/canvas.py" line="500" />
         <source>Delete Guide</source>
         <translation>Suprimeix la guia</translation>
     </message>
     <message>
-        <location filename="../documents/canvas.py" line="493" />
+        <location filename="../documents/canvas.py" line="502" />
         <source>Delete All Guides</source>
         <translation>Suprimeix totes les guies</translation>
     </message>
@@ -52,47 +52,47 @@
 </context><context>
     <name>LibraryTree</name>
     <message>
-        <location filename="../library_tree.py" line="129" />
+        <location filename="../library_tree.py" line="195" />
         <source>Place</source>
         <translation>Plaça</translation>
     </message>
     <message>
-        <location filename="../library_tree.py" line="130" />
+        <location filename="../library_tree.py" line="196" />
         <source>Transition</source>
         <translation>Transició</translation>
     </message>
     <message>
-        <location filename="../library_tree.py" line="132" />
+        <location filename="../library_tree.py" line="198" />
         <source>Timed Transition</source>
         <translation>Transició temporitzada</translation>
     </message>
     <message>
-        <location filename="../library_tree.py" line="134" />
+        <location filename="../library_tree.py" line="200" />
         <source>Attribute</source>
         <translation>Atribut</translation>
     </message>
     <message>
-        <location filename="../library_tree.py" line="139" />
+        <location filename="../library_tree.py" line="205" />
         <source>P/T Petri Net</source>
         <translation>Xarxa de Petri P/T</translation>
     </message>
     <message>
-        <location filename="../library_tree.py" line="145" />
+        <location filename="../library_tree.py" line="211" />
         <source>Timed Petri Net</source>
         <translation>Xarxa de Petri temporitzada</translation>
     </message>
     <message>
-        <location filename="../library_tree.py" line="151" />
+        <location filename="../library_tree.py" line="217" />
         <source>Attributed Timed Petri Net</source>
         <translation>Xarxa de Petri temporitzada amb atributs</translation>
     </message>
     <message>
-        <location filename="../library_tree.py" line="157" />
+        <location filename="../library_tree.py" line="223" />
         <source>Process Flow</source>
         <translation>Flux de procés</translation>
     </message>
     <message>
-        <location filename="../library_tree.py" line="162" />
+        <location filename="../library_tree.py" line="228" />
         <source>Unimplemented</source>
         <translation>Sense implementar</translation>
     </message>
@@ -692,9 +692,9 @@
 </context><context>
     <name>PetriNetEditor</name>
     <message>
-        <location filename="../documents/petri_net.py" line="51" />
-        <source>The Petri net canvas is not built yet</source>
-        <translation>El llenç de la xarxa de Petri encara no està construït</translation>
+        <location filename="../documents/petri_net.py" line="74" />
+        <source>Drag an element out of the Libraries pane</source>
+        <translation>Arrossegueu un element des del plafó de Biblioteques</translation>
     </message>
 </context><context>
     <name>ProjectTree</name>
