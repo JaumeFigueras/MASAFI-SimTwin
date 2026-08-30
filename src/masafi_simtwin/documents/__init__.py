@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from PyQt6.QtWidgets import QWidget
 
+from masafi_simtwin.documents.arc import Arc
 from masafi_simtwin.documents.canvas import Canvas
 from masafi_simtwin.documents.petri_net import PetriNetEditor
 from masafi_simtwin.documents.place import Place
@@ -31,7 +32,15 @@ EDITORS: dict[ModelKind, type[QWidget]] = {
     ModelKind.PETRI_NET: PetriNetEditor,
 }
 
-__all__ = ['EDITORS', 'Canvas', 'PetriNetEditor', 'Place', 'Transition', 'editor_for']
+__all__ = [
+    'EDITORS',
+    'Arc',
+    'Canvas',
+    'PetriNetEditor',
+    'Place',
+    'Transition',
+    'editor_for',
+]
 
 
 def editor_for(model: dict, parent: QWidget | None = None) -> QWidget | None:

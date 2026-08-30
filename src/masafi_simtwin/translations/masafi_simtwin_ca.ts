@@ -26,14 +26,32 @@
         <translation>Publicat sota la Llicència Pública General de GNU, versió 3 o posterior.</translation>
     </message>
 </context><context>
+    <name>ArcDialog</name>
+    <message>
+        <location filename="../dialogs/forms/arc.ui" line="0" />
+        <source>Arc</source>
+        <translation>Arc</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/arc.ui" line="0" />
+        <source>Weight</source>
+        <translation>Pes</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/arc.ui" line="0" />
+        <source>How many tokens the arc carries. A weight of one is not drawn.</source>
+        <extracomment>under the weight field of the Arc dialog</extracomment>
+        <translation>Quants testimonis transporta l'arc. Un pes d'un no es dibuixa.</translation>
+    </message>
+</context><context>
     <name>CanvasView</name>
     <message>
-        <location filename="../documents/canvas.py" line="500" />
+        <location filename="../documents/canvas.py" line="561" />
         <source>Delete Guide</source>
         <translation>Suprimeix la guia</translation>
     </message>
     <message>
-        <location filename="../documents/canvas.py" line="502" />
+        <location filename="../documents/canvas.py" line="563" />
         <source>Delete All Guides</source>
         <translation>Suprimeix totes les guies</translation>
     </message>
@@ -692,7 +710,7 @@
 </context><context>
     <name>PetriNetEditor</name>
     <message>
-        <location filename="../documents/petri_net.py" line="74" />
+        <location filename="../documents/petri_net.py" line="79" />
         <source>Drag an element out of the Libraries pane</source>
         <translation>Arrossegueu un element des del plafó de Biblioteques</translation>
     </message>

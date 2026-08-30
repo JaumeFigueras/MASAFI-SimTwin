@@ -97,6 +97,12 @@ class Transition(NetItem):
     and for everything a transition shares with the rest of a net.
     """
 
+    #: What a transition counts as when an arc is drawn to it.
+    GROUP = 'transition'
+
+    #: What it may be joined to.  A Petri net is bipartite.
+    CONNECTS_TO = ('place',)
+
     @staticmethod
     def port_offsets_along_an_edge() -> list[float]:
         """Give how far along a long edge each of its points is, from the middle.

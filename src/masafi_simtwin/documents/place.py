@@ -69,6 +69,12 @@ class Place(NetItem):
     and for everything a place shares with the rest of a net.
     """
 
+    #: What a place counts as when an arc is drawn to it.
+    GROUP = 'place'
+
+    #: What it may be joined to.  A Petri net is bipartite.
+    CONNECTS_TO = ('transition',)
+
     @staticmethod
     def port_angles() -> list[float]:
         """Give the angle of every connecting point, in degrees.

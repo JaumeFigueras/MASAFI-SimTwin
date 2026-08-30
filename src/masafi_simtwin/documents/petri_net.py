@@ -26,9 +26,12 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PyQt6.QtCore import QPointF
-from PyQt6.QtWidgets import QGraphicsItem, QWidget
+from PyQt6.QtWidgets import QDialog, QGraphicsItem, QWidget
 
+from masafi_simtwin.dialogs.arc import ArcDialog
+from masafi_simtwin.documents.arc import Arc
 from masafi_simtwin.documents.canvas import Canvas
+from masafi_simtwin.documents.net_item import NetItem
 from masafi_simtwin.documents.place import Place
 from masafi_simtwin.documents.ruler import MILLIMETRES, RulerUnit
 from masafi_simtwin.documents.transition import Transition
@@ -75,6 +78,8 @@ class PetriNetEditor(Canvas):
         self.model = dict(model or {})
         self.view.empty_note = self.tr('Drag an element out of the Libraries pane')
         self.view.element_dropped.connect(self._on_element_dropped)
+        self.view.connection_drawn.connect(self._on_connection_drawn)
+        self.view.item_activated.connect(self._on_item_activated)
 
     # ------------------------------------------------------------------
     # What is on the sheet
@@ -122,6 +127,49 @@ class PetriNetEditor(Canvas):
 
         return self.items_of(Transition)
 
+    @property
+    def arcs(self) -> list[Arc]:
+        """list: The arcs on the sheet, in the order the scene holds them."""
+
+        return self.items_of(Arc)
+
+    def add_arc(
+        self,
+        source: NetItem,
+        target: NetItem,
+        source_port: int | None = None,
+        target_port: int | None = None,
+    ) -> Arc | None:
+        """Join two items of the net with an arc.
+
+        Parameters
+        ----------
+        source : masafi_simtwin.documents.net_item.NetItem
+            The item the arc leaves.
+        target : masafi_simtwin.documents.net_item.NetItem
+            The item it enters, which is where the arrowhead goes.
+        source_port : int, optional
+            Which connecting point of the source it leaves by — the one that was
+            pressed, when a person drew it.  Left out, the one facing the target
+            and free of arcs is taken.
+        target_port : int, optional
+            Which of the target's it enters by.  Left out, as above.
+
+        Returns
+        -------
+        masafi_simtwin.documents.arc.Arc, optional
+            The arc, already on the scene, or ``None`` when the two may not be
+            joined — a Petri net is bipartite, so a place joins a transition and
+            nothing else, itself included.
+        """
+
+        if not source.may_connect_to(target):
+            return None
+
+        arc = Arc(source, target, source_port, target_port)
+        self.scene().addItem(arc)
+        return arc
+
     def items_of(self, kind: type) -> list:
         """Give the items of one kind that are on the sheet.
 
@@ -156,6 +204,69 @@ class PetriNetEditor(Canvas):
         """
 
         self.add_element(library, element, position)
+
+    def _on_connection_drawn(
+        self, source, target, source_port: int, target_port: int
+    ) -> None:
+        """Join what has been drawn between, if the two may be joined.
+
+        Connected as a bound method rather than as a lambda, for the reason
+        :meth:`_on_element_dropped` is.
+
+        Parameters
+        ----------
+        source : masafi_simtwin.documents.net_item.NetItem
+            The item the arc was drawn from.
+        target : masafi_simtwin.documents.net_item.NetItem
+            The item it was drawn to.
+        source_port : int
+            Which connecting point of the source the press landed on, which is
+            the one the arc leaves by from now on.
+        target_port : int
+            Which of the target's it was let go nearest, which is the one it
+            arrives at from now on.
+        """
+
+        self.add_arc(source, target, source_port, target_port)
+
+    def edit_arc(self, arc: Arc) -> bool:
+        """Ask what an arc carries, and set it.
+
+        The weight is the only property a P/T arc has, and until the right-hand
+        properties pane exists a double click is where it is asked for.
+
+        Parameters
+        ----------
+        arc : masafi_simtwin.documents.arc.Arc
+            The arc to ask about.
+
+        Returns
+        -------
+        bool
+            Whether the weight was changed.
+        """
+
+        dialog = ArcDialog(arc.weight, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return False
+        changed = dialog.weight != arc.weight
+        arc.weight = dialog.weight
+        return changed
+
+    def _on_item_activated(self, item) -> None:
+        """Open what was double-clicked, when it is something that opens.
+
+        Connected as a bound method rather than as a lambda, for the reason
+        :meth:`_on_element_dropped` is.
+
+        Parameters
+        ----------
+        item : PyQt6.QtWidgets.QGraphicsItem, optional
+            What was under the pointer, or ``None`` for the bare sheet.
+        """
+
+        if isinstance(item, Arc):
+            self.edit_arc(item)
 
     @property
     def model_id(self) -> str:

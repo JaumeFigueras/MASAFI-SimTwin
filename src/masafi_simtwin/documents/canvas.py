@@ -47,6 +47,7 @@ import math
 from PyQt6.QtCore import QLineF, QPointF, QRectF, QSizeF, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QPainter, QPalette, QPen
 from PyQt6.QtWidgets import (
+    QApplication,
     QGraphicsScene,
     QGraphicsView,
     QGridLayout,
@@ -55,7 +56,9 @@ from PyQt6.QtWidgets import (
 )
 
 from masafi_simtwin import preferences
+from masafi_simtwin.documents.arc import Arc
 from masafi_simtwin.documents.guide import Guide
+from masafi_simtwin.documents.net_item import PORT_RADIUS, NetItem
 from masafi_simtwin.documents.ruler import MILLIMETRES, Ruler, RulerCorner, RulerUnit
 from masafi_simtwin.library_tree import element_from_mime
 
@@ -187,12 +190,22 @@ class CanvasView(QGraphicsView):
         The view takes the drop and says so; what an element *becomes* is the
         document's to decide, a canvas being the sheet rather than the drawing
         on it.
+    connection_drawn : PyQt6.QtCore.pyqtSignal
+        Emitted with the two :class:`~masafi_simtwin.documents.net_item.NetItem`
+        an arc has been drawn between — the one it was started from first — and
+        the indices of the connecting point it leaves by and the one it enters
+        by, which are where it is attached for good.  The view runs the gesture and checks that the
+        two may be joined at all; what the connection *is* — an arc of a Petri
+        net, and of which kind — is the document's, for the same reason a drop
+        is.
     """
 
     view_changed = pyqtSignal()
     pointer_moved = pyqtSignal(QPointF)
     pointer_left = pyqtSignal()
     element_dropped = pyqtSignal(str, str, QPointF)
+    connection_drawn = pyqtSignal(object, object, int, int)
+    item_activated = pyqtSignal(object)
 
     def __init__(self, page: QSizeF | None = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -218,6 +231,11 @@ class CanvasView(QGraphicsView):
         self.setAcceptDrops(True)
 
         self._panning_from: QPointF | None = None
+        self._connecting_from: NetItem | None = None
+        self._connecting_over: NetItem | None = None
+        self._connecting_port = 0
+        self._connecting_at = QPointF()
+        self._connecting_pressed_at: QPointF | None = None
         self.scale(PIXELS_PER_MM, PIXELS_PER_MM)
         self.scroll_to_origin()
 
@@ -393,14 +411,57 @@ class CanvasView(QGraphicsView):
         for guide in self.guides:
             self.remove_guide(guide)
 
+    def remove(self, item) -> None:
+        """Take one thing off the sheet, and whatever cannot outlive it.
+
+        An arc is a relation between two items, so an item taken off the sheet
+        takes its arcs with it: a line drawn to somewhere nothing is would be
+        worse than no line.  An arc taken off on its own tells both of its ends,
+        so that neither goes on reporting its movements to something that is no
+        longer there.
+
+        Parameters
+        ----------
+        item : PyQt6.QtWidgets.QGraphicsItem
+            What to remove.
+        """
+
+        scene = self.scene()
+        if isinstance(item, NetItem):
+            for arc in item.arcs:
+                self.remove(arc)
+        if isinstance(item, Arc):
+            item.detach()
+        if item.scene() is scene:
+            scene.removeItem(item)
+
+    def delete_selection(self) -> int:
+        """Remove everything that is selected, whatever it is.
+
+        Guides, items and arcs alike: *Delete* acts on the selection, which is
+        the only rule that can be explained in one sentence.  An arc drawn by
+        mistake has to be removable, and that is what made this a question worth
+        answering now rather than when the *Edit* menu is built.
+
+        Returns
+        -------
+        int
+            How many things there were, so that a caller can say whether
+            anything happened.
+        """
+
+        selected = self.scene().selectedItems()
+        for item in selected:
+            self.remove(item)
+        return len(selected)
+
     def delete_selected_guides(self) -> int:
         """Remove the guides that are selected.
 
         Returns
         -------
         int
-            How many there were, so that a caller can say whether anything
-            happened.
+            How many there were.
         """
 
         selected = [guide for guide in self.guides if guide.isSelected()]
@@ -422,7 +483,8 @@ class CanvasView(QGraphicsView):
         return any(not isinstance(item, Guide) for item in self.scene().items())
 
     def keyPressEvent(self, event) -> None:  # noqa: N802  (Qt naming)
-        """Delete what is selected on *Delete* or *Backspace*.
+        """Delete what is selected on *Delete* or *Backspace*, and abandon an
+        arc being drawn on *Escape*.
 
         Parameters
         ----------
@@ -431,9 +493,13 @@ class CanvasView(QGraphicsView):
         """
 
         if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
-            if self.delete_selected_guides():
+            if self.delete_selection():
                 event.accept()
                 return
+        if event.key() == Qt.Key.Key_Escape and self.connecting:
+            self.abandon_connection()
+            event.accept()
+            return
         super().keyPressEvent(event)
 
     def contextMenuEvent(self, event) -> None:  # noqa: N802  (Qt naming)
@@ -585,14 +651,309 @@ class CanvasView(QGraphicsView):
         )
 
     # ------------------------------------------------------------------
+    # Drawing an arc between two items
+    # ------------------------------------------------------------------
+
+    @property
+    def connecting(self) -> NetItem | None:
+        """NetItem, optional: The item an arc is being drawn from, if one is."""
+
+        return self._connecting_from
+
+    @property
+    def connection_target(self) -> NetItem | None:
+        """NetItem, optional: The item the arc being drawn is aimed at.
+
+        Only an item it may actually be joined to.  Aiming at one it may not be
+        joined to is aiming at nothing, which is what makes the refusal visible
+        before the button is let go rather than only afterwards.
+        """
+
+        return self._connecting_over
+
+    def landing_port(self, target: NetItem, at: QPointF) -> int:
+        """Give which connecting point of an item an arc let go there binds to.
+
+        **The one nearest the pointer**, so that the point an arc arrives at is
+        chosen the way the point it leaves by is: by aiming at it.  Nearest
+        rather than exactly-on, because the pointer is somewhere over the item
+        rather than on a point of it, and because on a transition the points are
+        a millimetre and a half apart and asking for more precision than that
+        would be asking for a fight.
+
+        A point that already has an arc on it is **not** passed over.  Choosing
+        one is choosing it, exactly as a press on a busy point is still a press
+        on that point; the preview shows where the arc would land, so a person
+        who lands two arcs on one point meant to.
+
+        Parameters
+        ----------
+        target : masafi_simtwin.documents.net_item.NetItem
+            What the arc is arriving at.
+        at : PyQt6.QtCore.QPointF
+            Where the pointer is, in scene millimetres.
+
+        Returns
+        -------
+        int
+            The index of the point.
+        """
+
+        return target.port_index_towards(at)
+
+    def connection_endpoint(self) -> QPointF:
+        """Give where the arc being drawn currently ends.
+
+        The **exact connecting point it would bind to** while it is aimed at an
+        item, and the pointer itself while it is not — so what is drawn is what
+        would be made, and the point it will land on can be seen, and changed by
+        moving the pointer about the item, before the button is let go.
+
+        Returns
+        -------
+        PyQt6.QtCore.QPointF
+            The end of the line, in scene millimetres.
+        """
+
+        target = self._connecting_over
+        if self._connecting_from is None or target is None:
+            return QPointF(self._connecting_at)
+        return target.scene_port(self.landing_port(target, self._connecting_at))
+
+    def aim_at(self, position) -> NetItem | None:
+        """Follow the arc being drawn onto whatever it is over.
+
+        The item it is over shows its connecting points, the way the item it
+        came from does, so that both ends of the binding can be seen while it is
+        being made.  They go again as soon as the arc is taken off it.
+
+        Only an item the arc **may** be joined to lights up: a Petri net is
+        bipartite, so a place aimed at a place shows nothing, and that is the
+        refusal made visible while there is still time to aim somewhere else.
+
+        Parameters
+        ----------
+        position : PyQt6.QtCore.QPoint
+            Where the pointer is, in the viewport's coordinates.
+
+        Returns
+        -------
+        masafi_simtwin.documents.net_item.NetItem, optional
+            What it is now aimed at, if anything.
+        """
+
+        source = self._connecting_from
+        found = self.item_at(position) if source is not None else None
+        if found is not None and not source.may_connect_to(found):
+            found = None
+
+        if found is self._connecting_over:
+            return found
+
+        if self._connecting_over is not None:
+            self._connecting_over.ports_visible = False
+        self._connecting_over = found
+        if found is not None:
+            found.ports_visible = True
+        return found
+
+    def item_at(self, position) -> NetItem | None:
+        """Find the item of a net under a point of the viewport.
+
+        **A connecting point counts as part of the item it belongs to**, even
+        though half of every one of them is drawn outside its shape: the points
+        stand *on* the boundary, so a ring is half in and half out, and an arc
+        aimed at the visible half that happens to be outside would find nothing
+        there.  That is a miss at the very place a person is told to aim, and it
+        is silent — no arc is drawn and nothing says why.
+
+        The shape itself is not widened to include the rings, because what the
+        item is *taken hold of* by is its drawn shape: a transition is grabbed by
+        its bar.  Reaching for the points is what drawing an arc does, and only
+        that.
+
+        Parameters
+        ----------
+        position : PyQt6.QtCore.QPoint
+            Where to look, in the viewport's coordinates.
+
+        Returns
+        -------
+        masafi_simtwin.documents.net_item.NetItem, optional
+            The item, or ``None`` when there is none there.
+        """
+
+        for item in self.items(position):
+            if isinstance(item, NetItem):
+                return item
+
+        where = self.mapToScene(position)
+        near = QRectF(
+            where.x() - PORT_RADIUS,
+            where.y() - PORT_RADIUS,
+            PORT_RADIUS * 2.0,
+            PORT_RADIUS * 2.0,
+        )
+        for item in self.scene().items(near):
+            if isinstance(item, NetItem) and item.port_index_at(where) is not None:
+                return item
+        return None
+
+    def port_pressed(self, position) -> tuple[NetItem, int] | None:
+        """Find the item and the connecting point under a point of the viewport.
+
+        A press on a connecting point starts an arc; a press anywhere else on
+        the same item moves it.  That is the whole of what tells the two apart,
+        and it is why the points are worth having.  *Which* point was pressed
+        matters as well, because it is the one the arc will leave by for good.
+
+        Parameters
+        ----------
+        position : PyQt6.QtCore.QPoint
+            Where the press landed, in the viewport's coordinates.
+
+        Returns
+        -------
+        tuple, optional
+            The item and the index of its connecting point, or ``None`` when the
+            press was not on one.
+        """
+
+        item = self.item_at(position)
+        if item is None:
+            return None
+        index = item.port_index_at(self.mapToScene(position))
+        return None if index is None else (item, index)
+
+    def begin_connection(
+        self, item: NetItem, port: int, at: QPointF, pressed_at=None
+    ) -> None:
+        """Start drawing an arc out of one connecting point of an item.
+
+        Parameters
+        ----------
+        item : masafi_simtwin.documents.net_item.NetItem
+            What the arc is being drawn from.
+        port : int
+            Which of its connecting points was pressed.  The arc will leave by
+            that one and no other, so the line being dragged is drawn from it
+            rather than from wherever happens to face the pointer.
+        at : PyQt6.QtCore.QPointF
+            Where the pointer is, in the scene.
+        pressed_at : PyQt6.QtCore.QPointF, optional
+            Where the press landed, in the viewport.  It is kept so that letting
+            go can tell a drag from a click: a drag that lands on nothing is a
+            drag that missed and is given up, while a click leaves the arc being
+            drawn with the button up, which is what makes the second half of a
+            click-click possible.
+        """
+
+        self._connecting_from = item
+        self._connecting_port = int(port)
+        self._connecting_at = QPointF(at)
+        self._connecting_pressed_at = None if pressed_at is None else QPointF(pressed_at)
+        item.ports_visible = True
+        self.viewport().update()
+
+    def abandon_connection(self) -> None:
+        """Give up the arc being drawn, leaving nothing behind.
+
+        Both ends put their connecting points away — the one the arc came from
+        and the one it was aimed at — because neither is being pointed at any
+        more, whether the arc landed or was given up.  The pointer's next move
+        goes to the scene again, so an item it is still over lights up by
+        hovering the way it would have anyway.
+        """
+
+        for item in (self._connecting_from, self._connecting_over):
+            if item is not None:
+                item.ports_visible = False
+        self._connecting_from = None
+        self._connecting_over = None
+        self._connecting_pressed_at = None
+        self.viewport().update()
+
+    def finish_connection(self, position) -> bool:
+        """Land the arc being drawn, if it lands on something it may join.
+
+        Parameters
+        ----------
+        position : PyQt6.QtCore.QPoint
+            Where the pointer is, in the viewport's coordinates.
+
+        Returns
+        -------
+        bool
+            Whether an arc was drawn.  It was not if the pointer is over nothing,
+            over the item the arc came from, or over one this one may not be
+            joined to — a Petri net is bipartite, and a refusal is silent
+            because the arc simply is not there.
+
+        Notes
+        -----
+        The point it arrives at is :meth:`landing_port` of wherever the pointer
+        is, which is the point the preview has been ending on, so an arc lands
+        where it was seen to be going.
+        """
+
+        source = self._connecting_from
+        target = self.item_at(position)
+        if source is None or target is None or not source.may_connect_to(target):
+            return False
+
+        leaving = self._connecting_port
+        arriving = self.landing_port(target, self.mapToScene(position))
+        self.abandon_connection()
+        self.connection_drawn.emit(source, target, leaving, arriving)
+        return True
+
+    def _draw_connection(self, painter) -> None:
+        """Draw the arc being dragged, from its point to the pointer.
+
+        It runs from the point that was pressed to the point it would bind to,
+        so the preview is the arc that would be made rather than something near
+        it.  Where it is over nothing it follows the pointer instead, there
+        being no point to end on yet.
+
+        It is drawn in the view's foreground rather than as an item, because it
+        is not one: nothing is on the sheet until the arc lands, and a preview
+        that had to be added and removed is a preview that can be left behind.
+
+        Parameters
+        ----------
+        painter : PyQt6.QtGui.QPainter
+            The painter of the view.
+        """
+
+        source = self._connecting_from
+        if source is None:
+            return
+
+        colour = self.palette().color(QPalette.ColorRole.Link)
+        pen = QPen(colour, 0)
+        pen.setStyle(Qt.PenStyle.DashLine)
+        painter.setPen(pen)
+        painter.drawLine(
+            QLineF(source.scene_port(self._connecting_port), self.connection_endpoint())
+        )
+
+    # ------------------------------------------------------------------
     # Panning, and where the pointer is
     # ------------------------------------------------------------------
 
     def mousePressEvent(self, event) -> None:  # noqa: N802  (Qt naming)
-        """Start panning on the middle button, and select with the rest.
+        """Start panning on the middle button, draw an arc from a connecting
+        point, and select with the rest.
 
         The middle button is the one free of meaning once the left one draws and
         selects, and panning with it is what every canvas of this kind does.
+
+        A press on a connecting point starts an arc; a press anywhere else on
+        the same item is left to the scene, which moves it.  A press while an
+        arc is already being drawn is the second click of a **click-click**: an
+        arc can be drawn by holding the button down and dragging, or by clicking
+        once at each end — which is the one that works when the two items are
+        far enough apart that the sheet has to be scrolled between them.
 
         Parameters
         ----------
@@ -605,6 +966,21 @@ class CanvasView(QGraphicsView):
             self.viewport().setCursor(Qt.CursorShape.ClosedHandCursor)
             event.accept()
             return
+
+        if event.button() == Qt.MouseButton.LeftButton:
+            spot = event.position().toPoint()
+            if self._connecting_from is not None:
+                if not self.finish_connection(spot):
+                    self.abandon_connection()
+                event.accept()
+                return
+            pressed = self.port_pressed(spot)
+            if pressed is not None:
+                item, port = pressed
+                self.begin_connection(item, port, self.mapToScene(spot), event.position())
+                event.accept()
+                return
+
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:  # noqa: N802  (Qt naming)
@@ -627,11 +1003,24 @@ class CanvasView(QGraphicsView):
             event.accept()
             return
 
-        self.pointer_moved.emit(self.mapToScene(event.position().toPoint()))
+        where = self.mapToScene(event.position().toPoint())
+        self.pointer_moved.emit(where)
+        if self._connecting_from is not None:
+            self._connecting_at = where
+            self.aim_at(event.position().toPoint())
+            self.viewport().update()
+            event.accept()
+            return
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802  (Qt naming)
-        """Stop panning when the middle button comes back up.
+        """Stop panning when the middle button comes back up, and land an arc
+        that was dragged onto something.
+
+        Letting go anywhere else does **not** abandon the arc: it leaves it
+        being drawn with the button up, which is what turns a drag that missed
+        into a click-click and what lets the sheet be scrolled between the two
+        ends.  *Escape*, or a click on nothing, is what gives one up.
 
         Parameters
         ----------
@@ -644,7 +1033,65 @@ class CanvasView(QGraphicsView):
             self.viewport().unsetCursor()
             event.accept()
             return
+
+        if event.button() == Qt.MouseButton.LeftButton and self._connecting_from is not None:
+            if self._dragged_since_press(event.position()):
+                if not self.finish_connection(event.position().toPoint()):
+                    self.abandon_connection()
+            else:
+                self._connecting_pressed_at = None
+            event.accept()
+            return
+
         super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802  (Qt naming)
+        """Say what was double-clicked, so that the document can open it.
+
+        Parameters
+        ----------
+        event : PyQt6.QtGui.QMouseEvent
+            The mouse event.
+        """
+
+        if event.button() == Qt.MouseButton.LeftButton:
+            found = self.items(event.position().toPoint())
+            self.item_activated.emit(found[0] if found else None)
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
+
+    def _dragged_since_press(self, position) -> bool:
+        """Say whether the pointer has moved far enough to count as a drag.
+
+        The two halves of the gesture part here.  A press, a drag and a release
+        is one motion and ends the arc where it was let go, on something or on
+        nothing.  A press and a release in the same place is a *click*, and
+        leaves the arc being drawn with the button up so that the sheet can be
+        scrolled before the second click — which is the only way to join two
+        items further apart than the window is wide.
+
+        Qt's own ``startDragDistance`` is what draws the line, because it is the
+        distance the desktop has already decided separates a click from a drag.
+
+        Parameters
+        ----------
+        position : PyQt6.QtCore.QPointF
+            Where the pointer is now, in the viewport.
+
+        Returns
+        -------
+        bool
+            Whether it has moved that far since the press.
+        """
+
+        pressed = self._connecting_pressed_at
+        if pressed is None:
+            return True
+
+        moved = position - pressed
+        reach = QApplication.startDragDistance()
+        return moved.x() ** 2 + moved.y() ** 2 > reach * reach
 
     def leaveEvent(self, event) -> None:  # noqa: N802  (Qt naming)
         """Take the pointer's mark off the rulers when it leaves the sheet.
@@ -797,6 +1244,7 @@ class CanvasView(QGraphicsView):
         """
 
         super().drawForeground(painter, rect)
+        self._draw_connection(painter)
         if not self.empty_note or self.scene() is None or self.has_content():
             return
 

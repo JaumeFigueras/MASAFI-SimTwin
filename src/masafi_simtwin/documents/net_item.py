@@ -41,6 +41,24 @@ around the bar's own black, which reads as a dot again.  The pen is width nought
 — Qt's cosmetic hairline, one pixel at every zoom — so the ring is a line rather
 than a band that thickens as the sheet is come closer to.
 
+An item carries a **uuid**, which is what an arc names its two ends by.  It is
+generated when the item is made and is meant to be the identity the model
+document keeps, so an item read back out of a project is given the one it had
+rather than a new one.
+
+An arc, once drawn, keeps the **index** of the connecting point it was drawn to
+at each end, not the point itself: the index does not change when the item is
+dragged about, and :meth:`NetItem.scene_port` turns it back into a place on the
+sheet.  That is what makes an arc stay where it was put — it moves with its ends
+without ever choosing different ones.
+
+Which items may be joined to which is declared here as well, by two class
+attributes rather than by asking what class a thing is: :attr:`NetItem.GROUP`
+says what an item counts as, and :attr:`NetItem.CONNECTS_TO` says what it may be
+joined to.  A Petri net is bipartite — a place joins a transition and nothing
+else — and a timed transition is a transition for this purpose however it is
+drawn, which is a fact about the net rather than about the class hierarchy.
+
 Nothing here knows about the *model*.  An item on the sheet is a drawing of one,
 and what a place or a transition is in a Petri net belongs to the document layer
 that is still to come; when it arrives these items are given one rather than
@@ -60,6 +78,7 @@ from __future__ import annotations
 import math
 
 from collections.abc import Callable
+from uuid import uuid4
 
 from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QColor, QPainterPath, QPalette, QPen
@@ -78,6 +97,38 @@ ITEM_PEN_SELECTED = 0.6
 
 #: The net sits on the sheet, under the guides the sheet is lined up against.
 ITEM_Z = 10.0
+
+#: The arcs go under the items they join, so that a line runs behind a place
+#: rather than across it and an arrowhead meets a boundary cleanly.
+ARC_Z = 5.0
+
+
+def ink_colour(selected: bool, option) -> QColor:
+    """Give the colour a thing of the net is drawn in.
+
+    ``Text`` is the ink of the sheet and ``Link`` is the accent — where
+    :data:`~masafi_simtwin.theme.ThemeColors.accent` is kept, ``Highlight`` being
+    the pale wash behind selected text — so a selected thing is drawn in the
+    accent.  It is one rule for the items and the arcs alike, which is why it is
+    a function here rather than a method of either.
+
+    Parameters
+    ----------
+    selected : bool
+        Whether the thing is selected.
+    option : PyQt6.QtWidgets.QStyleOptionGraphicsItem
+        What the view knows about drawing it, its palette included.  An item has
+        no widget to take a palette from, so this is where the palette comes
+        from.
+
+    Returns
+    -------
+    PyQt6.QtGui.QColor
+        The colour.
+    """
+
+    role = QPalette.ColorRole.Link if selected else QPalette.ColorRole.Text
+    return option.palette.color(role)
 
 
 class NetItem(QGraphicsItem):
@@ -103,7 +154,27 @@ class NetItem(QGraphicsItem):
         again whenever the page changes under it.
     parent : PyQt6.QtWidgets.QGraphicsItem, optional
         Parent item.
+
+    Attributes
+    ----------
+    uuid : str
+        What an arc names this item by.  Generated when the item is made; a
+        document read back out of a project assigns the one it was saved under.
+    GROUP : str
+        What this item counts as when it is joined to another.  A subclass says
+        it; two items of the same group are two of the same kind of thing
+        however differently they are drawn.
+    CONNECTS_TO : tuple of str
+        The groups this item may be joined to.  A Petri net is bipartite, so a
+        place names the transition and a transition names the place, and
+        everything else — including joining a thing to itself — is refused.
     """
+
+    #: What this item counts as when it is joined to another.
+    GROUP: str = ''
+
+    #: The groups it may be joined to.
+    CONNECTS_TO: tuple[str, ...] = ()
 
     def __init__(
         self,
@@ -115,6 +186,8 @@ class NetItem(QGraphicsItem):
         self._snap = snap
         self._bounds = bounds
         self._ports_visible = False
+        self._arcs: list = []
+        self.uuid = str(uuid4())
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
@@ -181,6 +254,57 @@ class NetItem(QGraphicsItem):
 
         return [self.mapToScene(point) for point in self.ports()]
 
+    def scene_port(self, index: int) -> QPointF:
+        """Give one connecting point where it is on the sheet.
+
+        This is what an arc asks: it keeps the *index* of the point it was drawn
+        to, and the index does not change when the item moves — the point's
+        place on the sheet does, which is exactly what an arc has to follow.
+
+        Parameters
+        ----------
+        index : int
+            Which of :meth:`ports`, in that order.  One past the end is held to
+            the last, so a document naming a point this version does not have
+            still opens.
+
+        Returns
+        -------
+        PyQt6.QtCore.QPointF
+            The point, in scene millimetres.
+        """
+
+        points = self.ports()
+        return self.mapToScene(points[min(max(index, 0), len(points) - 1)])
+
+    def port_index_at(self, position: QPointF) -> int | None:
+        """Find which connecting point a scene position falls on.
+
+        The **nearest** one within reach rather than the first: on a transition
+        the points along a long edge are a fifth of a millimetre clear of one
+        another, and taking whichever came first in the list would hand back a
+        neighbour of the one that was aimed at.  That did not matter while an
+        arc chose its own points; it matters now that a press decides where an
+        arc leaves for good.
+
+        Parameters
+        ----------
+        position : QPointF
+            Where to look, in scene millimetres.
+
+        Returns
+        -------
+        int, optional
+            The index, or ``None`` when the position is on none of them.
+        """
+
+        within = [
+            (math.hypot(position.x() - point.x(), position.y() - point.y()), index)
+            for index, point in enumerate(self.scene_ports())
+        ]
+        near = [pair for pair in within if pair[0] <= PORT_RADIUS]
+        return min(near)[1] if near else None
+
     def port_at(self, position: QPointF) -> QPointF | None:
         """Find the connecting point a scene position falls on.
 
@@ -196,11 +320,144 @@ class NetItem(QGraphicsItem):
             position is not on one of them.
         """
 
-        for point in self.scene_ports():
-            offset = position - point
-            if math.hypot(offset.x(), offset.y()) <= PORT_RADIUS:
-                return point
-        return None
+        index = self.port_index_at(position)
+        return None if index is None else self.scene_port(index)
+
+    # ------------------------------------------------------------------
+    # The arcs that touch it
+    # ------------------------------------------------------------------
+
+    @property
+    def arcs(self) -> list:
+        """list: The arcs joined to this item, in the order they were drawn."""
+
+        return list(self._arcs)
+
+    def attach(self, arc) -> None:
+        """Take note of an arc that has just been joined to this item.
+
+        An arc is drawn from its two ends rather than from a position of its
+        own, so an item has to be able to tell its arcs that it has moved.
+
+        Parameters
+        ----------
+        arc : masafi_simtwin.documents.arc.Arc
+            The arc.  Attaching one twice does nothing, which is what an arc
+            whose two ends are the same item would otherwise do.
+        """
+
+        if arc not in self._arcs:
+            self._arcs.append(arc)
+
+    def detach(self, arc) -> None:
+        """Forget an arc that no longer joins this item.
+
+        Parameters
+        ----------
+        arc : masafi_simtwin.documents.arc.Arc
+            The arc.  One that was never attached is ignored, so a half-built
+            arc can be taken apart without knowing how far it got.
+        """
+
+        if arc in self._arcs:
+            self._arcs.remove(arc)
+
+    def may_connect_to(self, other) -> bool:
+        """Say whether an arc may be drawn from this item to another.
+
+        Parameters
+        ----------
+        other : NetItem
+            What it would be joined to.
+
+        Returns
+        -------
+        bool
+            Whether :attr:`CONNECTS_TO` names the other's :attr:`GROUP`.  An
+            item is never in its own ``CONNECTS_TO``, so a thing cannot be
+            joined to itself and a place cannot be joined to a place.
+        """
+
+        return isinstance(other, NetItem) and other.GROUP in self.CONNECTS_TO
+
+    def used_ports(self) -> set[int]:
+        """Give the connecting points that already have an arc on them.
+
+        Returns
+        -------
+        set of int
+            The indices, at this end of each of this item's arcs.
+        """
+
+        return {arc.port_of(self) for arc in self._arcs}
+
+    def port_index_towards(self, point: QPointF, skip=()) -> int:
+        """Give the connecting point that faces a place on the sheet.
+
+        Parameters
+        ----------
+        point : PyQt6.QtCore.QPointF
+            What to face, in scene millimetres.
+        skip : collections.abc.Container, optional
+            Indices to pass over.  A point already carrying an arc is passed
+            over so that two arcs do not land on top of one another; if every
+            point is taken the nearest is given anyway, an item having a fixed
+            number of points and no fixed number of arcs.
+
+        Returns
+        -------
+        int
+            The index of the point.
+        """
+
+        ranked = sorted(
+            range(len(self.ports())),
+            key=lambda index: (
+                (point.x() - self.scene_port(index).x()) ** 2
+                + (point.y() - self.scene_port(index).y()) ** 2
+            ),
+        )
+        for index in ranked:
+            if index not in skip:
+                return index
+        return ranked[0]
+
+    def free_port_towards(self, point: QPointF) -> int:
+        """Give the nearest connecting point that no arc is on yet.
+
+        This is how the far end of an arc is chosen when it is drawn: the near
+        end is the point that was pressed, and the far end is whichever point
+        faces it and is still free.  Both are then **kept**, so an arc drawn
+        once is drawn the same way for ever.
+
+        Parameters
+        ----------
+        point : PyQt6.QtCore.QPointF
+            What to face, in scene millimetres.
+
+        Returns
+        -------
+        int
+            The index of the point.
+        """
+
+        return self.port_index_towards(point, self.used_ports())
+
+    def port_towards(self, point: QPointF) -> QPointF:
+        """Give the connecting point facing a place on the sheet.
+
+        Parameters
+        ----------
+        point : PyQt6.QtCore.QPointF
+            What to face, in scene millimetres.
+
+        Returns
+        -------
+        PyQt6.QtCore.QPointF
+            The point, in scene millimetres.
+        """
+
+        return self.scene_port(self.port_index_towards(point))
 
     # ------------------------------------------------------------------
     # Where the item may go
@@ -232,6 +489,9 @@ class NetItem(QGraphicsItem):
             if self._bounds is not None:
                 x, y = self._inside(x, y, self._bounds())
             return QPointF(x, y)
+        if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
+            for arc in self._arcs:
+                arc.route()
         return super().itemChange(change, value)
 
     def _inside(self, x: float, y: float, area: QRectF) -> tuple[float, float]:
@@ -303,29 +563,19 @@ class NetItem(QGraphicsItem):
     def outline_colour(self, option) -> QColor:
         """Give the colour the item is drawn in.
 
-        ``Text`` is the ink of the sheet and ``Link`` is the accent, so a
-        selected item is drawn in the accent — the same rule a guide follows,
-        and for the same reason it asks for ``Link`` rather than ``Highlight``.
-
         Parameters
         ----------
         option : PyQt6.QtWidgets.QStyleOptionGraphicsItem
             What the view knows about drawing this item, its palette included.
-            An item has no widget to take a palette from, so this is where the
-            palette comes from.
 
         Returns
         -------
         PyQt6.QtGui.QColor
-            The colour.
+            The colour, by the one rule :func:`ink_colour` holds for the items
+            and the arcs alike.
         """
 
-        role = (
-            QPalette.ColorRole.Link
-            if self.isSelected()
-            else QPalette.ColorRole.Text
-        )
-        return option.palette.color(role)
+        return ink_colour(self.isSelected(), option)
 
     def outline_width(self) -> float:
         """Give how thick the outline is, which says whether it is selected.

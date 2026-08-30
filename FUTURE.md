@@ -357,40 +357,38 @@ answer for every model.
 
 ---
 
-## An item can be put down and moved, but not deleted
+## Deleting is *Delete*, and there is no undo
 
-**Now.** A place or a transition is dragged out of the Libraries pane, dropped on the sheet and moved
-about it. Nothing removes one. `CanvasView.keyPressEvent` deletes the selected *guides* on *Delete* and
-*Backspace*, and `delete_selected_guides()` says so in its name; a selected place is passed over.
-There is no *Edit → Delete* either — the menu bar has no *Delete* at all, which is why the guides
-carry their own context menu.
+**Now.** `CanvasView.delete_selection()` removes whatever is selected — guides, places, transitions
+and arcs alike — on *Delete* or *Backspace*, and `remove()` takes an item's arcs off with it. There
+is no *Edit* menu, no context menu over an item, no *Cut*, *Copy* or *Paste*, and **nothing can be
+undone**: a place deleted by accident is a place drawn again by hand, with the arcs that hung off it.
 
-**Why it was done this way.** Putting a place down and moving it is what was asked for, and deleting
-one is a different decision from placing one: what *Delete* means on a sheet — the selection
-whatever it holds, guides included, or only the drawing — is the shape of the editor's Edit menu, and
-that has not been designed. Guessing it here would put the answer in a key handler rather than in the
-menu where the rest of it will live.
+**Why it was done this way.** Arcs made deleting necessary — an arc drawn by mistake has to be
+removable — but they did not make undo necessary, and undo is not a key handler. It is a command
+stack that every change to the sheet has to go through, and writing one before there is a document
+for it to restore *into* would be designing the model layer from the wrong end.
 
-**When it will not be enough.** At once, for anyone who drops an item by accident: the only way back
-is to close the tab, and nothing is persisted yet so that is a way back. It stops being tolerable the
-moment a net is worth keeping.
+**When it will not be enough.** As soon as a net is big enough that redrawing part of it is real
+work, which is the same moment saving matters. The two arrive together.
 
 **Options.**
 
-- Generalise `delete_selected_guides()` into `delete_selection()` over every removable item, and give
-  the sheet a context menu over an item the way it has one over a guide. Smallest, and it settles
-  *Delete acts on the selection* without waiting for the menu bar.
-- Wait for *Edit* to grow *Undo*, *Cut*, *Copy*, *Paste* and *Delete*, and build all of it at once
-  against a command stack, so that deleting an item is undoable from the first day it is possible.
-- Both, in that order: the key handler now, the command stack when the model document exists and
-  there is something for an undo to restore.
+- A `QUndoStack` on the document, with every change to the net expressed as a `QUndoCommand`: add,
+  remove, move, reweight. That is the whole answer and it is the one Qt already provides; the cost is
+  that nothing may change the scene directly any more, which is a rule the code does not keep yet.
+- *Delete* only, plus a confirmation for anything that removes an item with arcs on it. Cheap, and it
+  turns a mistake into a question rather than into a loss.
+- Wait for the model document and build the two together, so that an undo restores a thing with an
+  identity rather than a new thing that looks the same.
 
 ---
 
 ## Nothing on the sheet is saved
 
-**Now.** A place or a transition dropped on a Petri net document lives on the `QGraphicsScene` and
-nowhere else.
+**Now.** A place, a transition or an arc drawn on a Petri net document lives on the
+`QGraphicsScene` and nowhere else. An item carries a `uuid` — arcs name their ends by it, so identity
+now exists — but nothing writes it anywhere.
 Closing the tab loses it; there is no `content` in the `.mfst` model document for it to be written
 to, and `PetriNetEditor` does not mark the model as changed, because there is nothing to change.
 Guides are in the same position, and for the same reason.
@@ -404,8 +402,10 @@ drawing layer can be built and looked at without it, which is what this is.
 **Options.**
 
 - Give the model document a `content` holding the net — the places and transitions with their UUIDs
-  and their positions in millimetres, then the arcs — and the guides beside it, since a guide is part
-  of the drawing even though it is not part of the net. Write-through, like the rest of
+  and their positions in millimetres, then the arcs, which are two UUIDs and a weight and no geometry
+  at all — and the guides beside it, since a guide is part of the drawing even though it is not part
+  of the net. That an arc has nothing to store but its ends is the clearest sign the split is the
+  right one. Write-through, like the rest of
   the project (see *Saving is write-through*).
 - Put the drawing in `simtwin_core` from the start, as the document the adapters will read, so that
   the editor is given a document rather than being one. That is where a document format belongs and
@@ -413,61 +413,107 @@ drawing layer can be built and looked at without it, which is what this is.
 
 ---
 
-## The connecting points are shown by hovering, and nothing else uses them
+## An arc is a straight line, and cannot be made to go round anything
 
-**Now.** Every item of a net carries connecting points — twelve round a place, twenty round a
-transition — and `NetItem.ports_visible` decides whether they are drawn. Nothing turns it on but the pointer:
-`hoverEnterEvent` shows them and `hoverLeaveEvent` hides them again. `NetItem.port_at()` finds the one
-under a scene position and nothing calls it.
+**Now.** An arc is one straight segment from a connecting point on one item to a connecting point on
+the other. There are no waypoints, no bends and no routing round whatever is in between, so an arc
+between two items with a third between them is drawn straight over it.
 
-**Why it was done this way.** The points are there for arcs, and there are no arcs. Hovering is what
-every diagram editor reveals its anchors with, so it makes the points visible to a person without
-inventing a tool; the property is the whole of the interface an arc tool will need, so the tool
-decides the rest rather than inheriting a guess.
+**Why it was done this way.** Straight is what a Petri net arc is in every textbook and most tools,
+and the nearest-port routing already keeps a net readable while it is being laid out. Bends are a
+second editing gesture — grabbing a line to put a point in it, dragging points, removing them — and a
+second thing to store, and neither was needed to draw a net.
 
-**When it will not be enough.** When arcs are drawn. Then the points want to be up for the whole of a
-drag rather than only over the place under the pointer — the far end of an arc has to be aimed at a
-place the pointer has not reached yet — and one of them wants to be marked as the one an arc would
-snap to.
+**When it will not be enough.** The first dense net. Any layout where an arc has to reach past
+something is a layout where a straight line crosses it.
 
 **Options.**
 
-- The arc tool sets `ports_visible` on every place while a drag is on, and clears it after. One line
-  either side, and the hover behaviour stays as the resting state.
-- A `highlighted_port` on the item beside `ports_visible`, drawn larger, so that where an arc will
-  attach can be seen before the button is let go.
-- Drop the fixed points and attach an arc wherever the line from the other end crosses the item.
-  A circle and a bar can both answer that, and `ports()` is already each shape's own — so this is a
-  change to what one shape returns rather than to the shape of the code.
+- Waypoints on the arc: a list of scene positions between the two ends, put in by dragging the line
+  and taken out by dragging them onto it. `Arc.path()` is the one place that would change, the two
+  end segments still asking the items which points face the neighbouring waypoints.
+- Orthogonal routing, which draws every arc in right angles and puts the corners in itself. It reads
+  well on a grid and it is a great deal more code, and it takes control away rather than giving it.
+- Leave arcs straight and let the layout be the answer, which is what moving items already does.
 
 ---
 
-## Two connecting points close together are one target
+## There is nowhere to choose a kind of arc
 
-**Now.** `NetItem.port_at()` walks the points in order and returns the first within `PORT_RADIUS` —
-0.7 mm — of the position it was given. On a place the twelve points are 2.6 mm apart and no two
-circles overlap. On a transition the nine along a long edge are `PORT_SPACING` apart, which is 1.6 mm,
-so neighbours are 0.2 mm clear of one another: nothing overlaps, but the gap is a fifth of a
-millimetre.
+**Now.** Every arc is an ordinary arc. `Arc` has no `kind`, and the Libraries pane deliberately does
+not list arcs at all — an arc is a relation, not an element taken from a palette, which is the rule
+that was chosen.
 
-**Why it was done this way.** The layout is what was asked for, and `port_at()` was written when the
-only shape was a place, where first-within-a-radius and nearest-centre are the same answer. Nothing
-calls it yet, so nothing has been wrong.
+**Why it was done this way.** The P/T library has one kind of arc, so there is nothing to choose
+between, and inventing a chooser for a choice of one is inventing chrome.
 
-**When it will not be enough.** When arcs are drawn. Aiming at a point on a bar means landing inside
-one 1.4 mm circle rather than the one beside it, which at any zoom showing the whole transition is a
-target a pointer cannot hit reliably — and a miss is silent, since the arc simply attaches to the
-neighbour.
+**When it will not be enough.** The attributed timed library, which has inhibitor and reset arcs.
+They are genuinely different elements of a family, and something has to say which one the next arc
+will be.
 
 **Options.**
 
-- Give a point a drawn size and a *grabbed* size separately: keep the ring at `PORT_RADIUS` and pick
-  the point whose centre is nearest the position, within some larger reach. Every position near the
-  edge then resolves to exactly one point, the aiming gets easier rather than harder as they crowd,
-  and nothing looks different. `port_at()` is the only place it goes.
-- Snap along the edge instead of to a point, and let the arc attach anywhere on the boundary — which
-  is the same change as dropping the fixed points altogether; see the entry above.
-- Fewer points along an edge, which is a change to what was asked for and so is Jaume's to make.
+- A small chooser on the document — a segmented control or a drop-down over the canvas — holding the
+  kinds the open model's library offers. It is where the choice is used, and it does not make the
+  Libraries pane lie about what an arc is.
+- Draw an ordinary arc and change its kind afterwards, in the properties pane. No chooser at all, one
+  more step per inhibitor arc, and it keeps every gesture the same.
+- Relax the rule and let the pane list arcs after all, as kinds rather than as drags. It was
+  considered and turned down; it would have to be turned down again for the same reason or accepted
+  for a new one.
+
+---
+
+## An arc's ends cannot be moved once it is drawn
+
+**Now.** An arc keeps the index of a connecting point at each end, settled when it was drawn — the
+point that was pressed at the near end, and the point it was let go nearest at the far end — and
+nothing changes them afterwards. Moving a place drags the arc's end along with it; it never passes
+the arc round to a point that would suit the new position better. There is no way to take hold of an
+arc's end and put it on another point, and no way to say which point it should use.
+
+**Why it was done this way.** It is what was asked for, and it is right: an arc that rearranged itself
+whenever a place was nudged meant a net could never be laid out by hand and left alone. The cost is
+the other half of the same coin — a net dragged a long way from where it was drawn keeps arcs
+entering from what is now the far side, and the only way back is to delete the arc and draw it again.
+
+**When it will not be enough.** The first time a net is rearranged rather than merely nudged. Redrawing
+an arc loses its weight as well as its place, which makes a small tidy-up more expensive than it
+should be.
+
+**Options.**
+
+- Drag an arc's end onto another connecting point, the way its middle can already be clicked. The
+  gesture is the one that draws an arc, started from an end rather than from an item, and
+  `Arc.source_port` / `Arc.target_port` are the only things it writes.
+- A *re-route* on the arc's context menu, putting both ends back on the points that face each other
+  now. One line — `free_port_towards` at each end — and it is the old behaviour offered as an action
+  rather than imposed as a rule.
+- Both, which is what a drawing program usually has: the automatic answer on demand, and the hand
+  free to overrule it.
+
+---
+
+## An arc has no elbow room when its two items overlap
+
+**Now.** Two items dropped on top of one another, or dragged there, are joined by an arc a
+millimetre long with an arrowhead as big as it is. Nothing prevents the overlap: `itemChange` holds
+an item inside the sheet and snaps it to the millimetre, and has no opinion about what else is there.
+
+**Why it was done this way.** Keeping items apart is a layout rule, and layout rules that push things
+around are worse than a person who can see the picture. Nothing about a net is wrong when two items
+touch; only the drawing is.
+
+**When it will not be enough.** Never, quite — it is a thing a person does and undoes in the same
+second. It is here because it is the one way the arcs can be made to look broken, so that the next
+person to see it knows it was noticed.
+
+**Options.**
+
+- Refuse to drop an item where it would overlap another, which is easy and occasionally infuriating.
+- Draw nothing when the two ends are closer together than the arrowhead is long, so the picture goes
+  quiet instead of going wrong.
+- Leave it, and let the person move the item.
 
 ---
 

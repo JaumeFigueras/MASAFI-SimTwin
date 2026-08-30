@@ -30,6 +30,13 @@ masafi_simtwin = ["resources/*.svg", "translations/*.qm", "dialogs/forms/*.ui"]
 
 [tool.pytest.ini_options]
 testpaths = ["test"]
+# The test tree mirrors src/, so two modules of the same name in different
+# packages are the ordinary case rather than a mistake: documents/arc.py and
+# dialogs/arc.py are each tested by a test_arc.py.  The default import mode
+# gives every test module a top-level name and refuses the second of them;
+# importlib names each one after its own path and does not.  There is no ini
+# key for it, so it goes through addopts.
+addopts = ["--import-mode=importlib"]
 markers = [
     "i18n: checks of the translation catalogues rather than of the application",
 ]
