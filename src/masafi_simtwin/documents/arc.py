@@ -31,6 +31,15 @@ geometry is where its ends are.  An item that never moves has nothing to gain
 from a local coordinate system, and a line whose two ends belong to two other
 items has nothing natural to measure from.
 
+An arc is drawn **straight or curved**, which is
+:class:`ArcShape` and is chosen from its context menu.  The curve is a single
+quadratic Bézier with one control point — no S, no corners, nothing to drag —
+because the first thing worth having is a way of telling two arcs apart when
+they run between the same two places, and one bow does that.  Which way it bows
+follows the arc's own direction, so a pair drawn both ways between one place and
+one transition bows apart of its own accord.  Richer shapes come later, and
+:class:`ArcShape` is the one place they will be added.
+
 The **weight** is how many tokens the arc carries, one by default.  It is drawn
 beside the line only when it is not one, which is the convention of every drawn
 Petri net: an arc without a number is an arc of weight one, and writing the one
@@ -42,6 +51,10 @@ follow, so a net reads as one drawing in either scheme.
 """
 
 from __future__ import annotations
+
+import math
+
+from enum import Enum
 
 from PyQt6.QtCore import QLineF, QPointF, QRectF, Qt
 from PyQt6.QtGui import QFont, QPainterPath, QPainterPathStroker, QPen, QTransform
@@ -71,6 +84,30 @@ WEIGHT_OFFSET = 1.2
 #: not drawn: an arc without a number is an arc of weight one.
 DEFAULT_WEIGHT = 1
 
+#: How far a curved arc bows away from its chord, as a fraction of the distance
+#: between its two ends.  A fraction rather than a length, so that a long arc
+#: and a short one bow by the same amount *to the eye*.
+CURVE_BOW = 0.18
+
+
+class ArcShape(Enum):
+    """How an arc is drawn between its two ends.
+
+    Attributes
+    ----------
+    STRAIGHT
+        One segment from end to end, which is what a Petri net arc is in most
+        drawings and what an arc is until it is told otherwise.
+    CURVED
+        A single quadratic Bézier bowing :data:`CURVE_BOW` of its own length off
+        the straight, on the left of the way it is going.  One control point and
+        no S: the shapes with more than one bend are a later piece of work, and
+        this enumeration is where they go.
+    """
+
+    STRAIGHT = 'straight'
+    CURVED = 'curved'
+
 
 class Arc(QGraphicsItem):
     """One arc of a Petri net, from a place to a transition or back.
@@ -92,6 +129,8 @@ class Arc(QGraphicsItem):
     weight : int, optional
         How many tokens it carries.  One by default, which is the weight that is
         not drawn.
+    shape_kind : ArcShape, optional
+        Whether it is drawn straight or curved.  Straight by default.
     parent : PyQt6.QtWidgets.QGraphicsItem, optional
         Parent item.
 
@@ -112,12 +151,14 @@ class Arc(QGraphicsItem):
         source_port: int | None = None,
         target_port: int | None = None,
         weight: int = DEFAULT_WEIGHT,
+        shape_kind: ArcShape = ArcShape.STRAIGHT,
         parent: QGraphicsItem | None = None,
     ) -> None:
         super().__init__(parent)
         self.source = source
         self.target = target
         self._weight = int(weight)
+        self._shape_kind = ArcShape(shape_kind)
         self._line = QLineF()
 
         if source_port is None:
@@ -216,6 +257,64 @@ class Arc(QGraphicsItem):
         self.update()
 
     # ------------------------------------------------------------------
+    # Straight or curved
+    # ------------------------------------------------------------------
+
+    @property
+    def shape_kind(self) -> ArcShape:
+        """ArcShape: Whether the arc is drawn straight or curved.
+
+        Not ``shape``: :meth:`QGraphicsItem.shape` is what a scene hit-tests
+        against, and an item may not have both.
+        """
+
+        return self._shape_kind
+
+    @shape_kind.setter
+    def shape_kind(self, value: ArcShape) -> None:
+        """Draw the arc straight or curved from now on.
+
+        Parameters
+        ----------
+        value : ArcShape
+            Which of them.
+        """
+
+        value = ArcShape(value)
+        if value != self._shape_kind:
+            self.prepareGeometryChange()
+            self._shape_kind = value
+            self.update()
+
+    @property
+    def curved(self) -> bool:
+        """bool: Whether the arc bows, which is the whole of what a menu asks."""
+
+        return self._shape_kind is ArcShape.CURVED
+
+    def control_point(self) -> QPointF:
+        """Give the one point that bends a curved arc.
+
+        A quadratic Bézier has a single control point, and this is it: the
+        middle of the chord, moved :data:`CURVE_BOW` of the chord's length to
+        the **left of the way the arc is going**.  Following the arc's own
+        direction is what makes a place and a transition joined both ways bow
+        apart rather than on top of one another, without either arc knowing the
+        other is there.
+
+        Returns
+        -------
+        PyQt6.QtCore.QPointF
+            The control point, in scene millimetres.  It is on the chord itself
+            for an arc with no length to bow across.
+        """
+
+        away = self._perpendicular()
+        reach = self._line.length() * CURVE_BOW
+        middle = self._line.center()
+        return QPointF(middle.x() + away.x() * reach, middle.y() + away.y() * reach)
+
+    # ------------------------------------------------------------------
     # The weight
     # ------------------------------------------------------------------
 
@@ -268,8 +367,7 @@ class Arc(QGraphicsItem):
 
         glyphs.translate(-drawn.center().x(), -drawn.center().y())
         scale = WEIGHT_HEIGHT / drawn.height()
-        away = self._perpendicular()
-        middle = self._line.center()
+        middle, away = self._halfway()
         reach = WEIGHT_OFFSET + WEIGHT_HEIGHT / 2.0
 
         placed = QTransform().scale(scale, scale).map(glyphs)
@@ -278,6 +376,51 @@ class Arc(QGraphicsItem):
             middle.y() + away.y() * reach,
         )
         return placed
+
+    def _halfway(self) -> tuple[QPointF, QPointF]:
+        """Give the middle of the arc and the way across it there.
+
+        The middle of the *drawn* arc rather than of the chord, so a number
+        beside a curved arc sits beside the curve.  ``QPainterPath`` answers
+        both halves of the question, which is what keeps one placement rule for
+        every shape an arc may be given.
+
+        Returns
+        -------
+        tuple
+            The point, in scene millimetres, and the unit vector across the arc
+            there.
+        """
+
+        path = self.path()
+        if not path.length():
+            return self._line.center(), self._perpendicular()
+
+        angle = math.radians(path.angleAtPercent(0.5))
+        along = QPointF(math.cos(angle), -math.sin(angle))
+        return path.pointAtPercent(0.5), QPointF(-along.y(), along.x())
+
+    def _arriving(self) -> QPointF:
+        """Give the unit vector the arc is travelling in when it arrives.
+
+        The chord for a straight arc, and the tangent at the end for a curved
+        one — which for a quadratic Bézier is the way from its control point to
+        its end.
+
+        Returns
+        -------
+        PyQt6.QtCore.QPointF
+            The direction, of unit length.
+        """
+
+        if self._shape_kind is ArcShape.CURVED:
+            reach = QLineF(self.control_point(), self._line.p2())
+        else:
+            reach = QLineF(self._line)
+        length = reach.length()
+        if not length:
+            return QPointF(1.0, 0.0)
+        return QPointF(reach.dx() / length, reach.dy() / length)
 
     def _perpendicular(self) -> QPointF:
         """Give the unit vector across the line, which is where the weight sits.
@@ -302,20 +445,32 @@ class Arc(QGraphicsItem):
     # ------------------------------------------------------------------
 
     def path(self) -> QPainterPath:
-        """Give the line as a path, which is what is stroked and hit-tested.
+        """Give the arc as a path, which is what is drawn, stroked and measured.
+
+        Everything about the arc's geometry comes through here — what is
+        painted, what can be taken hold of, where the arrowhead points and where
+        the weight sits — so a new :class:`ArcShape` is a new branch here and
+        nothing else.
 
         Returns
         -------
         PyQt6.QtGui.QPainterPath
-            From one end to the other.
+            From one end to the other, straight or bowed.
         """
 
         path = QPainterPath(self._line.p1())
-        path.lineTo(self._line.p2())
+        if self._shape_kind is ArcShape.CURVED:
+            path.quadTo(self.control_point(), self._line.p2())
+        else:
+            path.lineTo(self._line.p2())
         return path
 
     def arrow(self) -> QPainterPath:
         """Build the arrowhead, at the end the arc enters.
+
+        It points along the arc's **tangent** where it arrives, not along the
+        chord, so a curved arc meets its target head on rather than at an angle
+        to the line that was drawn.
 
         Returns
         -------
@@ -330,7 +485,7 @@ class Arc(QGraphicsItem):
             return head
 
         tip = self._line.p2()
-        along = QPointF(self._line.dx() / length, self._line.dy() / length)
+        along = self._arriving()
         across = QPointF(-along.y(), along.x())
         back = QPointF(tip.x() - along.x() * ARROW_LENGTH, tip.y() - along.y() * ARROW_LENGTH)
 
@@ -352,11 +507,11 @@ class Arc(QGraphicsItem):
         Returns
         -------
         PyQt6.QtCore.QRectF
-            The line, the arrowhead, the number beside it and the band the line
-            can be taken hold of in.
+            The arc as it is drawn, the arrowhead, the number beside it and the
+            band the line can be taken hold of in.
         """
 
-        area = QRectF(self._line.p1(), self._line.p2()).normalized()
+        area = self.path().boundingRect().normalized()
         weight = self.weight_path()
         if weight is not None:
             area = area.united(weight.boundingRect())
@@ -380,7 +535,7 @@ class Arc(QGraphicsItem):
         return band
 
     def paint(self, painter, option, widget=None) -> None:
-        """Draw the line, its arrowhead and its weight.
+        """Draw the arc, its arrowhead and its weight.
 
         Parameters
         ----------
@@ -399,7 +554,7 @@ class Arc(QGraphicsItem):
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         painter.setPen(pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawLine(self._line)
+        painter.drawPath(self.path())
 
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(colour)

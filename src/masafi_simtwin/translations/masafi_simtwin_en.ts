@@ -46,12 +46,27 @@
 </context><context>
     <name>CanvasView</name>
     <message>
-        <location filename="../documents/canvas.py" line="561" />
+        <location filename="../documents/canvas.py" line="598" />
+        <source>Straight</source>
+        <translation>Straight</translation>
+    </message>
+    <message>
+        <location filename="../documents/canvas.py" line="599" />
+        <source>Curved</source>
+        <translation>Curved</translation>
+    </message>
+    <message>
+        <location filename="../documents/canvas.py" line="611" />
+        <source>Delete Arc</source>
+        <translation>Delete Arc</translation>
+    </message>
+    <message>
+        <location filename="../documents/canvas.py" line="653" />
         <source>Delete Guide</source>
         <translation>Delete Guide</translation>
     </message>
     <message>
-        <location filename="../documents/canvas.py" line="563" />
+        <location filename="../documents/canvas.py" line="655" />
         <source>Delete All Guides</source>
         <translation>Delete All Guides</translation>
     </message>

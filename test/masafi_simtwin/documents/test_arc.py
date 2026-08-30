@@ -4,11 +4,17 @@ from __future__ import annotations
 
 import pytest
 from PyQt6.QtCore import QEvent, QPointF, Qt
-from PyQt6.QtGui import QColor, QKeyEvent, QMouseEvent
+from PyQt6.QtGui import QColor, QKeyEvent, QMouseEvent, QPainterPath
 from PyQt6.QtWidgets import QDialog
 
 from masafi_simtwin.documents import petri_net
-from masafi_simtwin.documents.arc import ARROW_LENGTH, DEFAULT_WEIGHT, Arc
+from masafi_simtwin.documents.arc import (
+    ARROW_LENGTH,
+    CURVE_BOW,
+    DEFAULT_WEIGHT,
+    Arc,
+    ArcShape,
+)
 from masafi_simtwin.documents.net_item import ARC_Z, ITEM_Z, NetItem
 from masafi_simtwin.documents.place import Place
 from masafi_simtwin.documents.transition import Transition
@@ -874,3 +880,277 @@ def test_an_arc_is_something_drawn_on_the_sheet(editor, net):
 
     assert editor.view.has_content()
     assert isinstance(place, NetItem)
+
+
+# ----------------------------------------------------------------------
+# Straight or curved
+# ----------------------------------------------------------------------
+
+
+def elements(path: QPainterPath) -> set:
+    """Give what a path is made of, apart from where it begins.
+
+    ``QPainterPath`` keeps a quadratic curve as a cubic one, so counting the
+    elements says less than asking what kind they are.
+
+    Parameters
+    ----------
+    path : PyQt6.QtGui.QPainterPath
+        The path.
+
+    Returns
+    -------
+    set
+        The element types in it, without the ``MoveToElement`` every path opens
+        with.
+    """
+
+    kinds = {path.elementAt(index).type for index in range(path.elementCount())}
+    return kinds - {QPainterPath.ElementType.MoveToElement}
+
+
+def test_an_arc_is_straight_until_it_is_told_otherwise(editor, net):
+    """Which is what a Petri net arc is in most drawings."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+
+    assert arc.shape_kind is ArcShape.STRAIGHT
+    assert not arc.curved
+    assert elements(arc.path()) == {QPainterPath.ElementType.LineToElement}
+
+
+def test_a_curved_arc_bows_off_its_chord(editor, net):
+    """A single quadratic Bézier: one control point, and no S."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    arc.shape_kind = ArcShape.CURVED
+
+    assert arc.curved
+    assert QPainterPath.ElementType.CurveToElement in elements(arc.path())
+    assert QPainterPath.ElementType.LineToElement not in elements(arc.path())
+
+    chord = arc.line
+    middle = chord.center()
+    control = arc.control_point()
+    off = QPointF(control.x() - middle.x(), control.y() - middle.y())
+
+    assert off != QPointF(0.0, 0.0)
+    assert (off.x() ** 2 + off.y() ** 2) ** 0.5 == pytest.approx(
+        chord.length() * CURVE_BOW
+    )
+
+
+def test_a_curved_arc_keeps_the_two_points_it_is_attached_to(editor, net):
+    """Bowing is how it is drawn between them, not where it is attached."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    ends = (arc.line.p1(), arc.line.p2())
+
+    arc.shape_kind = ArcShape.CURVED
+
+    assert (arc.line.p1(), arc.line.p2()) == ends
+    assert arc.path().pointAtPercent(0.0) == ends[0]
+    assert arc.path().pointAtPercent(1.0) == ends[1]
+
+
+def test_two_arcs_drawn_both_ways_bow_apart(editor, net):
+    """Which way it bows follows the arc's own direction, so a pair between one
+    place and one transition separates without either knowing the other is
+    there."""
+
+    place, transition = net
+    there = editor.add_arc(place, transition, source_port=0, target_port=10)
+    back = editor.add_arc(transition, place, source_port=10, target_port=0)
+    for arc in (there, back):
+        arc.shape_kind = ArcShape.CURVED
+
+    middle = there.line.center()
+    away = there.control_point() - middle
+    back_away = back.control_point() - back.line.center()
+
+    assert away.x() == pytest.approx(-back_away.x())
+    assert away.y() == pytest.approx(-back_away.y())
+
+
+def test_a_curved_arc_arrives_along_its_own_tangent(editor, net):
+    """So it meets its target head on rather than at an angle to the curve."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    straight_on = arc.arrow().boundingRect()
+
+    arc.shape_kind = ArcShape.CURVED
+
+    assert arc.arrow().boundingRect() != straight_on
+    assert arc.arrow().contains(arc.line.p2()) or arc.arrow().boundingRect().contains(
+        arc.line.p2()
+    )
+
+
+def test_the_weight_rides_the_curve(editor, net):
+    """A number beside a curved arc sits beside the curve, not beside the chord."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    arc.weight = 5
+    on_the_chord = arc.weight_path().boundingRect().center()
+
+    arc.shape_kind = ArcShape.CURVED
+
+    assert arc.weight_path().boundingRect().center() != on_the_chord
+
+
+def test_a_curved_arc_covers_and_is_grabbed_along_its_curve(editor, net):
+    """Its bounding rectangle and the band it is taken hold of in both come
+    from the path, so neither has to know which shape it is."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    straight_bounds = arc.boundingRect()
+
+    arc.shape_kind = ArcShape.CURVED
+    bowed = arc.path().pointAtPercent(0.5)
+
+    assert arc.boundingRect() != straight_bounds
+    assert arc.boundingRect().contains(bowed)
+    assert arc.shape().contains(bowed)
+    assert not arc.shape().contains(arc.line.center())
+
+
+# ----------------------------------------------------------------------
+# Choosing the shape
+# ----------------------------------------------------------------------
+
+
+def test_an_arc_offers_its_two_shapes_and_a_way_out(editor, net):
+    """An arc has no entry in the menu bar, so this is where both are found."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    menu = editor.view.arc_menu(arc)
+
+    assert [action.text() for action in menu.actions() if not action.isSeparator()] == [
+        'Straight',
+        'Curved',
+        'Delete Arc',
+    ]
+
+
+def test_the_menu_says_which_shape_the_arc_already_is(editor, net):
+    """A menu that says what a thing is is worth more than one that only says
+    what can be done to it."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+
+    checked = [
+        action.data()
+        for action in editor.view.arc_menu(arc).actions()
+        if action.isCheckable() and action.isChecked()
+    ]
+    assert checked == [ArcShape.STRAIGHT]
+
+    arc.shape_kind = ArcShape.CURVED
+    checked = [
+        action.data()
+        for action in editor.view.arc_menu(arc).actions()
+        if action.isCheckable() and action.isChecked()
+    ]
+    assert checked == [ArcShape.CURVED]
+
+
+def test_the_two_shapes_are_one_choice(editor, net):
+    """They are exclusive of their own accord, being one group."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    menu = editor.view.arc_menu(arc)
+    groups = {
+        action.actionGroup()
+        for action in menu.actions()
+        if action.isCheckable()
+    }
+
+    assert len(groups) == 1
+    assert next(iter(groups)).isExclusive()
+
+
+def test_choosing_curved_curves_the_arc(editor, net):
+    """Which is the whole of what the menu is for."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    menu = editor.view.arc_menu(arc)
+    curved = [action for action in menu.actions() if action.data() is ArcShape.CURVED]
+
+    curved[0].trigger()
+
+    assert arc.curved
+
+
+def test_choosing_straight_straightens_it_again(editor, net):
+    """And the choice can be made twice over."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    arc.shape_kind = ArcShape.CURVED
+    menu = editor.view.arc_menu(arc)
+    straight = [
+        action for action in menu.actions() if action.data() is ArcShape.STRAIGHT
+    ]
+
+    straight[0].trigger()
+
+    assert not arc.curved
+
+
+def test_the_menu_deletes_the_arc_it_was_aimed_at(editor, net):
+    """And takes it off both of its ends, as any other removal does."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    other = editor.add_arc(transition, place)
+    menu = editor.view.arc_menu(arc)
+
+    [action for action in menu.actions() if action.text() == 'Delete Arc'][0].trigger()
+
+    assert editor.arcs == [other]
+    assert place.arcs == [other]
+
+
+def test_the_menu_acts_on_the_arc_under_the_pointer_and_no_other(editor, net):
+    """A context menu is aimed at a thing, selection or no selection."""
+
+    place, transition = net
+    aimed = editor.add_arc(place, transition)
+    selected = editor.add_arc(transition, place)
+    selected.setSelected(True)
+
+    curved = [
+        action
+        for action in editor.view.arc_menu(aimed).actions()
+        if action.data() is ArcShape.CURVED
+    ]
+    curved[0].trigger()
+
+    assert aimed.curved
+    assert not selected.curved
+
+
+def test_the_bare_sheet_offers_no_arc_menu(editor, net):
+    """There is no arc there to be shaped."""
+
+    assert editor.view.arc_menu(None) is None
+
+
+def test_an_arc_is_found_under_the_pointer(editor, net):
+    """Which is what the context menu is built from."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    middle = editor.view.mapFromScene(arc.line.center())
+
+    assert editor.view.arc_at(middle) is arc

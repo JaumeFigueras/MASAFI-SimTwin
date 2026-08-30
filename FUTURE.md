@@ -413,28 +413,34 @@ drawing layer can be built and looked at without it, which is what this is.
 
 ---
 
-## An arc is a straight line, and cannot be made to go round anything
+## An arc is straight or bowed, and its bow cannot be adjusted
 
-**Now.** An arc is one straight segment from a connecting point on one item to a connecting point on
-the other. There are no waypoints, no bends and no routing round whatever is in between, so an arc
-between two items with a third between them is drawn straight over it.
+**Now.** `ArcShape` has two values. A straight arc is one segment; a curved one is a single quadratic
+Bézier bowing `CURVE_BOW` — 18% of its own length — to the left of the way it is going. That fraction
+is a module constant: there is no handle to drag, no way to bow one arc more than another, and no way
+to bow it the *other* way. There are still no waypoints, so no arc can be made to go round a third
+item between its ends.
 
-**Why it was done this way.** Straight is what a Petri net arc is in every textbook and most tools,
-and the nearest-port routing already keeps a net readable while it is being laid out. Bends are a
-second editing gesture — grabbing a line to put a point in it, dragging points, removing them — and a
-second thing to store, and neither was needed to draw a net.
+**Why it was done this way.** It is what was asked for, and it is the shape that earns its keep first:
+one bow is what tells two arcs apart when they run between the same pair, and following the arc's
+direction makes a both-ways pair separate with no arc knowing about the other. Everything richer — an
+S, waypoints, orthogonal routing — is a second editing gesture and a second thing to store, and was
+deliberately left for later.
 
-**When it will not be enough.** The first dense net. Any layout where an arc has to reach past
-something is a layout where a straight line crosses it.
+**When it will not be enough.** Three or more arcs between one pair, which all bow the same way and
+by the same amount and so lie on top of one another. And the first dense net, where an arc has to
+reach past something.
 
 **Options.**
 
-- Waypoints on the arc: a list of scene positions between the two ends, put in by dragging the line
-  and taken out by dragging them onto it. `Arc.path()` is the one place that would change, the two
-  end segments still asking the items which points face the neighbouring waypoints.
-- Orthogonal routing, which draws every arc in right angles and puts the corners in itself. It reads
-  well on a grid and it is a great deal more code, and it takes control away rather than giving it.
-- Leave arcs straight and let the layout be the answer, which is what moving items already does.
+- A bow that can be dragged: take hold of a curved arc and move its control point, keeping the
+  distance from the chord and storing it on the arc. `Arc.control_point()` is the one place it is
+  worked out, so it becomes the one place it is read from instead.
+- A bow that counts: give the *n*-th arc between one pair *n* times the bow, the way the ports
+  already pass over one another. It needs the arcs of a pair to be ordered again, which is the
+  machinery `Arc.rank` used to be.
+- Waypoints, and then `ArcShape.STRAIGHT` and `ArcShape.CURVED` become the no-waypoint cases of one
+  general path. `Arc.path()` is the one place that changes either way.
 
 ---
 

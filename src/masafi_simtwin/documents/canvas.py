@@ -45,7 +45,7 @@ from __future__ import annotations
 import math
 
 from PyQt6.QtCore import QLineF, QPointF, QRectF, QSizeF, Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QPainter, QPalette, QPen
+from PyQt6.QtGui import QActionGroup, QColor, QPainter, QPalette, QPen
 from PyQt6.QtWidgets import (
     QApplication,
     QGraphicsScene,
@@ -56,7 +56,7 @@ from PyQt6.QtWidgets import (
 )
 
 from masafi_simtwin import preferences
-from masafi_simtwin.documents.arc import Arc
+from masafi_simtwin.documents.arc import Arc, ArcShape
 from masafi_simtwin.documents.guide import Guide
 from masafi_simtwin.documents.net_item import PORT_RADIUS, NetItem
 from masafi_simtwin.documents.ruler import MILLIMETRES, Ruler, RulerCorner, RulerUnit
@@ -503,11 +503,13 @@ class CanvasView(QGraphicsView):
         super().keyPressEvent(event)
 
     def contextMenuEvent(self, event) -> None:  # noqa: N802  (Qt naming)
-        """Offer to delete the guide under the pointer, or all of them.
+        """Offer what can be done to whatever is under the pointer.
 
-        A guide has no entry in the menu bar to be deleted from, so this is
-        where deleting one is found; when the *Edit* menu grows a *Delete* it
-        should come here rather than repeat this.
+        An arc first, because an arc lies over the sheet a guide runs across and
+        is the smaller target of the two; then the guides.  Neither has an entry
+        in the menu bar to be reached from, so this is where they are found, and
+        when the *Edit* menu grows a *Delete* it should come here rather than
+        repeat this.
 
         Parameters
         ----------
@@ -515,7 +517,9 @@ class CanvasView(QGraphicsView):
             The context menu event.
         """
 
-        menu = self.guide_menu(self.guide_at(event.pos()))
+        menu = self.arc_menu(self.arc_at(event.pos()))
+        if menu is None:
+            menu = self.guide_menu(self.guide_at(event.pos()))
         if menu is None:
             super().contextMenuEvent(event)
             return
@@ -540,6 +544,89 @@ class CanvasView(QGraphicsView):
             if isinstance(item, Guide):
                 return item
         return None
+
+    def arc_at(self, position) -> Arc | None:
+        """Find the arc under a point of the viewport.
+
+        Parameters
+        ----------
+        position : PyQt6.QtCore.QPoint
+            Where to look, in the viewport's coordinates.
+
+        Returns
+        -------
+        masafi_simtwin.documents.arc.Arc, optional
+            The arc, or ``None`` when there is none there.
+        """
+
+        for item in self.items(position):
+            if isinstance(item, Arc):
+                return item
+        return None
+
+    def arc_menu(self, arc: Arc | None) -> QMenu | None:
+        """Build what is offered over an arc.
+
+        Kept apart from showing it, the way :meth:`guide_menu` is, so that what
+        is offered can be checked without a menu going up and blocking on its
+        own event loop.
+
+        The two shapes are one choice, so they are one exclusive group of
+        checkable actions with the arc's own shape already checked: a menu that
+        says what a thing *is* is worth more than one that only says what can be
+        done to it.  It acts on the arc under the pointer and on no other, even
+        when several are selected — a context menu is aimed at a thing.
+
+        Parameters
+        ----------
+        arc : masafi_simtwin.documents.arc.Arc, optional
+            The arc under the pointer, if there is one.
+
+        Returns
+        -------
+        PyQt6.QtWidgets.QMenu, optional
+            The menu, or ``None`` when the pointer is not over an arc.
+        """
+
+        if arc is None:
+            return None
+
+        menu = QMenu(self)
+        shapes = QActionGroup(menu)
+        shapes.setExclusive(True)
+        for shape, label in (
+            (ArcShape.STRAIGHT, self.tr('Straight')),
+            (ArcShape.CURVED, self.tr('Curved')),
+        ):
+            action = menu.addAction(label)
+            action.setCheckable(True)
+            action.setChecked(arc.shape_kind is shape)
+            action.setData(shape)
+            shapes.addAction(action)
+            action.triggered.connect(
+                lambda checked, chosen=shape, one=arc: self.set_arc_shape(one, chosen)
+            )
+
+        menu.addSeparator()
+        delete = menu.addAction(self.tr('Delete Arc'))
+        delete.triggered.connect(lambda: self.remove(arc))
+        return menu
+
+    def set_arc_shape(self, arc: Arc, shape: ArcShape) -> None:
+        """Draw one arc straight or curved from now on.
+
+        Kept as a method rather than written into the menu so that the menu is
+        the only thing a test of the menu has to drive.
+
+        Parameters
+        ----------
+        arc : masafi_simtwin.documents.arc.Arc
+            The arc.
+        shape : masafi_simtwin.documents.arc.ArcShape
+            Which shape.
+        """
+
+        arc.shape_kind = shape
 
     def guide_menu(self, guide: Guide | None) -> QMenu | None:
         """Build what is offered over a guide, or over the bare sheet.
