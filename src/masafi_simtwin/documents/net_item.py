@@ -131,6 +131,28 @@ def ink_colour(selected: bool, option) -> QColor:
     return option.palette.color(role)
 
 
+def paper_colour(option) -> QColor:
+    """Give the colour of the sheet a thing of the net is drawn on.
+
+    ``Base`` is what :meth:`CanvasView.drawBackground` fills the sheet with, so
+    this is what a thing is filled with to read as a hole in whatever it is
+    over — a connecting point on a transition, a handle on a curve — and what a
+    place is filled with to be the colour of the paper it sits on.
+
+    Parameters
+    ----------
+    option : PyQt6.QtWidgets.QStyleOptionGraphicsItem
+        What the view knows about drawing it, its palette included.
+
+    Returns
+    -------
+    PyQt6.QtGui.QColor
+        The colour.
+    """
+
+    return option.palette.color(QPalette.ColorRole.Base)
+
+
 class NetItem(QGraphicsItem):
     """One item of a net, drawn on the sheet.
 
@@ -657,7 +679,7 @@ class NetItem(QGraphicsItem):
             return
 
         painter.setPen(QPen(option.palette.color(QPalette.ColorRole.Link), 0.0))
-        painter.setBrush(option.palette.color(QPalette.ColorRole.Base))
+        painter.setBrush(paper_colour(option))
         for point in self.ports():
             painter.drawEllipse(point, PORT_RADIUS, PORT_RADIUS)
 

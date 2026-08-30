@@ -12,6 +12,8 @@ from masafi_simtwin.documents.arc import (
     ARROW_LENGTH,
     CURVE_BOW,
     DEFAULT_WEIGHT,
+    HANDLE_SIZE,
+    HANDLES,
     Arc,
     ArcShape,
 )
@@ -921,7 +923,9 @@ def test_an_arc_is_straight_until_it_is_told_otherwise(editor, net):
 
 
 def test_a_curved_arc_bows_off_its_chord(editor, net):
-    """A single quadratic Bézier: one control point, and no S."""
+    """A cubic Bézier with a control point at each end, and no S until one is
+    asked for: both controls start the same distance across the chord, which is
+    the cubic that draws exactly a single bow of :data:`CURVE_BOW`."""
 
     place, transition = net
     arc = editor.add_arc(place, transition)
@@ -932,13 +936,15 @@ def test_a_curved_arc_bows_off_its_chord(editor, net):
     assert QPainterPath.ElementType.LineToElement not in elements(arc.path())
 
     chord = arc.line
-    middle = chord.center()
-    control = arc.control_point()
-    off = QPointF(control.x() - middle.x(), control.y() - middle.y())
+    across = [arc.chord_frame(control)[1] for control in arc.control_points()]
 
-    assert off != QPointF(0.0, 0.0)
-    assert (off.x() ** 2 + off.y() ** 2) ** 0.5 == pytest.approx(
-        chord.length() * CURVE_BOW
+    assert across[0] == pytest.approx(across[1])
+    assert across[0] == pytest.approx(CURVE_BOW * 2.0 / 3.0)
+
+    bow = arc.path().pointAtPercent(0.5) - chord.center()
+
+    assert (bow.x() ** 2 + bow.y() ** 2) ** 0.5 == pytest.approx(
+        chord.length() * CURVE_BOW / 2.0, rel=1e-3
     )
 
 
@@ -967,12 +973,11 @@ def test_two_arcs_drawn_both_ways_bow_apart(editor, net):
     for arc in (there, back):
         arc.shape_kind = ArcShape.CURVED
 
-    middle = there.line.center()
-    away = there.control_point() - middle
-    back_away = back.control_point() - back.line.center()
+    away = there.path().pointAtPercent(0.5) - there.line.center()
+    back_away = back.path().pointAtPercent(0.5) - back.line.center()
 
-    assert away.x() == pytest.approx(-back_away.x())
-    assert away.y() == pytest.approx(-back_away.y())
+    assert away.x() == pytest.approx(-back_away.x(), abs=1e-6)
+    assert away.y() == pytest.approx(-back_away.y(), abs=1e-6)
 
 
 def test_a_curved_arc_arrives_along_its_own_tangent(editor, net):
@@ -1154,3 +1159,285 @@ def test_an_arc_is_found_under_the_pointer(editor, net):
     middle = editor.view.mapFromScene(arc.line.center())
 
     assert editor.view.arc_at(middle) is arc
+
+
+# ----------------------------------------------------------------------
+# Shaping a curve by hand
+# ----------------------------------------------------------------------
+
+
+@pytest.fixture
+def curve(editor, net):
+    """Give a curved arc, selected, so that its handles are out.
+
+    Parameters
+    ----------
+    editor : masafi_simtwin.documents.petri_net.PetriNetEditor
+        The document.
+    net : tuple
+        The place and the transition.
+
+    Returns
+    -------
+    masafi_simtwin.documents.arc.Arc
+        The arc.
+    """
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    arc.shape_kind = ArcShape.CURVED
+    arc.setSelected(True)
+    return arc
+
+
+def test_a_straight_arc_has_nothing_to_shape(editor, net):
+    """There is no curve on it to take hold of."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    arc.setSelected(True)
+
+    assert arc.handles() == {}
+
+
+def test_a_curve_shows_its_handles_only_while_it_is_selected(editor, net):
+    """A sheet showing a handle for every arc on it is a sheet nobody can read."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    arc.shape_kind = ArcShape.CURVED
+
+    assert arc.handles() == {}
+
+    arc.setSelected(True)
+    assert sorted(arc.handles()) == sorted(HANDLES)
+
+
+def test_the_middle_handle_sits_on_the_curve(curve):
+    """On it rather than off it, which is what makes it a thing to take hold of
+    rather than a thing to interpret."""
+
+    assert curve.handles()['middle'] == curve.curve_middle()
+    assert curve.curve_middle() == curve.path().pointAtPercent(0.5)
+
+
+def test_the_other_two_handles_are_the_control_points(curve):
+    """One for each end, which is what says where the curve sets off."""
+
+    first, second = curve.control_points()
+
+    assert curve.handles()['start'] == first
+    assert curve.handles()['end'] == second
+
+
+def test_a_handle_is_found_by_being_near_enough(curve):
+    """A handle that has to be hit exactly is a handle nobody can use."""
+
+    middle = curve.handles()['middle']
+
+    assert curve.handle_at(middle) == 'middle'
+    assert curve.handle_at(QPointF(middle.x() + 0.5, middle.y())) == 'middle'
+    assert curve.handle_at(QPointF(middle.x() + 20.0, middle.y())) is None
+
+
+def test_a_handle_can_be_pressed_at_all(curve):
+    """A handle outside the shape is a handle no press ever reaches, the scene
+    sending a press to the item whose shape it fell in."""
+
+    for where in curve.handles().values():
+        assert curve.shape().contains(where)
+
+
+def test_dragging_the_middle_handle_moves_the_curve_under_the_pointer(editor, curve):
+    """It lands where it was put rather than short of it: a cubic's half-way
+    point moves three quarters as far as its controls do, so the controls are
+    moved four thirds of the way.  Where it was put is the nearest millimetre,
+    every handle snapping like everything else on the sheet."""
+
+    was = curve.curve_middle()
+    wants = QPointF(was.x(), was.y() + 8.0)
+    snapped = QPointF(editor.view.snap(wants.x()), editor.view.snap(wants.y()))
+
+    curve.move_handle('middle', wants)
+
+    assert curve.curve_middle().x() == pytest.approx(snapped.x(), abs=1e-6)
+    assert curve.curve_middle().y() == pytest.approx(snapped.y(), abs=1e-6)
+
+
+def test_dragging_the_middle_handle_keeps_the_curve_one_bow(curve):
+    """Both control points shift by the same amount, so the plain gesture
+    cannot make an S of it by accident."""
+
+    before = [curve.chord_frame(control) for control in curve.control_points()]
+    middle = curve.curve_middle()
+
+    curve.move_handle('middle', QPointF(middle.x() + 5.0, middle.y() + 5.0))
+
+    after = [curve.chord_frame(control) for control in curve.control_points()]
+    shifts = [
+        (now[0] - then[0], now[1] - then[1]) for then, now in zip(before, after)
+    ]
+
+    assert shifts[0][0] == pytest.approx(shifts[1][0])
+    assert shifts[0][1] == pytest.approx(shifts[1][1])
+
+
+def test_dragging_a_control_handle_moves_only_that_end(curve):
+    """Which is what says where the curve sets off from that end."""
+
+    before = curve.control_points()
+    wants = QPointF(before[0].x() + 6.0, before[0].y() - 4.0)
+
+    curve.move_handle('start', wants)
+    after = curve.control_points()
+
+    assert after[0] != before[0]
+    assert after[1] == before[1]
+
+
+def test_the_two_control_handles_can_be_pulled_into_an_s(curve):
+    """Which is what the handles are for; the middle one is the gesture that
+    cannot do it."""
+
+    first, second = curve.control_points()
+    chord = curve.line
+    curve.move_handle('start', curve.chord_point(1.0 / 3.0, 0.4))
+    curve.move_handle('end', curve.chord_point(2.0 / 3.0, -0.4))
+
+    across = [curve.chord_frame(control)[1] for control in curve.control_points()]
+
+    assert across[0] > 0.0
+    assert across[1] < 0.0
+
+
+def test_a_shaped_curve_keeps_its_shape_when_the_net_is_dragged_about(curve, net):
+    """A control point is kept in the chord's own frame, so the whole picture
+    turns and scales with the arc instead of coming apart."""
+
+    place, transition = net
+    curve.move_handle('start', curve.chord_point(0.2, 0.5))
+    shaped = [curve.chord_frame(control) for control in curve.control_points()]
+
+    transition.setPos(QPointF(30.0, 90.0))
+    place.setPos(QPointF(90.0, 30.0))
+    after = [curve.chord_frame(control) for control in curve.control_points()]
+
+    for then, now in zip(shaped, after):
+        assert now[0] == pytest.approx(then[0], abs=1e-6)
+        assert now[1] == pytest.approx(then[1], abs=1e-6)
+
+
+def test_a_handle_snaps_to_the_millimetre(curve):
+    """The same grid everything else on the sheet lands on."""
+
+    middle = curve.curve_middle()
+    curve.move_handle('middle', QPointF(middle.x() + 4.4, middle.y() + 3.6))
+    landed = curve.curve_middle()
+
+    assert landed.x() == pytest.approx(round(landed.x()), abs=1e-6)
+    assert landed.y() == pytest.approx(round(landed.y()), abs=1e-6)
+
+
+def test_a_straight_arc_ignores_its_handles_being_moved(editor, net):
+    """There is no curve to shape, so nothing happens."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    arc.setSelected(True)
+    before = arc.path().pointAtPercent(0.5)
+
+    arc.move_handle('middle', QPointF(0.0, 0.0))
+
+    assert arc.path().pointAtPercent(0.5) == before
+
+
+def scene_mouse(view, kind: QEvent.Type, position: QPointF) -> QMouseEvent:
+    """Build a mouse event the *scene* will act on, not only the view.
+
+    A scene hit-tests a mouse event through its **global** position — it maps it
+    back into the view that sent it — so an event whose global position is not
+    where the widget actually is reaches the view's own handlers and stops
+    there.  Every other test here drives ``CanvasView``'s overrides, which read
+    the local position and never ask the scene; this one has to get all the way
+    to an item.
+
+    Parameters
+    ----------
+    view : masafi_simtwin.documents.canvas.CanvasView
+        The view the event is for.
+    kind : PyQt6.QtCore.QEvent.Type
+        Press, move or release.
+    position : PyQt6.QtCore.QPointF
+        Where it happened, in the viewport's coordinates.
+
+    Returns
+    -------
+    PyQt6.QtGui.QMouseEvent
+        The event.
+    """
+
+    return QMouseEvent(
+        kind,
+        QPointF(position),
+        QPointF(view.viewport().mapToGlobal(position.toPoint())),
+        Qt.MouseButton.LeftButton,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+
+
+def test_the_handles_are_dragged_with_the_mouse(editor, net, curve):
+    """The whole chain: a press on a handle reaches the arc through the scene,
+    the drag reshapes it, and letting go lets go."""
+
+    view = editor.view
+    was = curve.curve_middle()
+    start = viewport_point(view, was)
+    end = viewport_point(view, QPointF(was.x(), was.y() + 10.0))
+
+    view.mousePressEvent(scene_mouse(view, QEvent.Type.MouseButtonPress, start))
+    view.mouseMoveEvent(scene_mouse(view, QEvent.Type.MouseMove, end))
+    moved = curve.curve_middle()
+    view.mouseReleaseEvent(scene_mouse(view, QEvent.Type.MouseButtonRelease, end))
+
+    assert moved.y() > was.y() + 5.0
+
+    view.mouseMoveEvent(
+        scene_mouse(
+            view, QEvent.Type.MouseMove, viewport_point(view, QPointF(10.0, 90.0))
+        )
+    )
+    assert curve.curve_middle() == moved
+
+
+@pytest.mark.parametrize('colors', SCHEMES, ids=SCHEME_NAMES)
+def test_a_handle_is_drawn_the_way_a_connecting_point_is(ink, curve, colors):
+    """A hairline of the accent around the colour of the paper.
+
+    The middle handle is read, which is the hard case: it sits **on** the curve,
+    and the curve under a selected arc is drawn in the accent too — so the paper
+    in the middle of the square is the fill covering the line, exactly as a
+    connecting point is a hole in a transition.  What tells a handle from a
+    connecting point is its shape, not its colour.
+    """
+
+    where = curve.handles()['middle']
+    close = ink.close_up(where.x(), where.y(), 40.0)
+    image = close.painted(curve, colors)
+
+    assert close.at(image) == QColor(colors.editor)
+    assert ink.holds(
+        close.window(image, 0.0, 0.0, HANDLE_SIZE / 2.0), QColor(colors.accent)
+    )
+
+
+@pytest.mark.parametrize('colors', SCHEMES, ids=SCHEME_NAMES)
+def test_a_handle_is_not_a_solid_block_of_accent(ink, curve, colors):
+    """Which is what it was before, and what made three of them a heavy thing to
+    put on a drawing."""
+
+    where = curve.handles()['start']
+    close = ink.close_up(where.x(), where.y(), 40.0)
+    inside = close.window(close.painted(curve, colors), 0.0, 0.0, HANDLE_SIZE / 4.0)
+
+    assert all(pixel == QColor(colors.editor) for pixel in inside)

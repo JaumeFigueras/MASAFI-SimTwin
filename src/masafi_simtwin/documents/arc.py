@@ -32,13 +32,37 @@ from a local coordinate system, and a line whose two ends belong to two other
 items has nothing natural to measure from.
 
 An arc is drawn **straight or curved**, which is
-:class:`ArcShape` and is chosen from its context menu.  The curve is a single
-quadratic Bézier with one control point — no S, no corners, nothing to drag —
-because the first thing worth having is a way of telling two arcs apart when
-they run between the same two places, and one bow does that.  Which way it bows
-follows the arc's own direction, so a pair drawn both ways between one place and
-one transition bows apart of its own accord.  Richer shapes come later, and
-:class:`ArcShape` is the one place they will be added.
+:class:`ArcShape` and is chosen from its context menu.  A curve is a cubic
+Bézier with a control point at each end, and it is **shaped by hand**: selecting
+a curved arc brings out three handles, in the manner of a Bézier in DIA.
+
+Handles are drawn the way the connecting points are — a hairline of the accent
+around the colour of the paper — and are told apart from them by their shape
+alone: a handle is square, a connecting point is round.
+
+``middle``
+    On the curve at its half-way point.  Dragging it moves the whole bow — both
+    control points together — so the plain gesture keeps the curve a single bow
+    and cannot make an S of it by accident.
+``start`` and ``end``
+    The two control points, each joined to the end it belongs to by a **dashed**
+    line, which is what says where the curve sets off from that end and where it
+    comes in at the other.  Dragging them apart is what an S is; that is what
+    the handles are for, and it is the person's to do rather than the code's to
+    prevent.
+
+**A control point is kept in the chord's own frame** — how far along the two
+ends it lies and how far across, as fractions of the distance between them — not
+as a place on the sheet.  So a curve shaped by hand keeps exactly that shape
+when either of its items is dragged: the whole picture turns and scales with the
+chord instead of coming apart.  Until a handle is touched the two are
+:data:`DEFAULT_CONTROLS`, which draws the same single bow of :data:`CURVE_BOW`
+that the shape had before there were handles at all — the cubic that is
+identical to that quadratic.
+
+Which way an untouched curve bows follows the arc's own direction, so a pair
+drawn both ways between one place and one transition bows apart of its own
+accord.
 
 The **weight** is how many tokens the arc carries, one by default.  It is drawn
 beside the line only when it is not one, which is the convention of every drawn
@@ -54,6 +78,7 @@ from __future__ import annotations
 
 import math
 
+from collections.abc import Callable
 from enum import Enum
 
 from PyQt6.QtCore import QLineF, QPointF, QRectF, Qt
@@ -66,6 +91,7 @@ from masafi_simtwin.documents.net_item import (
     ITEM_PEN_SELECTED,
     NetItem,
     ink_colour,
+    paper_colour,
 )
 
 #: How far from the line, in millimetres, the pointer may be and still take hold
@@ -88,6 +114,30 @@ DEFAULT_WEIGHT = 1
 #: between its two ends.  A fraction rather than a length, so that a long arc
 #: and a short one bow by the same amount *to the eye*.
 CURVE_BOW = 0.18
+
+#: Where the two control points of an untouched curve sit, in the chord's own
+#: frame: how far along the chord, and how far across it, as fractions of its
+#: length.  These are the cubic that draws exactly the quadratic bow of
+#: :data:`CURVE_BOW` — a quadratic with control ``Q`` is the cubic with controls
+#: two thirds of the way from each end towards ``Q``.
+DEFAULT_CONTROLS = (
+    (1.0 / 3.0, CURVE_BOW * 2.0 / 3.0),
+    (2.0 / 3.0, CURVE_BOW * 2.0 / 3.0),
+)
+
+#: How big a handle is drawn, in millimetres of side.  A square, so that a
+#: handle is never mistaken for a connecting point, which is a ring.
+HANDLE_SIZE = 1.4
+
+#: How far from a handle, in millimetres, the pointer may be and still take hold
+#: of it.  More than half its side: a handle is aimed at, and a handle that has
+#: to be hit exactly is a handle nobody can use.
+HANDLE_GRAB = 1.3
+
+#: The handles a curved arc carries, in the order they are drawn and searched.
+#: The middle one is first, being the one that is aimed at most and the one that
+#: overlaps the others when a curve is pulled flat.
+HANDLES = ('middle', 'start', 'end')
 
 
 class ArcShape(Enum):
@@ -131,6 +181,10 @@ class Arc(QGraphicsItem):
         not drawn.
     shape_kind : ArcShape, optional
         Whether it is drawn straight or curved.  Straight by default.
+    snap : collections.abc.Callable, optional
+        What to round a handle to as it is dragged.  The canvas passes its own,
+        which is the millimetre at every zoom; without one a handle goes where
+        it is put.
     parent : PyQt6.QtWidgets.QGraphicsItem, optional
         Parent item.
 
@@ -152,6 +206,7 @@ class Arc(QGraphicsItem):
         target_port: int | None = None,
         weight: int = DEFAULT_WEIGHT,
         shape_kind: ArcShape = ArcShape.STRAIGHT,
+        snap: Callable[[float], float] | None = None,
         parent: QGraphicsItem | None = None,
     ) -> None:
         super().__init__(parent)
@@ -159,6 +214,9 @@ class Arc(QGraphicsItem):
         self.target = target
         self._weight = int(weight)
         self._shape_kind = ArcShape(shape_kind)
+        self._snap = snap
+        self._controls = [list(control) for control in DEFAULT_CONTROLS]
+        self._dragging: str | None = None
         self._line = QLineF()
 
         if source_port is None:
@@ -292,27 +350,198 @@ class Arc(QGraphicsItem):
 
         return self._shape_kind is ArcShape.CURVED
 
-    def control_point(self) -> QPointF:
-        """Give the one point that bends a curved arc.
+    def chord_point(self, along: float, across: float) -> QPointF:
+        """Turn a place in the chord's own frame into a place on the sheet.
 
-        A quadratic Bézier has a single control point, and this is it: the
-        middle of the chord, moved :data:`CURVE_BOW` of the chord's length to
-        the **left of the way the arc is going**.  Following the arc's own
-        direction is what makes a place and a transition joined both ways bow
-        apart rather than on top of one another, without either arc knowing the
-        other is there.
+        The frame is the arc's two ends: ``along`` runs from nought at the
+        source to one at the target, and ``across`` is at right angles to it, to
+        the **left of the way the arc is going**.  Both are fractions of the
+        distance between the ends, so a shape kept in this frame turns and
+        scales with the arc rather than coming apart when an item is dragged.
+
+        Parameters
+        ----------
+        along : float
+            How far along, as a fraction.
+        across : float
+            How far across, as a fraction.
 
         Returns
         -------
         PyQt6.QtCore.QPointF
-            The control point, in scene millimetres.  It is on the chord itself
-            for an arc with no length to bow across.
+            The place, in scene millimetres.
         """
 
-        away = self._perpendicular()
-        reach = self._line.length() * CURVE_BOW
-        middle = self._line.center()
-        return QPointF(middle.x() + away.x() * reach, middle.y() + away.y() * reach)
+        length = self._line.length()
+        origin = self._line.p1()
+        if not length:
+            return QPointF(origin)
+
+        forward = QPointF(self._line.dx() / length, self._line.dy() / length)
+        sideways = QPointF(-forward.y(), forward.x())
+        return QPointF(
+            origin.x() + (forward.x() * along + sideways.x() * across) * length,
+            origin.y() + (forward.y() * along + sideways.y() * across) * length,
+        )
+
+    def chord_frame(self, point: QPointF) -> tuple[float, float]:
+        """Turn a place on the sheet into a place in the chord's own frame.
+
+        The other half of :meth:`chord_point`, and what a dragged handle is
+        stored as.
+
+        Parameters
+        ----------
+        point : PyQt6.QtCore.QPointF
+            The place, in scene millimetres.
+
+        Returns
+        -------
+        tuple of float
+            How far along and how far across, as fractions of the chord.
+        """
+
+        length = self._line.length()
+        if not length:
+            return 0.0, 0.0
+
+        forward = QPointF(self._line.dx() / length, self._line.dy() / length)
+        sideways = QPointF(-forward.y(), forward.x())
+        reach = point - self._line.p1()
+        return (
+            (reach.x() * forward.x() + reach.y() * forward.y()) / length,
+            (reach.x() * sideways.x() + reach.y() * sideways.y()) / length,
+        )
+
+    def control_points(self) -> list[QPointF]:
+        """Give the two points that bend a curved arc.
+
+        Returns
+        -------
+        list of PyQt6.QtCore.QPointF
+            The one that says where the curve leaves the source and the one that
+            says where it comes in at the target, in scene millimetres.
+        """
+
+        return [self.chord_point(along, across) for along, across in self._controls]
+
+    def curve_middle(self) -> QPointF:
+        """Give the half-way point of the arc as it is drawn.
+
+        Returns
+        -------
+        PyQt6.QtCore.QPointF
+            Where the middle handle sits, in scene millimetres — on the curve
+            itself rather than off it, which is what makes it a thing to take
+            hold of rather than a thing to interpret.
+        """
+
+        path = self.path()
+        if not path.length():
+            return self._line.center()
+        return path.pointAtPercent(0.5)
+
+    # ------------------------------------------------------------------
+    # The handles a curve is shaped by
+    # ------------------------------------------------------------------
+
+    def handles(self) -> dict:
+        """Give the handles a curved arc is shaped by, and where they are.
+
+        There are none on a straight arc and none on one that is not selected: a
+        sheet showing a handle for every arc on it is a sheet nobody can read,
+        and selecting a thing is how a person says which one they mean.
+
+        Returns
+        -------
+        dict
+            ``middle``, on the curve half way along; ``start`` and ``end``, the
+            two control points.  Empty when there is nothing to shape.
+        """
+
+        if self._shape_kind is not ArcShape.CURVED or not self.isSelected():
+            return {}
+
+        first, second = self.control_points()
+        return {'middle': self.curve_middle(), 'start': first, 'end': second}
+
+    def handle_at(self, point: QPointF) -> str | None:
+        """Find the handle a scene position takes hold of.
+
+        Parameters
+        ----------
+        point : PyQt6.QtCore.QPointF
+            Where to look, in scene millimetres.
+
+        Returns
+        -------
+        str, optional
+            Which handle, in the order of :data:`HANDLES` so that the middle one
+            wins where they overlap, or ``None`` for none of them.
+        """
+
+        found = self.handles()
+        for name in HANDLES:
+            where = found.get(name)
+            if where is None:
+                continue
+            if math.hypot(point.x() - where.x(), point.y() - where.y()) <= HANDLE_GRAB:
+                return name
+        return None
+
+    def move_handle(self, name: str, point: QPointF) -> None:
+        """Put one handle where the pointer is, and reshape the curve.
+
+        The **middle** handle moves the whole bow: both control points shift by
+        the same amount, so the curve keeps its shape and only its depth and its
+        lean change.  A cubic's half-way point moves three quarters as far as
+        its controls do, so the controls are moved four thirds of the way — the
+        handle then lands under the pointer rather than short of it.
+
+        The other two are the control points themselves, and moving them apart
+        is what makes an S.  That is what they are for.
+
+        Parameters
+        ----------
+        name : str
+            Which handle, one of :data:`HANDLES`.
+        point : PyQt6.QtCore.QPointF
+            Where to put it, in scene millimetres.
+        """
+
+        if self._shape_kind is not ArcShape.CURVED:
+            return
+        if self._snap is not None:
+            point = QPointF(self._snap(point.x()), self._snap(point.y()))
+
+        self.prepareGeometryChange()
+        if name == 'middle':
+            was = self.chord_frame(self.curve_middle())
+            wants = self.chord_frame(point)
+            shift = ((wants[0] - was[0]) * 4.0 / 3.0, (wants[1] - was[1]) * 4.0 / 3.0)
+            for control in self._controls:
+                control[0] += shift[0]
+                control[1] += shift[1]
+        elif name in ('start', 'end'):
+            self._controls[0 if name == 'start' else 1] = list(self.chord_frame(point))
+        self.update()
+
+    def handle_rect(self, at: QPointF) -> QRectF:
+        """Give the square a handle is drawn as.
+
+        Parameters
+        ----------
+        at : PyQt6.QtCore.QPointF
+            Where the handle is, in scene millimetres.
+
+        Returns
+        -------
+        PyQt6.QtCore.QRectF
+            The square, centred there.
+        """
+
+        half = HANDLE_SIZE / 2.0
+        return QRectF(at.x() - half, at.y() - half, HANDLE_SIZE, HANDLE_SIZE)
 
     # ------------------------------------------------------------------
     # The weight
@@ -404,8 +633,8 @@ class Arc(QGraphicsItem):
         """Give the unit vector the arc is travelling in when it arrives.
 
         The chord for a straight arc, and the tangent at the end for a curved
-        one — which for a quadratic Bézier is the way from its control point to
-        its end.
+        one — which for a cubic Bézier is the way from its second control point
+        to its end.
 
         Returns
         -------
@@ -414,7 +643,7 @@ class Arc(QGraphicsItem):
         """
 
         if self._shape_kind is ArcShape.CURVED:
-            reach = QLineF(self.control_point(), self._line.p2())
+            reach = QLineF(self.control_points()[1], self._line.p2())
         else:
             reach = QLineF(self._line)
         length = reach.length()
@@ -460,7 +689,8 @@ class Arc(QGraphicsItem):
 
         path = QPainterPath(self._line.p1())
         if self._shape_kind is ArcShape.CURVED:
-            path.quadTo(self.control_point(), self._line.p2())
+            first, second = self.control_points()
+            path.cubicTo(first, second, self._line.p2())
         else:
             path.lineTo(self._line.p2())
         return path
@@ -507,15 +737,18 @@ class Arc(QGraphicsItem):
         Returns
         -------
         PyQt6.QtCore.QRectF
-            The arc as it is drawn, the arrowhead, the number beside it and the
-            band the line can be taken hold of in.
+            The arc as it is drawn, the arrowhead, the number beside it, its
+            handles when it has any, and the band the line can be taken hold of
+            in.
         """
 
         area = self.path().boundingRect().normalized()
         weight = self.weight_path()
         if weight is not None:
             area = area.united(weight.boundingRect())
-        reach = max(ARC_GRAB, ARROW_WIDTH, ITEM_PEN_SELECTED)
+        for where in self.handles().values():
+            area = area.united(self.handle_rect(where))
+        reach = max(ARC_GRAB, ARROW_WIDTH, ITEM_PEN_SELECTED, HANDLE_GRAB)
         return area.adjusted(-reach, -reach, reach, reach)
 
     def shape(self) -> QPainterPath:
@@ -524,14 +757,19 @@ class Arc(QGraphicsItem):
         Returns
         -------
         PyQt6.QtGui.QPainterPath
-            The line stroked to :data:`ARC_GRAB`, with the arrowhead, because a
-            line a third of a millimetre wide is a line nobody can click on.
+            The line stroked to :data:`ARC_GRAB`, with the arrowhead and with a
+            reach around each handle — a line a third of a millimetre wide is a
+            line nobody can click on, and a handle outside the shape is a handle
+            no press ever reaches, the scene sending a press to the item whose
+            shape it fell in.
         """
 
         stroker = QPainterPathStroker()
         stroker.setWidth(ARC_GRAB * 2.0)
         band = stroker.createStroke(self.path())
         band.addPath(self.arrow())
+        for where in self.handles().values():
+            band.addEllipse(where, HANDLE_GRAB, HANDLE_GRAB)
         return band
 
     def paint(self, painter, option, widget=None) -> None:
@@ -563,3 +801,92 @@ class Arc(QGraphicsItem):
         weight = self.weight_path()
         if weight is not None:
             painter.drawPath(weight)
+
+        self._paint_handles(painter, option)
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802  (Qt naming)
+        """Take hold of a handle, or leave the press to the scene.
+
+        Parameters
+        ----------
+        event : PyQt6.QtWidgets.QGraphicsSceneMouseEvent
+            The mouse event.
+        """
+
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._dragging = self.handle_at(event.scenePos())
+            if self._dragging is not None:
+                event.accept()
+                return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802  (Qt naming)
+        """Drag whichever handle was taken hold of.
+
+        Parameters
+        ----------
+        event : PyQt6.QtWidgets.QGraphicsSceneMouseEvent
+            The mouse event.
+        """
+
+        if self._dragging is not None:
+            self.move_handle(self._dragging, event.scenePos())
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802  (Qt naming)
+        """Let go of the handle.
+
+        Parameters
+        ----------
+        event : PyQt6.QtWidgets.QGraphicsSceneMouseEvent
+            The mouse event.
+        """
+
+        if self._dragging is not None:
+            self._dragging = None
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def _paint_handles(self, painter, option) -> None:
+        """Draw the handles a selected curve is shaped by.
+
+        A handle is drawn the way a connecting point is: a **hairline** of the
+        accent — one pixel at every zoom — around the colour of the paper.  It
+        is a thing to take hold of rather than a mark on the drawing, and the
+        two are told apart by their shape alone, a handle being square and a
+        connecting point round.  The fill is what makes a handle legible over
+        the curve it sits on, exactly as it makes a connecting point legible
+        over a transition.
+
+        Each control point is joined to the end it belongs to by a **dashed**
+        line, which is what says that it is that end's — the line is not part of
+        the arc and is not something the arc goes along, so it is drawn the way
+        a guide is drawn rather than the way an arc is.
+
+        Parameters
+        ----------
+        painter : PyQt6.QtGui.QPainter
+            The painter of the view.
+        option : PyQt6.QtWidgets.QStyleOptionGraphicsItem
+            What the view knows about drawing this item, its palette included.
+        """
+
+        found = self.handles()
+        if not found:
+            return
+
+        accent = ink_colour(True, option)
+        lead = QPen(accent, 0.0)
+        lead.setStyle(Qt.PenStyle.DashLine)
+        painter.setPen(lead)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawLine(QLineF(self._line.p1(), found['start']))
+        painter.drawLine(QLineF(self._line.p2(), found['end']))
+
+        painter.setPen(QPen(accent, 0.0))
+        painter.setBrush(paper_colour(option))
+        for name in HANDLES:
+            painter.drawRect(self.handle_rect(found[name]))

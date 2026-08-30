@@ -40,13 +40,14 @@ from __future__ import annotations
 import math
 
 from PyQt6.QtCore import QPointF, QRectF
-from PyQt6.QtGui import QPainterPath, QPalette
+from PyQt6.QtGui import QPainterPath
 
 from masafi_simtwin.documents.net_item import (
     ITEM_PEN,
     ITEM_PEN_SELECTED,
     PORT_RADIUS,
     NetItem,
+    paper_colour,
 )
 
 #: How far across a place is, in millimetres.  One centimetre.
@@ -167,5 +168,5 @@ class Place(NetItem):
         """
 
         painter.setPen(self.pen(option))
-        painter.setBrush(option.palette.color(QPalette.ColorRole.Base))
+        painter.setBrush(paper_colour(option))
         painter.drawEllipse(QPointF(0.0, 0.0), PLACE_RADIUS, PLACE_RADIUS)

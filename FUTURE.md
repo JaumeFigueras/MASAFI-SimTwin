@@ -413,34 +413,54 @@ drawing layer can be built and looked at without it, which is what this is.
 
 ---
 
-## An arc is straight or bowed, and its bow cannot be adjusted
+## A curve has one segment, however it is shaped
 
-**Now.** `ArcShape` has two values. A straight arc is one segment; a curved one is a single quadratic
-Bézier bowing `CURVE_BOW` — 18% of its own length — to the left of the way it is going. That fraction
-is a module constant: there is no handle to drag, no way to bow one arc more than another, and no way
-to bow it the *other* way. There are still no waypoints, so no arc can be made to go round a third
-item between its ends.
+**Now.** `ArcShape` has two values. A curved arc is a **single** cubic Bézier: two control points,
+three handles, and no way to add a third bend. It can be bowed, leaned and pulled into an S by hand,
+but it cannot be made to go round a third item between its ends, because doing that needs the curve
+to be cut into more than one segment.
 
-**Why it was done this way.** It is what was asked for, and it is the shape that earns its keep first:
-one bow is what tells two arcs apart when they run between the same pair, and following the arc's
-direction makes a both-ways pair separate with no arc knowing about the other. Everything richer — an
-S, waypoints, orthogonal routing — is a second editing gesture and a second thing to store, and was
-deliberately left for later.
+**Why it was done this way.** One segment is what was asked for, and with handles on it it covers
+what a net actually needs: telling apart two arcs between one pair, and steering an arc clear of a
+label or a neighbour. Waypoints are a second editing gesture — putting a point into a line, dragging
+it, taking it out — and a second thing to store, and they were deliberately left for later.
 
-**When it will not be enough.** Three or more arcs between one pair, which all bow the same way and
-by the same amount and so lie on top of one another. And the first dense net, where an arc has to
-reach past something.
+**When it will not be enough.** A net dense enough that an arc has to go *around* something rather
+than merely lean away from it. One bend cannot get past two obstacles.
 
 **Options.**
 
-- A bow that can be dragged: take hold of a curved arc and move its control point, keeping the
-  distance from the chord and storing it on the arc. `Arc.control_point()` is the one place it is
-  worked out, so it becomes the one place it is read from instead.
-- A bow that counts: give the *n*-th arc between one pair *n* times the bow, the way the ports
-  already pass over one another. It needs the arcs of a pair to be ordered again, which is the
-  machinery `Arc.rank` used to be.
-- Waypoints, and then `ArcShape.STRAIGHT` and `ArcShape.CURVED` become the no-waypoint cases of one
-  general path. `Arc.path()` is the one place that changes either way.
+- Waypoints: a list of places in the chord frame between the two ends, each with its own pair of
+  control points, drawn as one path. `Arc.path()` is the one place that changes, and the handles are
+  the ones that already exist, repeated per segment.
+- Orthogonal routing as a third `ArcShape`, drawing every arc in right angles and putting the corners
+  in itself. It reads well on a grid, it is a great deal more code, and it takes control away rather
+  than giving it.
+- Leave it at one segment and let moving the items be the answer, which is what a net's layout mostly
+  is anyway.
+
+---
+
+## Nothing keeps a hand-shaped curve sensible
+
+**Now.** A control handle can be dragged anywhere at all — behind its own end, miles off the sheet,
+on top of the other control. The curve follows, and a curve whose controls are wild is a curve that
+loops back on itself or vanishes off the paper. Nothing prevents it and nothing puts it right.
+
+**Why it was done this way.** A handle that fights the hand is worse than one that lets a person make
+a mess and undo it. The bounds and the snapping that hold an *item* on the sheet are about where a
+thing **is**; a control point is not where anything is, it is how a line bends.
+
+**When it will not be enough.** The first time someone flings a handle and cannot find it again —
+which is more likely than it sounds, the handles being small and the sheet being four metres wide.
+
+**Options.**
+
+- Hold a control point inside the sheet the way an item is held, through the same `bounds` callable.
+  Cheap, and it means a handle can always be found.
+- A *reset shape* on the arc's context menu, putting both controls back to `DEFAULT_CONTROLS`. One
+  line, and it is the way out of any mess rather than a rule against making one.
+- Both. The second is worth having whatever happens to the first.
 
 ---
 

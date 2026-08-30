@@ -166,7 +166,7 @@ class PetriNetEditor(Canvas):
         if not source.may_connect_to(target):
             return None
 
-        arc = Arc(source, target, source_port, target_port)
+        arc = Arc(source, target, source_port, target_port, snap=self.view.snap)
         self.scene().addItem(arc)
         return arc
 
