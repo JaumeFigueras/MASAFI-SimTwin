@@ -20,7 +20,7 @@ import pytest
 from PyQt6.QtCore import QMimeData, QPointF, QSizeF, Qt
 from PyQt6.QtGui import QDragMoveEvent, QDropEvent
 
-from masafi_simtwin.documents.net_item import PORT_RADIUS, NetItem
+from masafi_simtwin.documents.net_item import PORT_GRAB, PORT_RADIUS, NetItem
 from masafi_simtwin.documents.place import Place
 from masafi_simtwin.documents.transition import Transition
 from masafi_simtwin.library_tree import element_mime_data
@@ -198,11 +198,23 @@ def test_a_connecting_point_is_found_by_being_near_enough(item):
 
     item.setPos(QPointF(50.0, 40.0))
     on = item.scene_ports()[0]
-    near = QPointF(on.x(), on.y() + PORT_RADIUS * 0.5)
-    far = QPointF(on.x(), on.y() + PORT_RADIUS * 2.0)
+    near = QPointF(on.x(), on.y() + PORT_GRAB * 0.5)
+    far = QPointF(on.x(), on.y() + PORT_GRAB * 2.0)
 
     assert item.port_at(near) is not None
     assert item.port_at(far) is None
+
+
+def test_a_connecting_point_is_aimed_at_beyond_where_it_is_drawn(item):
+    """What is drawn is a mark; what is aimed at is wider than the mark."""
+
+    assert PORT_GRAB > PORT_RADIUS
+
+    item.setPos(QPointF(50.0, 40.0))
+    on = item.scene_ports()[0]
+    outside_the_ring = QPointF(on.x(), on.y() + (PORT_RADIUS + PORT_GRAB) / 2.0)
+
+    assert item.port_at(outside_the_ring) is not None
 
 
 def test_the_connecting_points_are_invisible_to_begin_with(item):

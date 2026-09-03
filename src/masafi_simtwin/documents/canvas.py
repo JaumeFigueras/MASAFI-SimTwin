@@ -56,9 +56,9 @@ from PyQt6.QtWidgets import (
 )
 
 from masafi_simtwin import preferences
-from masafi_simtwin.documents.arc import Arc, ArcShape
+from masafi_simtwin.documents.arc import END_HANDLES, Arc, ArcShape
 from masafi_simtwin.documents.guide import Guide
-from masafi_simtwin.documents.net_item import PORT_RADIUS, NetItem
+from masafi_simtwin.documents.net_item import PORT_GRAB, NetItem
 from masafi_simtwin.documents.ruler import MILLIMETRES, Ruler, RulerCorner, RulerUnit
 from masafi_simtwin.library_tree import element_from_mime
 
@@ -234,6 +234,7 @@ class CanvasView(QGraphicsView):
         self._connecting_from: NetItem | None = None
         self._connecting_over: NetItem | None = None
         self._connecting_port = 0
+        self._moving_end: tuple[Arc, str] | None = None
         self._connecting_at = QPointF()
         self._connecting_pressed_at: QPointF | None = None
         self.scale(PIXELS_PER_MM, PIXELS_PER_MM)
@@ -517,7 +518,7 @@ class CanvasView(QGraphicsView):
             The context menu event.
         """
 
-        menu = self.arc_menu(self.arc_at(event.pos()))
+        menu = self.arc_menu(self.arc_at(event.pos()), self.mapToScene(event.pos()))
         if menu is None:
             menu = self.guide_menu(self.guide_at(event.pos()))
         if menu is None:
@@ -564,23 +565,36 @@ class CanvasView(QGraphicsView):
                 return item
         return None
 
-    def arc_menu(self, arc: Arc | None) -> QMenu | None:
+    def arc_menu(self, arc: Arc | None, at: QPointF | None = None) -> QMenu | None:
         """Build what is offered over an arc.
 
         Kept apart from showing it, the way :meth:`guide_menu` is, so that what
         is offered can be checked without a menu going up and blocking on its
         own event loop.
 
-        The two shapes are one choice, so they are one exclusive group of
+        The three shapes are one choice, so they are one exclusive group of
         checkable actions with the arc's own shape already checked: a menu that
         says what a thing *is* is worth more than one that only says what can be
         done to it.  It acts on the arc under the pointer and on no other, even
         when several are selected — a context menu is aimed at a thing.
 
+        An **S-curved** arc offers its points as well, and which entry it offers
+        is decided by where the menu was opened: *Delete Point* over a point,
+        *Add Point* anywhere else along the line.  They are one question — *is
+        there a point here?* — so they are one place in the menu rather than two
+        entries of which one is always dead.  The other two shapes offer
+        neither: a point is a thing an S is led through, and choosing the shape
+        is the step before putting points into it.
+
         Parameters
         ----------
         arc : masafi_simtwin.documents.arc.Arc, optional
             The arc under the pointer, if there is one.
+        at : PyQt6.QtCore.QPointF, optional
+            Where the menu was opened, in scene millimetres, which is where a
+            point would go and which point would go.  Half way along the arc
+            when it is left out, so that a menu asked for without a position —
+            which is what a test does — still offers everything it has.
 
         Returns
         -------
@@ -590,6 +604,8 @@ class CanvasView(QGraphicsView):
 
         if arc is None:
             return None
+        if at is None:
+            at = arc.path().pointAtPercent(0.5)
 
         menu = QMenu(self)
         shapes = QActionGroup(menu)
@@ -597,6 +613,7 @@ class CanvasView(QGraphicsView):
         for shape, label in (
             (ArcShape.STRAIGHT, self.tr('Straight')),
             (ArcShape.CURVED, self.tr('Curved')),
+            (ArcShape.S_CURVED, self.tr('S-Curved')),
         ):
             action = menu.addAction(label)
             action.setCheckable(True)
@@ -606,6 +623,16 @@ class CanvasView(QGraphicsView):
             action.triggered.connect(
                 lambda checked, chosen=shape, one=arc: self.set_arc_shape(one, chosen)
             )
+
+        if arc.shape_kind is ArcShape.S_CURVED:
+            menu.addSeparator()
+            point = arc.point_at(at)
+            if point is None:
+                add = menu.addAction(self.tr('Add Point'))
+                add.triggered.connect(lambda: self.add_arc_point(arc, at))
+            else:
+                drop = menu.addAction(self.tr('Delete Point'))
+                drop.triggered.connect(lambda: self.remove_arc_point(arc, point))
 
         menu.addSeparator()
         delete = menu.addAction(self.tr('Delete Arc'))
@@ -627,6 +654,36 @@ class CanvasView(QGraphicsView):
         """
 
         arc.shape_kind = shape
+
+    def add_arc_point(self, arc: Arc, at: QPointF) -> None:
+        """Put another point into an S-curved arc, where the menu was opened.
+
+        Kept as a method rather than written into the menu, the way
+        :meth:`set_arc_shape` is, so that the menu is the only thing a test of
+        the menu has to drive.
+
+        Parameters
+        ----------
+        arc : masafi_simtwin.documents.arc.Arc
+            The arc.
+        at : PyQt6.QtCore.QPointF
+            Where it was aimed at, in scene millimetres.
+        """
+
+        arc.insert_point(at)
+
+    def remove_arc_point(self, arc: Arc, index: int) -> None:
+        """Take one point out of an S-curved arc again.
+
+        Parameters
+        ----------
+        arc : masafi_simtwin.documents.arc.Arc
+            The arc.
+        index : int
+            Which of its points, counting from the source.
+        """
+
+        arc.remove_point(index)
 
     def guide_menu(self, guide: Guide | None) -> QMenu | None:
         """Build what is offered over a guide, or over the bare sheet.
@@ -844,6 +901,68 @@ class CanvasView(QGraphicsView):
             found.ports_visible = True
         return found
 
+    @property
+    def moving_end(self) -> tuple | None:
+        """tuple, optional: The arc and the end of it being put somewhere else."""
+
+        return self._moving_end
+
+    def arc_end_at(self, position) -> tuple[Arc, str] | None:
+        """Find the end handle of a selected arc under a point of the viewport.
+
+        An end handle sits **on** the connecting point its arc is attached to,
+        which is also where a press starts a *new* arc, so this is asked first
+        and the two gestures cannot both fire.  Only a selected arc has handles,
+        so nothing is in the way until an arc has been chosen.
+
+        Parameters
+        ----------
+        position : PyQt6.QtCore.QPoint
+            Where to look, in the viewport's coordinates.
+
+        Returns
+        -------
+        tuple, optional
+            The arc and which of its ends, or ``None`` when there is no handle
+            there.
+        """
+
+        where = self.mapToScene(position)
+        for item in self.scene().selectedItems():
+            if not isinstance(item, Arc):
+                continue
+            end = item.handle_at(where, END_HANDLES)
+            if end is not None:
+                return item, end
+        return None
+
+    def begin_moving_end(self, arc: Arc, end: str, at: QPointF, pressed_at=None) -> None:
+        """Start putting one end of an arc somewhere else.
+
+        It is the gesture that draws an arc, started from an end rather than
+        from an item: the arc's **other** end is what the line comes out of and
+        stays where it is, and the pointer carries the end being moved.  So the
+        whole of the drawing gesture is reused — the aiming, the lighting up of
+        what may be joined, the landing point, the giving up — and what is
+        different is only what happens when it lands.
+
+        Parameters
+        ----------
+        arc : masafi_simtwin.documents.arc.Arc
+            The arc.
+        end : str
+            ``source`` or ``target``, whichever is being moved.
+        at : PyQt6.QtCore.QPointF
+            Where the pointer is, in the scene.
+        pressed_at : PyQt6.QtCore.QPointF, optional
+            Where the press landed, in the viewport.
+        """
+
+        staying = arc.target if end == 'source' else arc.source
+        port = arc.target_port if end == 'source' else arc.source_port
+        self.begin_connection(staying, port, at, pressed_at)
+        self._moving_end = (arc, end)
+
     def item_at(self, position) -> NetItem | None:
         """Find the item of a net under a point of the viewport.
 
@@ -853,6 +972,10 @@ class CanvasView(QGraphicsView):
         aimed at the visible half that happens to be outside would find nothing
         there.  That is a miss at the very place a person is told to aim, and it
         is silent — no arc is drawn and nothing says why.
+
+        The reach is :data:`masafi_simtwin.documents.net_item.PORT_GRAB` rather
+        than the radius the ring is drawn at, so a point that is drawn small is
+        still a point that can be aimed at.
 
         The shape itself is not widened to include the rings, because what the
         item is *taken hold of* by is its drawn shape: a transition is grabbed by
@@ -876,10 +999,10 @@ class CanvasView(QGraphicsView):
 
         where = self.mapToScene(position)
         near = QRectF(
-            where.x() - PORT_RADIUS,
-            where.y() - PORT_RADIUS,
-            PORT_RADIUS * 2.0,
-            PORT_RADIUS * 2.0,
+            where.x() - PORT_GRAB,
+            where.y() - PORT_GRAB,
+            PORT_GRAB * 2.0,
+            PORT_GRAB * 2.0,
         )
         for item in self.scene().items(near):
             if isinstance(item, NetItem) and item.port_index_at(where) is not None:
@@ -958,6 +1081,7 @@ class CanvasView(QGraphicsView):
         self._connecting_from = None
         self._connecting_over = None
         self._connecting_pressed_at = None
+        self._moving_end = None
         self.viewport().update()
 
     def finish_connection(self, position) -> bool:
@@ -981,6 +1105,11 @@ class CanvasView(QGraphicsView):
         The point it arrives at is :meth:`landing_port` of wherever the pointer
         is, which is the point the preview has been ending on, so an arc lands
         where it was seen to be going.
+
+        An end being *moved* lands the same way and by the same rules, and
+        :meth:`~masafi_simtwin.documents.arc.Arc.reattach` puts it there instead
+        of a new arc being made.  Nothing is emitted for it: the document is not
+        told, because no arc has come or gone.
         """
 
         source = self._connecting_from
@@ -990,7 +1119,14 @@ class CanvasView(QGraphicsView):
 
         leaving = self._connecting_port
         arriving = self.landing_port(target, self.mapToScene(position))
+        moving = self._moving_end
         self.abandon_connection()
+
+        if moving is not None:
+            arc, end = moving
+            arc.reattach(end, target, arriving)
+            return True
+
         self.connection_drawn.emit(source, target, leaving, arriving)
         return True
 
@@ -1035,9 +1171,13 @@ class CanvasView(QGraphicsView):
         The middle button is the one free of meaning once the left one draws and
         selects, and panning with it is what every canvas of this kind does.
 
-        A press on a connecting point starts an arc; a press anywhere else on
-        the same item is left to the scene, which moves it.  A press while an
-        arc is already being drawn is the second click of a **click-click**: an
+        A press on the end handle of a **selected arc** takes that end off and
+        carries it, which is asked before anything else because such a handle
+        sits on the connecting point a press would otherwise start a new arc
+        from.  Otherwise a press on a connecting point starts an arc; a press
+        anywhere else on the same item is left to the scene, which moves it.  A
+        press while an arc is already being drawn is the second click of a
+        **click-click**: an
         arc can be drawn by holding the button down and dragging, or by clicking
         once at each end — which is the one that works when the two items are
         far enough apart that the sheet has to be scrolled between them.
@@ -1061,6 +1201,15 @@ class CanvasView(QGraphicsView):
                     self.abandon_connection()
                 event.accept()
                 return
+            moving = self.arc_end_at(spot)
+            if moving is not None:
+                arc, end = moving
+                self.begin_moving_end(
+                    arc, end, self.mapToScene(spot), event.position()
+                )
+                event.accept()
+                return
+
             pressed = self.port_pressed(spot)
             if pressed is not None:
                 item, port = pressed

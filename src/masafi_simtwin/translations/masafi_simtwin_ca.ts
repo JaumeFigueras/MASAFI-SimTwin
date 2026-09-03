@@ -46,27 +46,42 @@
 </context><context>
     <name>CanvasView</name>
     <message>
-        <location filename="../documents/canvas.py" line="598" />
+        <location filename="../documents/canvas.py" line="614" />
         <source>Straight</source>
         <translation>Recta</translation>
     </message>
     <message>
-        <location filename="../documents/canvas.py" line="599" />
+        <location filename="../documents/canvas.py" line="615" />
         <source>Curved</source>
         <translation>Corba</translation>
     </message>
     <message>
-        <location filename="../documents/canvas.py" line="611" />
+        <location filename="../documents/canvas.py" line="616" />
+        <source>S-Curved</source>
+        <translation>Corba en S</translation>
+    </message>
+    <message>
+        <location filename="../documents/canvas.py" line="631" />
+        <source>Add Point</source>
+        <translation>Afegeix un punt</translation>
+    </message>
+    <message>
+        <location filename="../documents/canvas.py" line="634" />
+        <source>Delete Point</source>
+        <translation>Suprimeix el punt</translation>
+    </message>
+    <message>
+        <location filename="../documents/canvas.py" line="638" />
         <source>Delete Arc</source>
         <translation>Suprimeix l'arc</translation>
     </message>
     <message>
-        <location filename="../documents/canvas.py" line="653" />
+        <location filename="../documents/canvas.py" line="710" />
         <source>Delete Guide</source>
         <translation>Suprimeix la guia</translation>
     </message>
     <message>
-        <location filename="../documents/canvas.py" line="655" />
+        <location filename="../documents/canvas.py" line="712" />
         <source>Delete All Guides</source>
         <translation>Suprimeix totes les guies</translation>
     </message>

@@ -413,38 +413,66 @@ drawing layer can be built and looked at without it, which is what this is.
 
 ---
 
-## A curve has one segment, however it is shaped
+## An S bends where its points are and nowhere else
 
-**Now.** `ArcShape` has two values. A curved arc is a **single** cubic Bézier: two control points,
-three handles, and no way to add a third bend. It can be bowed, leaned and pulled into an S by hand,
-but it cannot be made to go round a third item between its ends, because doing that needs the curve
-to be cut into more than one segment.
+**Now.** `ArcShape.S_CURVED` is led through as many points as it is given, and the curve between them
+is worked out rather than drawn: a uniform Catmull-Rom spline, with the control points of each
+segment fixed at a sixth of the neighbours' chords. So the *route* is a person's to choose and the
+*curvature* is not. Two consequences follow. A **corner** cannot be made — every point is smooth,
+and an arc that should turn a right angle has to be approximated by points close together. And a
+spline through points far apart **overshoots**: pull one point hard away from the line and the curve
+swings past it before coming back, which is the spline doing what a spline does and not a bug.
 
-**Why it was done this way.** One segment is what was asked for, and with handles on it it covers
-what a net actually needs: telling apart two arcs between one pair, and steering an arc clear of a
-label or a neighbour. Waypoints are a second editing gesture — putting a point into a line, dragging
-it, taking it out — and a second thing to store, and they were deliberately left for later.
+**Why it was done this way.** Points that are *on* the curve are the ones a person can aim: putting a
+point on a line means *the line goes here*. A poly-Bézier with its own pair of control handles at
+every point is the general answer, and it is three handles per point to explain, place and keep
+sensible — Inkscape's node editor, in a Petri net editor. The spline gives the whole of what the
+gesture was asked for, *lead this arc round that item*, with one handle per point.
 
-**When it will not be enough.** A net dense enough that an arc has to go *around* something rather
-than merely lean away from it. One bend cannot get past two obstacles.
+**When it will not be enough.** A net drawn in the orthogonal style, where arcs turn square corners;
+or a layout so tight that an overshoot puts an arc through the item it was routed around.
 
 **Options.**
 
-- Waypoints: a list of places in the chord frame between the two ends, each with its own pair of
-  control points, drawn as one path. `Arc.path()` is the one place that changes, and the handles are
-  the ones that already exist, repeated per segment.
-- Orthogonal routing as a third `ArcShape`, drawing every arc in right angles and putting the corners
-  in itself. It reads well on a grid, it is a great deal more code, and it takes control away rather
-  than giving it.
-- Leave it at one segment and let moving the items be the answer, which is what a net's layout mostly
-  is anyway.
+- A per-point tension, or a *sharp / smooth* on each point's context menu, cutting the spline at that
+  knot. Small, and it is where a corner would go.
+- Centripetal Catmull-Rom rather than uniform, which is the standard fix for the overshoot and is a
+  change to one function, `catmull_rom()`.
+- Control handles per point after all, as a fourth shape rather than in place of this one, so the
+  simple gesture stays simple.
+
+---
+
+## An arc cannot be led round anything until it is made an S
+
+**Now.** *Add Point* and *Delete Point* are offered on an S-curved arc and on no other. A person who
+wants a bend in a straight arc chooses *S-Curved* first — which gives the default S of two points —
+and then adds points where they want them. Two visits to the same menu for what feels like one wish.
+
+**Why it was done this way.** A menu entry that silently changes what a thing *is* is worse than one
+that asks. *Add Point* on a straight arc would have to turn it into an S to have anywhere to put the
+point, and the arc would come back curved when all that was asked for was a bend.
+
+**When it will not be enough.** The first time it is used in anger on a net that needs a dozen arcs
+routed: the shape is chosen a dozen times to no purpose, the default S always being thrown away by
+the points that follow.
+
+**Options.**
+
+- Offer *Add Point* on every shape and let it make the arc an S, starting from **no** points but the
+  one being added — so a straight arc gains exactly the bend that was asked for and nothing else.
+  That is the smallest change and probably the right one; it was left out only because it makes one
+  gesture do two things.
+- Give the S no default points, so choosing it changes nothing until a point is put in. Honest, but
+  then a shape named after its look does not look like it when chosen.
+- Leave it, on the grounds that choosing a shape and shaping it are two decisions.
 
 ---
 
 ## Nothing keeps a hand-shaped curve sensible
 
-**Now.** A control handle can be dragged anywhere at all — behind its own end, miles off the sheet,
-on top of the other control. The curve follows, and a curve whose controls are wild is a curve that
+**Now.** A control handle, and a point of an S, can be dragged anywhere at all — behind its own end,
+miles off the sheet, on top of the other control. The curve follows, and a curve whose controls are wild is a curve that
 loops back on itself or vanishes off the paper. Nothing prevents it and nothing puts it right.
 
 **Why it was done this way.** A handle that fights the hand is worse than one that lets a person make
@@ -458,8 +486,9 @@ which is more likely than it sounds, the handles being small and the sheet being
 
 - Hold a control point inside the sheet the way an item is held, through the same `bounds` callable.
   Cheap, and it means a handle can always be found.
-- A *reset shape* on the arc's context menu, putting both controls back to `DEFAULT_CONTROLS`. One
-  line, and it is the way out of any mess rather than a rule against making one.
+- A *reset shape* on the arc's context menu, putting both controls back to `DEFAULT_CONTROLS` — and
+  an S's points back to `DEFAULT_S_POINTS`. One line, and it is the way out of any mess rather than a
+  rule against making one.
 - Both. The second is worth having whatever happens to the first.
 
 ---
@@ -490,33 +519,29 @@ will be.
 
 ---
 
-## An arc's ends cannot be moved once it is drawn
+## Nothing puts an arc's ends back on the points that face each other
 
-**Now.** An arc keeps the index of a connecting point at each end, settled when it was drawn — the
-point that was pressed at the near end, and the point it was let go nearest at the far end — and
-nothing changes them afterwards. Moving a place drags the arc's end along with it; it never passes
-the arc round to a point that would suit the new position better. There is no way to take hold of an
-arc's end and put it on another point, and no way to say which point it should use.
+**Now.** An arc keeps the connecting point it was attached to at each end until a person moves it:
+dragging the handle at either end of a selected arc puts that end on another point, of the same item
+or of another item the arc may be joined to. What there is no way to ask for is the *automatic*
+answer — put both ends back on the points that face each other now — which is what `free_port_towards`
+works out when an arc is first drawn and never again.
 
-**Why it was done this way.** It is what was asked for, and it is right: an arc that rearranged itself
-whenever a place was nudged meant a net could never be laid out by hand and left alone. The cost is
-the other half of the same coin — a net dragged a long way from where it was drawn keeps arcs
-entering from what is now the far side, and the only way back is to delete the arc and draw it again.
+**Why it was done this way.** Fixed ends are what was asked for, twice: an arc that rearranged itself
+whenever a place was nudged meant a net could never be laid out by hand and left alone. Now that an
+end can be moved by hand the cost of that is small, and an action that does it automatically is a
+convenience rather than a repair.
 
-**When it will not be enough.** The first time a net is rearranged rather than merely nudged. Redrawing
-an arc loses its weight as well as its place, which makes a small tidy-up more expensive than it
-should be.
+**When it will not be enough.** A net rearranged wholesale rather than nudged — every arc then has
+ends facing the way they used to, and putting a dozen of them right by hand is a dozen drags.
 
 **Options.**
 
-- Drag an arc's end onto another connecting point, the way its middle can already be clicked. The
-  gesture is the one that draws an arc, started from an end rather than from an item, and
-  `Arc.source_port` / `Arc.target_port` are the only things it writes.
-- A *re-route* on the arc's context menu, putting both ends back on the points that face each other
-  now. One line — `free_port_towards` at each end — and it is the old behaviour offered as an action
-  rather than imposed as a rule.
-- Both, which is what a drawing program usually has: the automatic answer on demand, and the hand
-  free to overrule it.
+- *Re-route* on the arc's context menu: `free_port_towards()` at each end, which is one line, and it
+  is the old automatic behaviour offered as an action rather than imposed as a rule.
+- The same over a selection rather than one arc, so a rearranged net is put right in one go.
+- A *follow* flag per arc — automatic until a handle is dragged, fixed thereafter. It is the most
+  convenient and the least predictable, an arc changing its mind about what it does.
 
 ---
 

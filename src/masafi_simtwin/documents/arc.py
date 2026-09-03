@@ -31,10 +31,10 @@ geometry is where its ends are.  An item that never moves has nothing to gain
 from a local coordinate system, and a line whose two ends belong to two other
 items has nothing natural to measure from.
 
-An arc is drawn **straight or curved**, which is
-:class:`ArcShape` and is chosen from its context menu.  A curve is a cubic
-Bézier with a control point at each end, and it is **shaped by hand**: selecting
-a curved arc brings out three handles, in the manner of a Bézier in DIA.
+An arc is drawn **straight, curved or S-curved**, which is :class:`ArcShape` and
+is chosen from its context menu.  A curve is a cubic Bézier with a control point
+at each end, and it is **shaped by hand**: selecting a curved arc brings out
+three handles, in the manner of a Bézier in DIA.
 
 Handles are drawn the way the connecting points are — a hairline of the accent
 around the colour of the paper — and are told apart from them by their shape
@@ -44,12 +44,34 @@ alone: a handle is square, a connecting point is round.
     On the curve at its half-way point.  Dragging it moves the whole bow — both
     control points together — so the plain gesture keeps the curve a single bow
     and cannot make an S of it by accident.
-``start`` and ``end``
+``source_control`` and ``target_control``
     The two control points, each joined to the end it belongs to by a **dashed**
     line, which is what says where the curve sets off from that end and where it
     comes in at the other.  Dragging them apart is what an S is; that is what
     the handles are for, and it is the person's to do rather than the code's to
     prevent.
+
+An **S** is the other way of shaping a line, and the simpler one to use.  It is
+led through as many **points** as it is given — two to begin with, one bowed
+each way, which is what makes it an S — and each point is *on* the curve rather
+than off it, so a point is at once where the line goes and the handle that moves
+it.  The curve through them is a Catmull-Rom spline drawn as cubic Béziers, one
+segment between each pair of knots (see :func:`catmull_rom`), so it is smooth
+without anybody having to place a control point.  A point is put in and taken
+out from the arc's context menu: *Add Point* puts one on the line where the
+pointer is, *Delete Point* over a point takes that one out.  That is what lets
+an arc be led **round** something rather than merely leaned away from it, which
+a single bow cannot do.
+
+A **selected arc of any shape** also carries a handle at each of its two
+ends, ``source`` and ``target``, sitting on the connecting point it is attached
+to.  Dragging one puts that end on another connecting point — of the same item,
+or of another item the arc may be joined to, which moves the arc rather than
+merely reshaping it.  That gesture is not run here: it is the same one that
+draws an arc, started from an end rather than from an item, so
+:class:`~masafi_simtwin.documents.canvas.CanvasView` runs it and
+:meth:`Arc.reattach` is what it calls.  What is here is where the handles are
+and how they are drawn.
 
 **A control point is kept in the chord's own frame** — how far along the two
 ends it lies and how far across, as fractions of the distance between them — not
@@ -126,18 +148,51 @@ DEFAULT_CONTROLS = (
 )
 
 #: How big a handle is drawn, in millimetres of side.  A square, so that a
-#: handle is never mistaken for a connecting point, which is a ring.
-HANDLE_SIZE = 1.4
+#: handle is never mistaken for a connecting point, which is a ring; and as
+#: small as a connecting point is, because both are marks put on the drawing to
+#: be aimed at rather than parts of the drawing itself.
+HANDLE_SIZE = 0.7
 
 #: How far from a handle, in millimetres, the pointer may be and still take hold
-#: of it.  More than half its side: a handle is aimed at, and a handle that has
-#: to be hit exactly is a handle nobody can use.
+#: of it.  Well beyond the square it is drawn as: a handle is aimed at, and a
+#: handle that has to be hit exactly is a handle nobody can use.  Drawing it
+#: smaller is a change to the picture and not to the aiming, which is why the
+#: two are separate numbers.
 HANDLE_GRAB = 1.3
 
-#: The handles a curved arc carries, in the order they are drawn and searched.
-#: The middle one is first, being the one that is aimed at most and the one that
-#: overlaps the others when a curve is pulled flat.
-HANDLES = ('middle', 'start', 'end')
+#: Where the points of an untouched S sit, in the chord's own frame: one bowed
+#: :data:`CURVE_BOW` to the left a third of the way along and one the same to
+#: the right two thirds of the way, which is an S rather than a description of
+#: one.  A shape named after what it looks like should look like it as soon as
+#: it is chosen.
+DEFAULT_S_POINTS = (
+    (1.0 / 3.0, CURVE_BOW),
+    (2.0 / 3.0, -CURVE_BOW),
+)
+
+#: How many places along a segment are looked at when the nearest place on the
+#: curve is wanted — for putting a new point on the line where the pointer is,
+#: which is the only thing that asks.  A curve is not a thing to solve exactly
+#: when the answer is snapped to the millimetre afterwards.
+SEGMENT_SAMPLES = 24
+
+#: What the name of a point handle begins with, the rest of it being which
+#: point.  An S carries as many handles as it has points, so they are named
+#: rather than listed.
+POINT_PREFIX = 'point:'
+
+#: The handles that shape a single bow, in the order they are searched.  The
+#: middle one is first, being the one that is aimed at most and the one that
+#: overlaps the others when a curve is pulled flat.  Only a curved arc has them,
+#: and the arc drags them itself; an S has its points instead, which is what
+#: :meth:`Arc.shape_handles` answers.
+SHAPE_HANDLES = ('middle', 'source_control', 'target_control')
+
+#: The handles at an arc's two ends, which every selected arc has whatever shape
+#: it is.  Dragging one puts that end on another connecting point, and that is
+#: the canvas's gesture rather than the arc's — it is the one that draws an arc,
+#: started from an end.
+END_HANDLES = ('source', 'target')
 
 
 class ArcShape(Enum):
@@ -149,14 +204,106 @@ class ArcShape(Enum):
         One segment from end to end, which is what a Petri net arc is in most
         drawings and what an arc is until it is told otherwise.
     CURVED
-        A single quadratic Bézier bowing :data:`CURVE_BOW` of its own length off
-        the straight, on the left of the way it is going.  One control point and
-        no S: the shapes with more than one bend are a later piece of work, and
-        this enumeration is where they go.
+        One cubic Bézier bowing :data:`CURVE_BOW` of its own length off the
+        straight, on the left of the way it is going, shaped by its two control
+        points.  One bow: an S can be pulled out of it by hand, but it cannot be
+        made to go *round* anything, having nowhere to put a second bend.
+    S_CURVED
+        A curve through as many **points** as it is given, each of them on the
+        line rather than off it, drawn as one smooth path.  It starts as an S —
+        :data:`DEFAULT_S_POINTS` — and a point is put in or taken out from the
+        arc's context menu, so an arc can be led round whatever is in its way.
     """
 
     STRAIGHT = 'straight'
     CURVED = 'curved'
+    S_CURVED = 's-curved'
+
+
+def point_handle(index: int) -> str:
+    """Give the name of the handle on one point of an S.
+
+    Parameters
+    ----------
+    index : int
+        Which point, counting from the source.
+
+    Returns
+    -------
+    str
+        The name, which is :data:`POINT_PREFIX` and the index.
+    """
+
+    return f'{POINT_PREFIX}{index}'
+
+
+def point_of_handle(name: str | None) -> int | None:
+    """Give which point a handle is on, when it is on one.
+
+    Parameters
+    ----------
+    name : str, optional
+        The name of a handle, or ``None``.
+
+    Returns
+    -------
+    int, optional
+        The index of the point, or ``None`` when the handle is not one of them.
+    """
+
+    if not name or not name.startswith(POINT_PREFIX):
+        return None
+    return int(name[len(POINT_PREFIX) :])
+
+
+def catmull_rom(knots: list[QPointF]) -> list[tuple[QPointF, QPointF, QPointF]]:
+    """Draw a smooth curve **through** a run of points, as cubic Béziers.
+
+    A Bézier's control points are off the curve, which is what makes a Bézier
+    hard to explain and hard to aim: a person putting a point on a line means
+    *the line goes here*.  A Catmull-Rom spline is the curve that does that —
+    it passes through every knot it is given — and each of its segments is
+    exactly one cubic Bézier, so what is drawn is still the one thing
+    :meth:`Arc.path` knows how to draw.
+
+    The control points of the segment from ``P[i]`` to ``P[i + 1]`` are a sixth
+    of the way along the chords ``P[i - 1] → P[i + 1]`` and ``P[i] → P[i + 2]``,
+    which is the uniform spline; the run's own ends are doubled, there being no
+    point beyond them to take a direction from.
+
+    Parameters
+    ----------
+    knots : list of PyQt6.QtCore.QPointF
+        The points the curve passes through, in order, at least two of them.
+
+    Returns
+    -------
+    list of tuple
+        One ``(first control, second control, end)`` for each segment, which is
+        what a ``cubicTo`` takes.
+    """
+
+    segments = []
+    count = len(knots)
+    for index in range(count - 1):
+        before = knots[max(index - 1, 0)]
+        start = knots[index]
+        end = knots[index + 1]
+        after = knots[min(index + 2, count - 1)]
+        segments.append(
+            (
+                QPointF(
+                    start.x() + (end.x() - before.x()) / 6.0,
+                    start.y() + (end.y() - before.y()) / 6.0,
+                ),
+                QPointF(
+                    end.x() - (after.x() - start.x()) / 6.0,
+                    end.y() - (after.y() - start.y()) / 6.0,
+                ),
+                QPointF(end),
+            )
+        )
+    return segments
 
 
 class Arc(QGraphicsItem):
@@ -216,6 +363,7 @@ class Arc(QGraphicsItem):
         self._shape_kind = ArcShape(shape_kind)
         self._snap = snap
         self._controls = [list(control) for control in DEFAULT_CONTROLS]
+        self._points = [list(point) for point in DEFAULT_S_POINTS]
         self._dragging: str | None = None
         self._line = QLineF()
 
@@ -346,9 +494,10 @@ class Arc(QGraphicsItem):
 
     @property
     def curved(self) -> bool:
-        """bool: Whether the arc bows, which is the whole of what a menu asks."""
+        """bool: Whether the arc bows rather than running straight from end to
+        end, which is either of the two curved shapes."""
 
-        return self._shape_kind is ArcShape.CURVED
+        return self._shape_kind is not ArcShape.STRAIGHT
 
     def chord_point(self, along: float, across: float) -> QPointF:
         """Turn a place in the chord's own frame into a place on the sheet.
@@ -442,52 +591,351 @@ class Arc(QGraphicsItem):
         return path.pointAtPercent(0.5)
 
     # ------------------------------------------------------------------
+    # The points an S is led through
+    # ------------------------------------------------------------------
+
+    def curve_points(self) -> list[QPointF]:
+        """Give the points an S is led through, on the sheet.
+
+        Returns
+        -------
+        list of PyQt6.QtCore.QPointF
+            Them, in order from the source, in scene millimetres.  They are kept
+            in the chord's own frame, as the control points are, so an S shaped
+            by hand keeps its shape when either of its items is dragged.
+        """
+
+        return [self.chord_point(along, across) for along, across in self._points]
+
+    def segments(self) -> list[tuple[QPointF, QPointF, QPointF]]:
+        """Give the curve as cubic segments, which is what is drawn.
+
+        One segment for a single bow, one for every gap between the knots of an
+        S — its two ends and the points it is led through — and none at all for
+        a straight arc, which has no curve to cut up.
+
+        Returns
+        -------
+        list of tuple
+            One ``(first control, second control, end)`` for each, in scene
+            millimetres.
+        """
+
+        if self._shape_kind is ArcShape.CURVED:
+            first, second = self.control_points()
+            return [(first, second, self._line.p2())]
+        if self._shape_kind is ArcShape.S_CURVED:
+            knots = [self._line.p1(), *self.curve_points(), self._line.p2()]
+            return catmull_rom(knots)
+        return []
+
+    def segment_paths(self) -> list[QPainterPath]:
+        """Give each segment of the curve as a path of its own.
+
+        Which is what says *where along the arc* a place is: the whole path
+        answers how near, and only the segments answer between which two points.
+
+        Returns
+        -------
+        list of PyQt6.QtGui.QPainterPath
+            One path per segment, in the order they are drawn.
+        """
+
+        start = self._line.p1()
+        paths = []
+        for first, second, end in self.segments():
+            one = QPainterPath(start)
+            one.cubicTo(first, second, end)
+            paths.append(one)
+            start = end
+        return paths
+
+    def nearest_on_curve(self, point: QPointF) -> tuple[int, QPointF]:
+        """Find the place on the drawn arc nearest a place on the sheet.
+
+        Sampled rather than solved: the answer is snapped to the millimetre
+        afterwards, so an exact root of a cubic would be thrown away.
+
+        Parameters
+        ----------
+        point : PyQt6.QtCore.QPointF
+            Where to look from, in scene millimetres.
+
+        Returns
+        -------
+        tuple
+            Which segment it fell on and where on it, in scene millimetres.  The
+            segment is what says where a new point belongs in the run: the one
+            between the knots the pointer is between.
+        """
+
+        best = None
+        found = (0, self._line.center())
+        for index, one in enumerate(self.segment_paths()):
+            for step in range(SEGMENT_SAMPLES + 1):
+                where = one.pointAtPercent(step / SEGMENT_SAMPLES)
+                gap = math.hypot(point.x() - where.x(), point.y() - where.y())
+                if best is None or gap < best:
+                    best = gap
+                    found = (index, where)
+        return found
+
+    def insert_point(self, at: QPointF) -> int | None:
+        """Put another point into the curve, where the pointer is.
+
+        **On the line rather than under the pointer.**  A point is put in to be
+        dragged somewhere, and a curve that jumped as the point went in would
+        have to be put back before it could be shaped: the new point goes on the
+        nearest place on the curve, so the picture does not change and the
+        handle comes out where the person aimed.
+
+        Parameters
+        ----------
+        at : PyQt6.QtCore.QPointF
+            Where the arc was aimed at, in scene millimetres.
+
+        Returns
+        -------
+        int, optional
+            Which point it became, or ``None`` when the arc is not one that is
+            led through points.
+        """
+
+        if self._shape_kind is not ArcShape.S_CURVED:
+            return None
+
+        index, where = self.nearest_on_curve(at)
+        if self._snap is not None:
+            where = QPointF(self._snap(where.x()), self._snap(where.y()))
+
+        self.prepareGeometryChange()
+        self._points.insert(index, list(self.chord_frame(where)))
+        self.update()
+        return index
+
+    def remove_point(self, index: int) -> bool:
+        """Take one point out of the curve again.
+
+        Taking the last one out is allowed: an S led through no points is a
+        straight line, and it is still an S — the points can be put back.  A
+        gesture that refuses on the last of something is a gesture a person has
+        to count before using.
+
+        Parameters
+        ----------
+        index : int
+            Which point, counting from the source.
+
+        Returns
+        -------
+        bool
+            Whether there was one there to take out.
+        """
+
+        if not 0 <= index < len(self._points):
+            return False
+
+        self.prepareGeometryChange()
+        del self._points[index]
+        self.update()
+        return True
+
+    def point_at(self, position: QPointF) -> int | None:
+        """Find which point of an S a scene position falls on.
+
+        The **nearest** one within :data:`HANDLE_GRAB`, which is the rule the
+        connecting points follow.  Asked of the arc's geometry rather than of
+        its handles, because a menu asking *is there a point here?* is asking
+        about the arc and not about what is drawn on it: an arc that is not
+        selected has no handles at all.  An arc of another shape has no points
+        on it whatever it may be keeping for when it is made an S again.
+
+        Parameters
+        ----------
+        position : PyQt6.QtCore.QPointF
+            Where to look, in scene millimetres.
+
+        Returns
+        -------
+        int, optional
+            The index of the point, or ``None`` for none of them.
+        """
+
+        if self._shape_kind is not ArcShape.S_CURVED:
+            return None
+
+        best = None
+        found = None
+        for index, where in enumerate(self.curve_points()):
+            gap = math.hypot(position.x() - where.x(), position.y() - where.y())
+            if gap <= HANDLE_GRAB and (best is None or gap < best):
+                best = gap
+                found = index
+        return found
+
+    def point_handles(self) -> tuple:
+        """Give the names of the handles on the points of an S.
+
+        Returns
+        -------
+        tuple of str
+            One per point, in order, and none at all on an arc of another shape.
+        """
+
+        if self._shape_kind is not ArcShape.S_CURVED:
+            return ()
+        return tuple(point_handle(index) for index in range(len(self._points)))
+
+    # ------------------------------------------------------------------
     # The handles a curve is shaped by
     # ------------------------------------------------------------------
 
     def handles(self) -> dict:
-        """Give the handles a curved arc is shaped by, and where they are.
+        """Give the handles the arc carries, and where they are.
 
-        There are none on a straight arc and none on one that is not selected: a
-        sheet showing a handle for every arc on it is a sheet nobody can read,
-        and selecting a thing is how a person says which one they mean.
+        There are none on an arc that is not selected: a sheet showing a handle
+        for every arc on it is a sheet nobody can read, and selecting a thing is
+        how a person says which one they mean.
 
         Returns
         -------
         dict
-            ``middle``, on the curve half way along; ``start`` and ``end``, the
-            two control points.  Empty when there is nothing to shape.
+            ``source`` and ``target``, on the connecting points the two ends are
+            attached to, on any selected arc; on a curved one ``middle``, on the
+            curve half way along, with ``source_control`` and ``target_control``,
+            the two control points; and on an S one handle per point it is led
+            through, named by :func:`point_handle`.  Empty when the arc is not
+            selected.
         """
 
-        if self._shape_kind is not ArcShape.CURVED or not self.isSelected():
+        if not self.isSelected():
             return {}
 
-        first, second = self.control_points()
-        return {'middle': self.curve_middle(), 'start': first, 'end': second}
+        found = {'source': self._line.p1(), 'target': self._line.p2()}
+        if self._shape_kind is ArcShape.CURVED:
+            first, second = self.control_points()
+            found['middle'] = self.curve_middle()
+            found['source_control'] = first
+            found['target_control'] = second
+        elif self._shape_kind is ArcShape.S_CURVED:
+            for index, where in enumerate(self.curve_points()):
+                found[point_handle(index)] = where
+        return found
 
-    def handle_at(self, point: QPointF) -> str | None:
+    def shape_handles(self) -> tuple:
+        """Give the handles the arc shapes itself by, in the order they are
+        searched.
+
+        Which they are is the shape's own business: the three of a single bow,
+        one per point of an S, and none at all on a straight arc.  The two at
+        the ends are not among them — they are dragged by the canvas, that being
+        the gesture which draws an arc.
+
+        Returns
+        -------
+        tuple of str
+            Their names.
+        """
+
+        if self._shape_kind is ArcShape.CURVED:
+            return SHAPE_HANDLES
+        return self.point_handles()
+
+    def handle_order(self) -> tuple:
+        """Give every handle the arc carries, in the order they are searched.
+
+        Returns
+        -------
+        tuple of str
+            The shaping handles first, the ends after them: a handle sitting on
+            an end is the one a person means when the two are on top of one
+            another.
+        """
+
+        return self.shape_handles() + END_HANDLES
+
+    def handle_at(self, point: QPointF, among=None) -> str | None:
         """Find the handle a scene position takes hold of.
 
         Parameters
         ----------
         point : PyQt6.QtCore.QPointF
             Where to look, in scene millimetres.
+        among : collections.abc.Iterable, optional
+            Which handles to look at, in the order they are tried, so that the
+            arc can ask for the ones it drags itself and the canvas for the ones
+            it drags.  Every one this arc carries by default, which depends on
+            the shape it is drawn as — see :meth:`handle_order`.
 
         Returns
         -------
         str, optional
-            Which handle, in the order of :data:`HANDLES` so that the middle one
-            wins where they overlap, or ``None`` for none of them.
+            Which handle, the first of ``among`` within reach, or ``None`` for
+            none of them.
         """
 
         found = self.handles()
-        for name in HANDLES:
+        for name in self.handle_order() if among is None else among:
             where = found.get(name)
             if where is None:
                 continue
             if math.hypot(point.x() - where.x(), point.y() - where.y()) <= HANDLE_GRAB:
                 return name
         return None
+
+    def reattach(self, end: str, item: NetItem, port: int) -> bool:
+        """Put one end of the arc on another connecting point.
+
+        The point may belong to the item that end is already on, which only
+        moves it round; or to another item, which moves the arc itself.  The two
+        are one gesture because they are one question — *where does this end
+        go?* — and telling them apart would mean a person had to know which they
+        were doing before they started.
+
+        Parameters
+        ----------
+        end : str
+            ``source`` or ``target``.
+        item : masafi_simtwin.documents.net_item.NetItem
+            What that end is to be attached to.
+        port : int
+            Which of its connecting points.
+
+        Returns
+        -------
+        bool
+            Whether the arc was changed.  It is not when the end would be put
+            where it already is, nor when the two ends would become the same
+            item — an arc from a thing to itself is not an arc.
+        """
+
+        if end not in END_HANDLES:
+            return False
+
+        other = self.target if end == 'source' else self.source
+        if item is other:
+            return False
+
+        was = self.source if end == 'source' else self.target
+        was_port = self.source_port if end == 'source' else self.target_port
+        if item is was and port == was_port:
+            return False
+
+        if item is not was:
+            was.detach(self)
+            item.attach(self)
+            if end == 'source':
+                self.source = item
+            else:
+                self.target = item
+
+        if end == 'source':
+            self.source_port = int(port)
+        else:
+            self.target_port = int(port)
+
+        self.route()
+        return True
 
     def move_handle(self, name: str, point: QPointF) -> None:
         """Put one handle where the pointer is, and reshape the curve.
@@ -499,20 +947,32 @@ class Arc(QGraphicsItem):
         handle then lands under the pointer rather than short of it.
 
         The other two are the control points themselves, and moving them apart
-        is what makes an S.  That is what they are for.
+        is what makes an S out of a single bow.  That is what they are for.
+
+        A handle on a **point of an S** is simpler than either, the point being
+        on the line: it goes where it is put, and the curve follows it.
 
         Parameters
         ----------
         name : str
-            Which handle, one of :data:`HANDLES`.
+            Which handle, one this arc carries — see :meth:`shape_handles`.
         point : PyQt6.QtCore.QPointF
             Where to put it, in scene millimetres.
         """
 
-        if self._shape_kind is not ArcShape.CURVED:
-            return
         if self._snap is not None:
             point = QPointF(self._snap(point.x()), self._snap(point.y()))
+
+        index = point_of_handle(name)
+        if index is not None:
+            if self._shape_kind is ArcShape.S_CURVED and 0 <= index < len(self._points):
+                self.prepareGeometryChange()
+                self._points[index] = list(self.chord_frame(point))
+                self.update()
+            return
+
+        if self._shape_kind is not ArcShape.CURVED:
+            return
 
         self.prepareGeometryChange()
         if name == 'middle':
@@ -522,8 +982,9 @@ class Arc(QGraphicsItem):
             for control in self._controls:
                 control[0] += shift[0]
                 control[1] += shift[1]
-        elif name in ('start', 'end'):
-            self._controls[0 if name == 'start' else 1] = list(self.chord_frame(point))
+        elif name in ('source_control', 'target_control'):
+            index = 0 if name == 'source_control' else 1
+            self._controls[index] = list(self.chord_frame(point))
         self.update()
 
     def handle_rect(self, at: QPointF) -> QRectF:
@@ -634,7 +1095,7 @@ class Arc(QGraphicsItem):
 
         The chord for a straight arc, and the tangent at the end for a curved
         one — which for a cubic Bézier is the way from its second control point
-        to its end.
+        to its end, taken from the **last** segment, an S having several.
 
         Returns
         -------
@@ -642,9 +1103,9 @@ class Arc(QGraphicsItem):
             The direction, of unit length.
         """
 
-        if self._shape_kind is ArcShape.CURVED:
-            reach = QLineF(self.control_points()[1], self._line.p2())
-        else:
+        segments = self.segments()
+        reach = QLineF(segments[-1][1], self._line.p2()) if segments else QLineF(self._line)
+        if not reach.length():
             reach = QLineF(self._line)
         length = reach.length()
         if not length:
@@ -688,11 +1149,11 @@ class Arc(QGraphicsItem):
         """
 
         path = QPainterPath(self._line.p1())
-        if self._shape_kind is ArcShape.CURVED:
-            first, second = self.control_points()
-            path.cubicTo(first, second, self._line.p2())
-        else:
+        segments = self.segments()
+        if not segments:
             path.lineTo(self._line.p2())
+        for first, second, end in segments:
+            path.cubicTo(first, second, end)
         return path
 
     def arrow(self) -> QPainterPath:
@@ -805,7 +1266,11 @@ class Arc(QGraphicsItem):
         self._paint_handles(painter, option)
 
     def mousePressEvent(self, event) -> None:  # noqa: N802  (Qt naming)
-        """Take hold of a handle, or leave the press to the scene.
+        """Take hold of a shaping handle, or leave the press to the scene.
+
+        Only the handles that shape the curve: the two at the ends are dragged
+        by the canvas, which is where the gesture that draws an arc lives, and
+        the canvas takes those presses before the scene ever sees them.
 
         Parameters
         ----------
@@ -814,7 +1279,7 @@ class Arc(QGraphicsItem):
         """
 
         if event.button() == Qt.MouseButton.LeftButton:
-            self._dragging = self.handle_at(event.scenePos())
+            self._dragging = self.handle_at(event.scenePos(), self.shape_handles())
             if self._dragging is not None:
                 event.accept()
                 return
@@ -883,10 +1348,11 @@ class Arc(QGraphicsItem):
         lead.setStyle(Qt.PenStyle.DashLine)
         painter.setPen(lead)
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawLine(QLineF(self._line.p1(), found['start']))
-        painter.drawLine(QLineF(self._line.p2(), found['end']))
+        if 'source_control' in found:
+            painter.drawLine(QLineF(self._line.p1(), found['source_control']))
+            painter.drawLine(QLineF(self._line.p2(), found['target_control']))
 
         painter.setPen(QPen(accent, 0.0))
         painter.setBrush(paper_colour(option))
-        for name in HANDLES:
-            painter.drawRect(self.handle_rect(found[name]))
+        for where in found.values():
+            painter.drawRect(self.handle_rect(where))

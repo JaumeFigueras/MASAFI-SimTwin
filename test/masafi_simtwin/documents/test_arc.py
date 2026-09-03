@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import pytest
 from PyQt6.QtCore import QEvent, QPointF, Qt
 from PyQt6.QtGui import QColor, QKeyEvent, QMouseEvent, QPainterPath
@@ -12,10 +14,12 @@ from masafi_simtwin.documents.arc import (
     ARROW_LENGTH,
     CURVE_BOW,
     DEFAULT_WEIGHT,
+    END_HANDLES,
     HANDLE_SIZE,
-    HANDLES,
+    SHAPE_HANDLES,
     Arc,
     ArcShape,
+    point_handle,
 )
 from masafi_simtwin.documents.net_item import ARC_Z, ITEM_Z, NetItem
 from masafi_simtwin.documents.place import Place
@@ -1030,8 +1034,9 @@ def test_a_curved_arc_covers_and_is_grabbed_along_its_curve(editor, net):
 # ----------------------------------------------------------------------
 
 
-def test_an_arc_offers_its_two_shapes_and_a_way_out(editor, net):
-    """An arc has no entry in the menu bar, so this is where both are found."""
+def test_an_arc_offers_its_three_shapes_and_a_way_out(editor, net):
+    """An arc has no entry in the menu bar, so this is where all of them are
+    found."""
 
     place, transition = net
     arc = editor.add_arc(place, transition)
@@ -1040,6 +1045,7 @@ def test_an_arc_offers_its_two_shapes_and_a_way_out(editor, net):
     assert [action.text() for action in menu.actions() if not action.isSeparator()] == [
         'Straight',
         'Curved',
+        'S-Curved',
         'Delete Arc',
     ]
 
@@ -1191,13 +1197,14 @@ def curve(editor, net):
 
 
 def test_a_straight_arc_has_nothing_to_shape(editor, net):
-    """There is no curve on it to take hold of."""
+    """It carries its two end handles like any selected arc, and no others:
+    there is no curve on it to take hold of."""
 
     place, transition = net
     arc = editor.add_arc(place, transition)
     arc.setSelected(True)
 
-    assert arc.handles() == {}
+    assert sorted(arc.handles()) == sorted(END_HANDLES)
 
 
 def test_a_curve_shows_its_handles_only_while_it_is_selected(editor, net):
@@ -1210,7 +1217,7 @@ def test_a_curve_shows_its_handles_only_while_it_is_selected(editor, net):
     assert arc.handles() == {}
 
     arc.setSelected(True)
-    assert sorted(arc.handles()) == sorted(HANDLES)
+    assert sorted(arc.handles()) == sorted(SHAPE_HANDLES + END_HANDLES)
 
 
 def test_the_middle_handle_sits_on_the_curve(curve):
@@ -1226,8 +1233,8 @@ def test_the_other_two_handles_are_the_control_points(curve):
 
     first, second = curve.control_points()
 
-    assert curve.handles()['start'] == first
-    assert curve.handles()['end'] == second
+    assert curve.handles()['source_control'] == first
+    assert curve.handles()['target_control'] == second
 
 
 def test_a_handle_is_found_by_being_near_enough(curve):
@@ -1288,7 +1295,7 @@ def test_dragging_a_control_handle_moves_only_that_end(curve):
     before = curve.control_points()
     wants = QPointF(before[0].x() + 6.0, before[0].y() - 4.0)
 
-    curve.move_handle('start', wants)
+    curve.move_handle('source_control', wants)
     after = curve.control_points()
 
     assert after[0] != before[0]
@@ -1301,8 +1308,8 @@ def test_the_two_control_handles_can_be_pulled_into_an_s(curve):
 
     first, second = curve.control_points()
     chord = curve.line
-    curve.move_handle('start', curve.chord_point(1.0 / 3.0, 0.4))
-    curve.move_handle('end', curve.chord_point(2.0 / 3.0, -0.4))
+    curve.move_handle('source_control', curve.chord_point(1.0 / 3.0, 0.4))
+    curve.move_handle('target_control', curve.chord_point(2.0 / 3.0, -0.4))
 
     across = [curve.chord_frame(control)[1] for control in curve.control_points()]
 
@@ -1315,7 +1322,7 @@ def test_a_shaped_curve_keeps_its_shape_when_the_net_is_dragged_about(curve, net
     turns and scales with the arc instead of coming apart."""
 
     place, transition = net
-    curve.move_handle('start', curve.chord_point(0.2, 0.5))
+    curve.move_handle('source_control', curve.chord_point(0.2, 0.5))
     shaped = [curve.chord_frame(control) for control in curve.control_points()]
 
     transition.setPos(QPointF(30.0, 90.0))
@@ -1436,8 +1443,686 @@ def test_a_handle_is_not_a_solid_block_of_accent(ink, curve, colors):
     """Which is what it was before, and what made three of them a heavy thing to
     put on a drawing."""
 
-    where = curve.handles()['start']
+    where = curve.handles()['source_control']
     close = ink.close_up(where.x(), where.y(), 40.0)
     inside = close.window(close.painted(curve, colors), 0.0, 0.0, HANDLE_SIZE / 4.0)
 
     assert all(pixel == QColor(colors.editor) for pixel in inside)
+
+
+# ----------------------------------------------------------------------
+# The S, and the points it is led through
+# ----------------------------------------------------------------------
+
+
+@pytest.fixture
+def ess(editor, net):
+    """Give an S-curved arc, selected, so that its points are out.
+
+    Parameters
+    ----------
+    editor : masafi_simtwin.documents.petri_net.PetriNetEditor
+        The document.
+    net : tuple
+        The place and the transition.
+
+    Returns
+    -------
+    masafi_simtwin.documents.arc.Arc
+        The arc.
+    """
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    arc.shape_kind = ArcShape.S_CURVED
+    arc.setSelected(True)
+    return arc
+
+
+def knots(path: QPainterPath) -> list:
+    """Give the places a path is drawn through.
+
+    Parameters
+    ----------
+    path : PyQt6.QtGui.QPainterPath
+        The path.
+
+    Returns
+    -------
+    list of tuple
+        The coordinates of every element of it, which for a run of cubics
+        includes each point the curve passes through as well as the controls.
+    """
+
+    return [
+        (path.elementAt(index).x, path.elementAt(index).y)
+        for index in range(path.elementCount())
+    ]
+
+
+def test_an_s_is_an_s_as_soon_as_it_is_chosen(ess):
+    """A shape named after what it looks like should look like it before
+    anybody has touched it: two points, one bowed each way."""
+
+    across = [ess.chord_frame(point)[1] for point in ess.curve_points()]
+
+    assert len(across) == 2
+    assert across[0] > 0.0
+    assert across[1] < 0.0
+
+
+def test_an_s_is_drawn_through_its_points(ess):
+    """Which is what makes a point a place the line goes rather than a place it
+    leans towards, and it is the whole reason for the spline."""
+
+    drawn = knots(ess.path())
+
+    for point in ess.curve_points():
+        assert any(
+            abs(x - point.x()) < 1e-6 and abs(y - point.y()) < 1e-6 for x, y in drawn
+        )
+
+
+def test_an_s_is_one_cubic_between_each_pair_of_knots(ess):
+    """Its two ends and the points between them, so a point adds a segment."""
+
+    assert len(ess.segments()) == len(ess.curve_points()) + 1
+
+    ess.insert_point(ess.path().pointAtPercent(0.25))
+    assert len(ess.segments()) == len(ess.curve_points()) + 1
+
+
+def test_an_s_led_through_no_points_is_a_straight_line(ess):
+    """Taking the last point out is allowed, and what is left is honest: a
+    curve through nothing is a line, and the points can be put back."""
+
+    while ess.remove_point(0):
+        pass
+
+    half = ess.path().pointAtPercent(0.5)
+    chord = ess.line.center()
+
+    assert ess.curve_points() == []
+    assert half.x() == pytest.approx(chord.x(), abs=1e-6)
+    assert half.y() == pytest.approx(chord.y(), abs=1e-6)
+
+
+def test_an_s_carries_a_handle_on_every_point(ess):
+    """They are the handles: a point is on the line, so it is at once where the
+    line goes and the thing that moves it."""
+
+    names = sorted(ess.handles())
+    wanted = sorted([point_handle(0), point_handle(1), *END_HANDLES])
+
+    assert names == wanted
+
+
+def test_an_s_shows_its_points_only_while_it_is_selected(editor, net):
+    """A sheet showing a handle for every arc on it is a sheet nobody can
+    read."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    arc.shape_kind = ArcShape.S_CURVED
+
+    assert arc.handles() == {}
+
+    arc.setSelected(True)
+    assert point_handle(0) in arc.handles()
+
+
+def test_a_point_of_an_s_is_dragged_where_it_is_put(editor, ess):
+    """It is on the line, so there is nothing to work backwards: the point goes
+    under the pointer, at the nearest millimetre like everything else."""
+
+    was = ess.curve_points()[0]
+    wants = QPointF(was.x() + 4.4, was.y() - 6.6)
+    snapped = QPointF(editor.view.snap(wants.x()), editor.view.snap(wants.y()))
+
+    ess.move_handle(point_handle(0), wants)
+    landed = ess.curve_points()[0]
+
+    assert landed.x() == pytest.approx(snapped.x(), abs=1e-6)
+    assert landed.y() == pytest.approx(snapped.y(), abs=1e-6)
+
+
+def test_dragging_one_point_leaves_the_others_where_they_are(ess):
+    """A point is a point, not a bow: only the one taken hold of moves."""
+
+    before = ess.curve_points()[1]
+    first = ess.curve_points()[0]
+
+    ess.move_handle(point_handle(0), QPointF(first.x(), first.y() + 10.0))
+
+    assert ess.curve_points()[1] == before
+
+
+def test_an_s_keeps_its_shape_when_the_net_is_dragged_about(ess, net):
+    """The points are kept in the chord's own frame, as the control points are,
+    so the whole picture turns and scales with the arc."""
+
+    place, transition = net
+    first = ess.curve_points()[0]
+    ess.move_handle(point_handle(0), QPointF(first.x() + 3.0, first.y() - 9.0))
+    shaped = [ess.chord_frame(point) for point in ess.curve_points()]
+
+    transition.setPos(QPointF(30.0, 90.0))
+    place.setPos(QPointF(90.0, 30.0))
+    after = [ess.chord_frame(point) for point in ess.curve_points()]
+
+    for then, now in zip(shaped, after):
+        assert now[0] == pytest.approx(then[0], abs=1e-6)
+        assert now[1] == pytest.approx(then[1], abs=1e-6)
+
+
+def test_an_s_arrives_along_its_own_tangent(ess):
+    """The arrowhead follows the last segment in, so a curve meets its target
+    head on rather than at the angle of the chord."""
+
+    first = ess.curve_points()[0]
+    ess.move_handle(point_handle(0), QPointF(first.x(), first.y() - 20.0))
+
+    head = ess.arrow().boundingRect().center()
+    tip = ess.line.p2()
+    tangent = ess.path().angleAtPercent(1.0)
+    along = QPointF(math.cos(math.radians(tangent)), -math.sin(math.radians(tangent)))
+
+    assert (tip.x() - head.x()) * along.x() + (tip.y() - head.y()) * along.y() > 0.0
+
+
+def test_a_point_is_added_on_the_line(ess):
+    """A curve that jumped as the point went in would have to be put back before
+    it could be shaped, so the point goes on the nearest place on the curve."""
+
+    on = ess.path().pointAtPercent(0.25)
+    aimed = QPointF(on.x() + 3.0, on.y() + 3.0)
+
+    index = ess.insert_point(aimed)
+    put = ess.curve_points()[index]
+
+    assert math.hypot(put.x() - on.x(), put.y() - on.y()) < 2.0
+
+
+def test_a_point_goes_in_where_it_was_aimed(ess):
+    """Between the two knots the pointer was between, not at the end of the run:
+    an S can fold back on itself, so how far along the chord it is says nothing
+    about where it belongs."""
+
+    near_the_source = ess.path().pointAtPercent(0.05)
+    near_the_target = ess.path().pointAtPercent(0.95)
+
+    assert ess.insert_point(near_the_source) == 0
+    assert ess.insert_point(near_the_target) == 3
+
+
+def test_a_point_is_taken_out_again(ess):
+    """The one it was aimed at and no other."""
+
+    second = ess.curve_points()[1]
+
+    assert ess.remove_point(0)
+
+    assert ess.curve_points() == [second]
+
+
+def test_a_point_that_is_not_there_cannot_be_taken_out(ess):
+    """It says so rather than raising: the menu is built from what is under the
+    pointer, and what is under the pointer can go."""
+
+    assert not ess.remove_point(7)
+    assert not ess.remove_point(-1)
+
+
+def test_only_an_s_is_led_through_points(editor, net):
+    """A single bow has its control points and a straight arc has nothing, so
+    neither takes one."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+
+    assert arc.insert_point(QPointF(40.0, 20.0)) is None
+
+    arc.shape_kind = ArcShape.CURVED
+    assert arc.insert_point(QPointF(40.0, 20.0)) is None
+
+
+def test_a_point_is_found_under_the_pointer(ess):
+    """Which is what the menu asks to know whether it offers to add one or to
+    take one out."""
+
+    first = ess.curve_points()[0]
+
+    assert ess.point_at(first) == 0
+    assert ess.point_at(QPointF(first.x() + 0.5, first.y())) == 0
+    assert ess.point_at(QPointF(first.x() + 20.0, first.y())) is None
+
+
+def test_the_points_of_another_shape_are_not_there_to_be_found(editor, net):
+    """An arc keeps its points for when it is made an S again, but until it is
+    they are not on it."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    arc.shape_kind = ArcShape.S_CURVED
+    where = arc.curve_points()[0]
+
+    arc.shape_kind = ArcShape.CURVED
+
+    assert arc.point_at(where) is None
+
+
+def test_an_s_keeps_what_it_was_shaped_into_when_it_is_put_back(editor, net):
+    """Changing the shape is not throwing the shaping away, which is what the
+    control points already do."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    arc.shape_kind = ArcShape.S_CURVED
+    arc.setSelected(True)
+    first = arc.curve_points()[0]
+    arc.move_handle(point_handle(0), QPointF(first.x(), first.y() - 12.0))
+    shaped = [arc.chord_frame(point) for point in arc.curve_points()]
+
+    arc.shape_kind = ArcShape.STRAIGHT
+    arc.shape_kind = ArcShape.S_CURVED
+
+    assert [arc.chord_frame(point) for point in arc.curve_points()] == shaped
+
+
+def test_the_points_of_an_s_are_dragged_with_the_mouse(editor, ess):
+    """The whole chain: a press on a point reaches the arc through the scene,
+    the drag moves it, and letting go lets go."""
+
+    view = editor.view
+    was = ess.curve_points()[0]
+    start = viewport_point(view, was)
+    end = viewport_point(view, QPointF(was.x(), was.y() - 10.0))
+
+    view.mousePressEvent(scene_mouse(view, QEvent.Type.MouseButtonPress, start))
+    view.mouseMoveEvent(scene_mouse(view, QEvent.Type.MouseMove, end))
+    moved = ess.curve_points()[0]
+    view.mouseReleaseEvent(scene_mouse(view, QEvent.Type.MouseButtonRelease, end))
+
+    assert moved.y() < was.y() - 5.0
+
+    view.mouseMoveEvent(
+        scene_mouse(
+            view, QEvent.Type.MouseMove, viewport_point(view, QPointF(10.0, 90.0))
+        )
+    )
+    assert ess.curve_points()[0] == moved
+
+
+def test_a_point_of_an_s_can_be_pressed_at_all(ess):
+    """A handle outside the shape is a handle no press ever reaches."""
+
+    for where in ess.handles().values():
+        assert ess.shape().contains(where)
+
+
+def test_an_s_covers_and_is_grabbed_along_its_curve(ess):
+    """Not merely along its chord: a curve led away from the straight line is a
+    curve nobody could click on if the band stayed behind."""
+
+    first = ess.curve_points()[0]
+    ess.move_handle(point_handle(0), QPointF(first.x(), first.y() - 20.0))
+    on = ess.path().pointAtPercent(0.3)
+
+    assert ess.shape().contains(on)
+    assert ess.boundingRect().contains(on)
+
+
+# ----------------------------------------------------------------------
+# Adding and taking out a point from the menu
+# ----------------------------------------------------------------------
+
+
+def entries(menu) -> list:
+    """Give what a menu offers, leaving its separators out.
+
+    Parameters
+    ----------
+    menu : PyQt6.QtWidgets.QMenu
+        The menu.
+
+    Returns
+    -------
+    list of str
+        The text of every action of it.
+    """
+
+    return [action.text() for action in menu.actions() if not action.isSeparator()]
+
+
+def test_an_s_offers_a_point_to_be_added(editor, ess):
+    """Which is where the gesture lives: an arc has no entry in the menu bar."""
+
+    on = ess.path().pointAtPercent(0.4)
+
+    assert entries(editor.view.arc_menu(ess, on)) == [
+        'Straight',
+        'Curved',
+        'S-Curved',
+        'Add Point',
+        'Delete Arc',
+    ]
+
+
+def test_a_point_of_an_s_offers_to_be_taken_out(editor, ess):
+    """The same place in the menu: they are one question — is there a point
+    here? — rather than two entries of which one is always dead."""
+
+    on = ess.curve_points()[1]
+
+    assert entries(editor.view.arc_menu(ess, on)) == [
+        'Straight',
+        'Curved',
+        'S-Curved',
+        'Delete Point',
+        'Delete Arc',
+    ]
+
+
+def test_the_other_shapes_offer_no_points(editor, net):
+    """A point is a thing an S is led through, and choosing the shape is the
+    step before putting points into it."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    straight = entries(editor.view.arc_menu(arc, arc.line.center()))
+
+    arc.shape_kind = ArcShape.CURVED
+    curved = entries(editor.view.arc_menu(arc, arc.path().pointAtPercent(0.5)))
+
+    assert 'Add Point' not in straight
+    assert 'Delete Point' not in straight
+    assert 'Add Point' not in curved
+    assert 'Delete Point' not in curved
+
+
+def test_the_menu_adds_the_point_where_it_was_opened(editor, ess):
+    """And puts it in the run where it was aimed rather than at the end."""
+
+    was = len(ess.curve_points())
+    on = ess.path().pointAtPercent(0.05)
+    menu = editor.view.arc_menu(ess, on)
+
+    [action for action in menu.actions() if action.text() == 'Add Point'][0].trigger()
+
+    assert len(ess.curve_points()) == was + 1
+    put = ess.curve_points()[0]
+    assert math.hypot(put.x() - on.x(), put.y() - on.y()) < 2.0
+
+
+def test_the_menu_takes_out_the_point_it_was_aimed_at(editor, ess):
+    """And no other, a context menu being aimed at a thing."""
+
+    second = ess.curve_points()[1]
+    menu = editor.view.arc_menu(ess, ess.curve_points()[0])
+
+    [action for action in menu.actions() if action.text() == 'Delete Point'][
+        0
+    ].trigger()
+
+    assert ess.curve_points() == [second]
+
+
+def test_choosing_the_s_gives_the_arc_an_s(editor, net):
+    """Which is the whole of what the menu is for."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    menu = editor.view.arc_menu(arc)
+    chosen = [action for action in menu.actions() if action.data() is ArcShape.S_CURVED]
+
+    chosen[0].trigger()
+
+    assert arc.shape_kind is ArcShape.S_CURVED
+    assert arc.curved
+
+
+def test_the_menu_says_when_the_arc_is_an_s(editor, net):
+    """A menu that says what a thing is is worth more than one that only says
+    what can be done to it."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    arc.shape_kind = ArcShape.S_CURVED
+
+    checked = [
+        action.data()
+        for action in editor.view.arc_menu(arc).actions()
+        if action.isCheckable() and action.isChecked()
+    ]
+
+    assert checked == [ArcShape.S_CURVED]
+
+
+# ----------------------------------------------------------------------
+# Putting an end somewhere else
+# ----------------------------------------------------------------------
+
+
+def drag_end(view, arc, end: str, target, port: int) -> None:
+    """Take one end of an arc off and put it on a connecting point.
+
+    Parameters
+    ----------
+    view : masafi_simtwin.documents.canvas.CanvasView
+        The view.
+    arc : masafi_simtwin.documents.arc.Arc
+        The arc, which must be selected for its handles to be there at all.
+    end : str
+        ``source`` or ``target``.
+    target : masafi_simtwin.documents.net_item.NetItem
+        What to put it on.
+    port : int
+        Which of that item's connecting points to let go nearest.
+    """
+
+    start = viewport_point(view, arc.handles()[end])
+    finish = viewport_point(view, target.scene_ports()[port])
+    view.mousePressEvent(mouse(QEvent.Type.MouseButtonPress, start))
+    view.mouseMoveEvent(mouse(QEvent.Type.MouseMove, finish))
+    view.mouseReleaseEvent(mouse(QEvent.Type.MouseButtonRelease, finish))
+
+
+def test_a_selected_arc_carries_a_handle_at_each_end(editor, net):
+    """On the connecting point that end is attached to, which is where it is
+    taken hold of to be put somewhere else."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    arc.setSelected(True)
+
+    assert arc.handles()['source'] == arc.line.p1()
+    assert arc.handles()['target'] == arc.line.p2()
+
+
+def test_an_end_can_be_put_on_another_point_of_the_same_item(editor, net):
+    """Which is the whole of *change the connection point*."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition, source_port=0, target_port=10)
+    arc.setSelected(True)
+
+    drag_end(editor.view, arc, 'source', place, 4)
+
+    assert arc.source is place
+    assert arc.source_port == 4
+    assert arc.line.p1() == place.scene_ports()[4]
+    assert place.arcs == [arc]
+
+
+def test_the_far_end_stays_where_it_was(editor, net):
+    """Only the end that was taken hold of moves."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition, source_port=0, target_port=10)
+    arc.setSelected(True)
+    was = arc.target_port
+
+    drag_end(editor.view, arc, 'source', place, 4)
+
+    assert arc.target is transition
+    assert arc.target_port == was
+
+
+def test_the_target_end_can_be_moved_too(editor, net):
+    """Both ends carry a handle and both work the same way."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition, source_port=0, target_port=10)
+    arc.setSelected(True)
+
+    drag_end(editor.view, arc, 'target', transition, 5)
+
+    assert arc.target_port == 5
+    assert arc.source_port == 0
+
+
+def test_an_end_can_be_put_on_another_item_altogether(editor, net):
+    """The same gesture: it is one question — where does this end go?"""
+
+    place, transition = net
+    other = editor.add_element('pt-petri-net', 'place', QPointF(20.0, 70.0))
+    arc = editor.add_arc(place, transition)
+    arc.setSelected(True)
+
+    drag_end(editor.view, arc, 'source', other, 0)
+
+    assert arc.source is other
+    assert other.arcs == [arc]
+    assert place.arcs == []
+    assert arc.line.p1() == other.scene_ports()[0]
+
+
+def test_an_end_cannot_be_put_on_something_it_may_not_join(editor, net):
+    """A Petri net stays bipartite however an arc is moved about."""
+
+    place, transition = net
+    other = editor.add_element('pt-petri-net', 'transition', QPointF(20.0, 70.0))
+    arc = editor.add_arc(place, transition)
+    arc.setSelected(True)
+
+    drag_end(editor.view, arc, 'source', other, 0)
+
+    assert arc.source is place
+    assert other.arcs == []
+
+
+def test_an_end_cannot_be_put_on_the_arc_own_other_end(editor, net):
+    """An arc from a thing to itself is not an arc."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    arc.setSelected(True)
+
+    drag_end(editor.view, arc, 'source', transition, 3)
+
+    assert arc.source is place
+    assert arc.target is transition
+
+
+def test_moving_an_end_makes_no_new_arc(editor, net):
+    """Nothing is emitted for it: no arc has come or gone."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    arc.setSelected(True)
+    drawn = []
+    editor.view.connection_drawn.connect(lambda *args: drawn.append(args))
+
+    drag_end(editor.view, arc, 'source', place, 4)
+
+    assert drawn == []
+    assert editor.arcs == [arc]
+
+
+def test_an_end_handle_is_taken_before_a_new_arc_is_started(editor, net):
+    """The handle sits on the connecting point a press would otherwise start a
+    new arc from, so the two gestures cannot both fire."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition, source_port=0)
+    arc.setSelected(True)
+    spot = viewport_point(editor.view, arc.handles()['source'])
+
+    editor.view.mousePressEvent(mouse(QEvent.Type.MouseButtonPress, spot))
+
+    assert editor.view.moving_end == (arc, 'source')
+    assert editor.view.connecting is transition
+
+
+def test_a_press_on_a_point_of_an_unselected_arc_starts_a_new_arc(editor, net):
+    """Only a selected arc has handles, so nothing is in the way until an arc
+    has been chosen."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition, source_port=0)
+    spot = viewport_point(editor.view, place.scene_ports()[0])
+
+    editor.view.mousePressEvent(mouse(QEvent.Type.MouseButtonPress, spot))
+
+    assert editor.view.moving_end is None
+    assert editor.view.connecting is place
+    assert arc.source_port == 0
+
+
+def test_giving_up_leaves_the_end_where_it_was(editor, net):
+    """Escape means escape here too."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition, source_port=0, target_port=10)
+    arc.setSelected(True)
+    start = viewport_point(editor.view, arc.handles()['source'])
+
+    editor.view.mousePressEvent(mouse(QEvent.Type.MouseButtonPress, start))
+    editor.view.keyPressEvent(
+        QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Escape, Qt.KeyboardModifier.NoModifier)
+    )
+
+    assert editor.view.moving_end is None
+    assert (arc.source, arc.source_port) == (place, 0)
+
+
+def test_dropping_an_end_on_nothing_leaves_it_where_it_was(editor, net):
+    """A drag that missed is a drag that missed, here as anywhere."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition, source_port=0)
+    arc.setSelected(True)
+    start = viewport_point(editor.view, arc.handles()['source'])
+    nowhere = QPointF(40.0, 300.0)
+
+    editor.view.mousePressEvent(mouse(QEvent.Type.MouseButtonPress, start))
+    editor.view.mouseMoveEvent(mouse(QEvent.Type.MouseMove, nowhere))
+    editor.view.mouseReleaseEvent(mouse(QEvent.Type.MouseButtonRelease, nowhere))
+
+    assert (arc.source, arc.source_port) == (place, 0)
+    assert editor.view.moving_end is None
+
+
+def test_putting_an_end_where_it_already_is_changes_nothing(editor, net):
+    """Which is what a click on a handle comes to."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition, source_port=3)
+
+    assert not arc.reattach('source', place, 3)
+    assert arc.reattach('source', place, 4)
+
+
+def test_a_shaping_handle_is_not_an_end_handle(editor, net):
+    """The arc drags the ones that shape it; the canvas drags the ones at its
+    ends.  Asking for one must never hand back the other."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    arc.shape_kind = ArcShape.CURVED
+    arc.setSelected(True)
+
+    assert arc.handle_at(arc.handles()['middle'], SHAPE_HANDLES) == 'middle'
+    assert arc.handle_at(arc.handles()['middle'], END_HANDLES) is None
+    assert arc.handle_at(arc.handles()['source'], END_HANDLES) == 'source'
+    assert arc.handle_at(arc.handles()['source'], SHAPE_HANDLES) is None

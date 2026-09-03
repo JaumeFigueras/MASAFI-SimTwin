@@ -84,8 +84,19 @@ from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QColor, QPainterPath, QPalette, QPen
 from PyQt6.QtWidgets import QGraphicsItem
 
-#: How big a connecting point is drawn, in millimetres of radius.
-PORT_RADIUS = 0.7
+#: How big a connecting point is drawn, in millimetres of radius.  Small, and
+#: smaller than what it takes to aim at one: a connecting point is not part of
+#: the drawing but somewhere to aim at, shown only while it is being aimed at,
+#: so it is drawn as a mark rather than as a bead.
+PORT_RADIUS = 0.35
+
+#: How far from a connecting point's centre, in millimetres, the pointer may be
+#: and still take hold of it.  Wider than the ring is drawn, exactly as
+#: :data:`masafi_simtwin.documents.arc.HANDLE_GRAB` is wider than
+#: :data:`masafi_simtwin.documents.arc.HANDLE_SIZE`: shrinking a mark should
+#: not make what it marks harder to hit, and the nearest point within reach is
+#: the one taken, so reaches that overlap still pick the one aimed at.
+PORT_GRAB = 0.7
 
 #: How thick an outline is, in millimetres.  A real stroke rather than Qt's
 #: cosmetic hairline: these are things drawn on paper, so an outline grows with
@@ -302,9 +313,11 @@ class NetItem(QGraphicsItem):
     def port_index_at(self, position: QPointF) -> int | None:
         """Find which connecting point a scene position falls on.
 
-        The **nearest** one within reach rather than the first: on a transition
-        the points along a long edge are a fifth of a millimetre clear of one
-        another, and taking whichever came first in the list would hand back a
+        Within :data:`PORT_GRAB` rather than within the ring's own radius: a
+        connecting point is aimed at rather than hit, and what is drawn is the
+        smaller of the two.  The **nearest** one rather than the first: on a
+        transition the points along a long edge are less than two reaches
+        apart, and taking whichever came first in the list would hand back a
         neighbour of the one that was aimed at.  That did not matter while an
         arc chose its own points; it matters now that a press decides where an
         arc leaves for good.
@@ -324,7 +337,7 @@ class NetItem(QGraphicsItem):
             (math.hypot(position.x() - point.x(), position.y() - point.y()), index)
             for index, point in enumerate(self.scene_ports())
         ]
-        near = [pair for pair in within if pair[0] <= PORT_RADIUS]
+        near = [pair for pair in within if pair[0] <= PORT_GRAB]
         return min(near)[1] if near else None
 
     def port_at(self, position: QPointF) -> QPointF | None:
