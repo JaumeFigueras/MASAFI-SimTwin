@@ -7,11 +7,12 @@ import math
 import pytest
 from PyQt6.QtCore import QEvent, QPointF, Qt
 from PyQt6.QtGui import QColor, QKeyEvent, QMouseEvent, QPainterPath
-from PyQt6.QtWidgets import QDialog
+from PyQt6.QtWidgets import QApplication, QDialog
 
 from masafi_simtwin.documents import petri_net
 from masafi_simtwin.documents.arc import (
     ARROW_LENGTH,
+    ARROW_WIDTH,
     CURVE_BOW,
     DEFAULT_WEIGHT,
     END_HANDLES,
@@ -984,8 +985,9 @@ def test_two_arcs_drawn_both_ways_bow_apart(editor, net):
     assert away.y() == pytest.approx(-back_away.y(), abs=1e-6)
 
 
-def test_a_curved_arc_arrives_along_its_own_tangent(editor, net):
-    """So it meets its target head on rather than at an angle to the curve."""
+def test_a_curved_arc_arrives_along_its_own_curve(editor, net):
+    """So it meets its target the way the curve does rather than the way the
+    chord does."""
 
     place, transition = net
     arc = editor.add_arc(place, transition)
@@ -997,6 +999,166 @@ def test_a_curved_arc_arrives_along_its_own_tangent(editor, net):
     assert arc.arrow().contains(arc.line.p2()) or arc.arrow().boundingRect().contains(
         arc.line.p2()
     )
+
+
+def hooked(editor, net):
+    """Give an S that turns hard just before it lands.
+
+    The shape the arrowhead was wrong on: the last leg comes up into the
+    transition's bottom edge from a point almost directly below it, so the curve
+    is still swinging round where the head is drawn.
+
+    Parameters
+    ----------
+    editor : masafi_simtwin.documents.petri_net.PetriNetEditor
+        The document.
+    net : tuple
+        The place and the transition.
+
+    Returns
+    -------
+    masafi_simtwin.documents.arc.Arc
+        The arc.
+    """
+
+    place, transition = net
+    arc = editor.add_arc(place, transition, source_port=10, target_port=13)
+    arc.shape_kind = ArcShape.S_CURVED
+    arc.setSelected(True)
+    arc.move_handle(point_handle(0), QPointF(place.x() + 6.0, place.y() + 14.0))
+    arc.move_handle(point_handle(1), QPointF(transition.x() - 3.0, place.y() + 14.0))
+    return arc
+
+
+def base_of(head: QPainterPath) -> QPointF:
+    """Give the middle of an arrowhead's base.
+
+    Parameters
+    ----------
+    head : PyQt6.QtGui.QPainterPath
+        The arrowhead, whose first element is its tip and whose next two are the
+        corners of its base.
+
+    Returns
+    -------
+    PyQt6.QtCore.QPointF
+        Half way between the two corners.
+    """
+
+    corners = [QPointF(head.elementAt(index).x, head.elementAt(index).y) for index in (1, 2)]
+    return QPointF(
+        (corners[0].x() + corners[1].x()) / 2.0, (corners[0].y() + corners[1].y()) / 2.0
+    )
+
+
+def off_the_line(path: QPainterPath, point: QPointF) -> float:
+    """Give how far a place is from a line, in millimetres.
+
+    Parameters
+    ----------
+    path : PyQt6.QtGui.QPainterPath
+        The line.
+    point : PyQt6.QtCore.QPointF
+        The place.
+
+    Returns
+    -------
+    float
+        The distance to the nearest place on it, sampled finely enough that the
+        sampling is not what is being measured.
+    """
+
+    return min(
+        math.hypot(
+            path.pointAtPercent(step / 2000.0).x() - point.x(),
+            path.pointAtPercent(step / 2000.0).y() - point.y(),
+        )
+        for step in range(2001)
+    )
+
+
+def test_the_line_runs_up_the_middle_of_its_own_arrowhead(editor, net):
+    """An arrowhead is a straight triangle two and a half millimetres long, so
+    laying it along the *tangent* where the arc lands puts a straight thing
+    across a bend: on a curve that turns hard just before it lands the line then
+    met the base at its corner — 0.9 mm off centre, the whole half-width — and
+    the head read as a flag stuck on the end.  The base is taken off the line
+    itself, so the line passes through it."""
+
+    arc = hooked(editor, net)
+    middle = base_of(arc.arrow())
+
+    assert off_the_line(arc.path(), middle) < 0.01
+
+
+def test_every_arrowhead_is_the_same_size(editor, net):
+    """An arrowhead says what an arc *is*, not how it was drawn, so a curved
+    one is neither stubbier nor longer than a straight one.  Measuring its
+    length *along* the line is what made it stubby: the chord of a bend is
+    shorter than the bend."""
+
+    place, transition = net
+    heads = {}
+    arc = editor.add_arc(place, transition)
+    heads['straight'] = arc.arrow()
+    arc.shape_kind = ArcShape.CURVED
+    heads['curved'] = arc.arrow()
+    heads['s-curved'] = hooked(editor, net).arrow()
+
+    for name, head in heads.items():
+        tip = QPointF(head.elementAt(0).x, head.elementAt(0).y)
+        corners = [
+            QPointF(head.elementAt(index).x, head.elementAt(index).y) for index in (1, 2)
+        ]
+        middle = base_of(head)
+
+        assert math.hypot(
+            tip.x() - middle.x(), tip.y() - middle.y()
+        ) == pytest.approx(ARROW_LENGTH, abs=1e-3), f'{name} is the wrong length'
+        assert math.hypot(
+            corners[0].x() - corners[1].x(), corners[0].y() - corners[1].y()
+        ) == pytest.approx(ARROW_WIDTH, abs=1e-3), f'{name} is the wrong width'
+
+
+def test_the_last_stretch_of_the_line_is_inside_the_arrowhead(editor, net):
+    """Which is what makes the head read as the end of the line rather than as
+    something stuck on it."""
+
+    arc = hooked(editor, net)
+    path = arc.path()
+    head = arc.arrow()
+    length = path.length()
+
+    for back in (0.3, 0.9, 1.5, 2.1):
+        where = path.pointAtPercent((length - back) / length)
+        assert head.contains(where), f'the line leaves its own head {back} mm back'
+
+
+def test_the_arrowhead_still_ends_on_the_connecting_point(editor, net):
+    """Wherever it is aimed, its tip is where the arc lands."""
+
+    arc = hooked(editor, net)
+    tip = arc.arrow().elementAt(0)
+
+    assert (tip.x, tip.y) == pytest.approx((arc.line.p2().x(), arc.line.p2().y()))
+
+
+def test_the_arrowhead_of_a_straight_arc_is_the_straight_line(editor, net):
+    """The two rules are one where the line and its chord are one, so nothing
+    changes for the ordinary arc."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    head = arc.arrow()
+    tip = arc.line.p2()
+    along = arc.line.unitVector()
+    base = QPointF(
+        tip.x() - along.dx() * ARROW_LENGTH, tip.y() - along.dy() * ARROW_LENGTH
+    )
+    middle = base_of(head)
+
+    assert middle.x() == pytest.approx(base.x(), abs=1e-6)
+    assert middle.y() == pytest.approx(base.y(), abs=1e-6)
 
 
 def test_the_weight_rides_the_curve(editor, net):
@@ -1415,6 +1577,77 @@ def test_the_handles_are_dragged_with_the_mouse(editor, net, curve):
         )
     )
     assert curve.curve_middle() == moved
+
+
+def repainted(scene, act) -> list:
+    """Give the parts of the sheet the scene asked to have painted again.
+
+    Which is the only way to catch something left behind: what is *drawn* is
+    right either way — a fresh painting of the whole sheet shows nothing wrong —
+    and the bug is in the region the view is told to repaint.  The scene reports
+    it through ``changed``, which it emits once the dirty items have been
+    processed, so the loop has to be let run.
+
+    Parameters
+    ----------
+    scene : PyQt6.QtWidgets.QGraphicsScene
+        The scene.
+    act : collections.abc.Callable
+        What to do to it.
+
+    The connection is **taken off again** before this returns.  A connection
+    made with a lambda belongs to the sender alone, and the scene outlives the
+    test: left in place it is called again while the document is being torn
+    down, which kills the interpreter outright.  That is the same rule the
+    application follows for its own signals.
+
+    Returns
+    -------
+    list of PyQt6.QtCore.QRectF
+        Every rectangle reported, in scene millimetres.
+    """
+
+    seen = []
+    watch = scene.changed.connect(seen.extend)
+    try:
+        QApplication.processEvents()
+        seen.clear()
+        act()
+        QApplication.processEvents()
+    finally:
+        scene.changed.disconnect(watch)
+    return list(seen)
+
+
+def test_letting_go_of_an_arc_repaints_where_its_handles_were(editor, curve):
+    """A handle may lie a long way off the line, and it is inside the arc's
+    rectangle only while the arc is selected — so deselecting shrinks the
+    rectangle before Qt repaints, and the handles stay on the sheet with nothing
+    left that knows they are there.  This was seen: two squares left hanging
+    over a net."""
+
+    curve.move_handle('source_control', QPointF(30.0, 4.0))
+    QApplication.processEvents()
+    where = curve.handles()['source_control']
+
+    seen = repainted(editor.view.scene(), lambda: curve.setSelected(False))
+
+    assert any(rect.contains(where) for rect in seen), (
+        f'nothing repainted where the handle was, at {where}'
+    )
+
+
+def test_taking_hold_of_an_arc_paints_the_handles_it_grows(editor, net):
+    """The other way round, which has always worked and must go on working."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    arc.shape_kind = ArcShape.CURVED
+    QApplication.processEvents()
+
+    seen = repainted(editor.view.scene(), lambda: arc.setSelected(True))
+
+    assert any(rect.contains(arc.handles()['middle']) for rect in seen)
 
 
 @pytest.mark.parametrize('colors', SCHEMES, ids=SCHEME_NAMES)

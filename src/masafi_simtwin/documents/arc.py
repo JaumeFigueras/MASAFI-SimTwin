@@ -121,8 +121,22 @@ from masafi_simtwin.documents.net_item import (
 ARC_GRAB = 1.5
 
 #: How long the arrowhead is, in millimetres, and how wide across its base.
+#: One size for every shape of arc: an arrowhead is a mark of what an arc *is*
+#: rather than of how it was drawn, so a curved arc's must be neither stubbier
+#: nor longer than a straight one's.
 ARROW_LENGTH = 2.4
 ARROW_WIDTH = 1.8
+
+#: How far back along the line the base of the arrowhead is looked for, as a
+#: multiple of how far away it is to be.  A curve doubling back on itself covers
+#: the straight distance in more line than a straight arc does; past this it is
+#: a curl rather than an arrival, and the chord is used instead.
+SEARCH_TAIL = 6.0
+
+#: How many halvings that search takes.  Sixteen puts the base within a
+#: five-thousandth of a millimetre of where it belongs, which is far inside a
+#: pixel at any zoom a person works at.  A straight arc does not search at all.
+SEARCH_STEPS = 16
 
 #: How tall the weight is drawn, in millimetres, and how far off the line.
 WEIGHT_HEIGHT = 3.0
@@ -1090,27 +1104,112 @@ class Arc(QGraphicsItem):
         along = QPointF(math.cos(angle), -math.sin(angle))
         return path.pointAtPercent(0.5), QPointF(-along.y(), along.x())
 
-    def _arriving(self) -> QPointF:
-        """Give the unit vector the arc is travelling in when it arrives.
+    def _arrival(self) -> tuple[QPointF, QPointF]:
+        """Give where the arrowhead's base sits and which way it points.
 
-        The chord for a straight arc, and the tangent at the end for a curved
-        one — which for a cubic Bézier is the way from its second control point
-        to its end, taken from the **last** segment, an S having several.
+        The base is the place on the drawn line **:data:`ARROW_LENGTH` away from
+        the end as the crow flies**, and the head points from there to the tip.
+        Two things follow, and both are wanted:
+
+        * the head is the **same size on every arc** — exactly
+          :data:`ARROW_LENGTH` long, whatever the line is doing where it lands.
+          Measuring that length *along* the line instead makes the head as short
+          as the chord of the last stretch, so a curve that bends sharply gets a
+          stubby little head and a straight arc a full-sized one, which is what
+          happened first;
+        * the base is a point **of the line**, so the line runs up the middle of
+          the head rather than into a corner of it.
+
+        The tangent where the arc arrives is not used, and that is the point.  A
+        head is a straight triangle two and a half millimetres long: laid along
+        the tangent it is a straight thing across a bend, and on a curve that
+        turns hard just before it lands the line meets the base at its corner —
+        the whole half-width off centre — so the head reads as a flag stuck on
+        the end rather than as the end of the line.  On a straight arc the two
+        rules are the same thing, the line and its chord being one, and on a
+        gentle curve they are within a degree.
+
+        A **straight** arc skips the search: its line is its chord, so the base
+        is worked out rather than looked for, and it is exact.
 
         Returns
         -------
-        PyQt6.QtCore.QPointF
-            The direction, of unit length.
+        tuple
+            The base, in scene millimetres, and the direction of unit length.
         """
 
-        segments = self.segments()
-        reach = QLineF(segments[-1][1], self._line.p2()) if segments else QLineF(self._line)
-        if not reach.length():
-            reach = QLineF(self._line)
-        length = reach.length()
+        tip = self._line.p2()
+        if self.segments():
+            base = self._reach_back(self.path(), tip, ARROW_LENGTH)
+        else:
+            base = None
+        if base is not None:
+            reach = QLineF(base, tip)
+            if reach.length():
+                return base, QPointF(reach.dx() / reach.length(), reach.dy() / reach.length())
+
+        chord = self._line.length()
+        along = (
+            QPointF(self._line.dx() / chord, self._line.dy() / chord)
+            if chord
+            else QPointF(1.0, 0.0)
+        )
+        return (
+            QPointF(tip.x() - along.x() * ARROW_LENGTH, tip.y() - along.y() * ARROW_LENGTH),
+            along,
+        )
+
+    @staticmethod
+    def _reach_back(path: QPainterPath, tip: QPointF, reach: float) -> QPointF | None:
+        """Find the place on a path a given distance from its end, as the crow
+        flies.
+
+        Bisected rather than solved: the distance from the end grows as one goes
+        back along the line, so a dozen halvings of the tail land on it to a
+        thousandth of a millimetre, and a curve is not a thing to solve exactly
+        for a triangle two millimetres long.  Only the **tail** is searched —
+        :data:`SEARCH_TAIL` times the distance wanted — because a long arc can
+        wander back within that distance of its own end somewhere far away, and
+        the one under the arrowhead is the one that is wanted.
+
+        Parameters
+        ----------
+        path : PyQt6.QtGui.QPainterPath
+            The line.
+        tip : PyQt6.QtCore.QPointF
+            Its end, in scene millimetres.
+        reach : float
+            How far from the end, in millimetres.
+
+        Returns
+        -------
+        PyQt6.QtCore.QPointF, optional
+            The place, or ``None`` when the whole line is shorter than that —
+            a line with no room for a head on it.
+        """
+
+        length = path.length()
         if not length:
-            return QPointF(1.0, 0.0)
-        return QPointF(reach.dx() / length, reach.dy() / length)
+            return None
+
+        def away(percent: float) -> float:
+            where = path.pointAtPercent(percent)
+            return math.hypot(where.x() - tip.x(), where.y() - tip.y())
+
+        low = max(0.0, (length - reach * SEARCH_TAIL) / length)
+        if away(low) < reach:
+            low = 0.0
+        if away(low) < reach:
+            return None
+
+        high = 1.0
+        for _ in range(SEARCH_STEPS):
+            middle = (low + high) / 2.0
+            if away(middle) < reach:
+                high = middle
+            else:
+                low = middle
+        return path.pointAtPercent(low)
 
     def _perpendicular(self) -> QPointF:
         """Give the unit vector across the line, which is where the weight sits.
@@ -1159,9 +1258,9 @@ class Arc(QGraphicsItem):
     def arrow(self) -> QPainterPath:
         """Build the arrowhead, at the end the arc enters.
 
-        It points along the arc's **tangent** where it arrives, not along the
-        chord, so a curved arc meets its target head on rather than at an angle
-        to the line that was drawn.
+        It is laid along the **last :data:`ARROW_LENGTH` of the line**, base and
+        direction both — see :meth:`_arrival` — so it sits on the line rather
+        than merely near it, whatever the line is doing where it lands.
 
         Returns
         -------
@@ -1171,14 +1270,12 @@ class Arc(QGraphicsItem):
         """
 
         head = QPainterPath()
-        length = self._line.length()
-        if not length:
+        if not self._line.length():
             return head
 
         tip = self._line.p2()
-        along = self._arriving()
+        back, along = self._arrival()
         across = QPointF(-along.y(), along.x())
-        back = QPointF(tip.x() - along.x() * ARROW_LENGTH, tip.y() - along.y() * ARROW_LENGTH)
 
         head.moveTo(tip)
         head.lineTo(
@@ -1264,6 +1361,42 @@ class Arc(QGraphicsItem):
             painter.drawPath(weight)
 
         self._paint_handles(painter, option)
+
+    def itemChange(self, change, value):  # noqa: N802  (Qt naming)
+        """Have the whole of what was drawn repainted when the arc is selected
+        or let go of.
+
+        A selected arc carries handles, and a handle may lie a long way off the
+        line — a control point pulled away from the curve, a point of an S taken
+        out to the side.  Those handles are inside :meth:`boundingRect` only
+        while the arc is selected, so **deselecting shrinks the rectangle before
+        Qt repaints**: the plain ``update()`` Qt does for a selection change
+        marks the new, smaller area, and the handles stay painted on the sheet
+        with nothing left that knows they are there.
+
+        :meth:`prepareGeometryChange` is what says *the geometry is about to
+        change*, and it has the view repaint the area the item was **last
+        painted in** rather than the area it is about to occupy — which is the
+        whole of the fix.  It is done on ``ItemSelectedChange``, before the flag
+        is applied, so the rectangle it takes is still the one with the handles
+        in it.
+
+        Parameters
+        ----------
+        change : PyQt6.QtWidgets.QGraphicsItem.GraphicsItemChange
+            What is changing.
+        value : object
+            What it is changing to.
+
+        Returns
+        -------
+        object
+            The value, unchanged: nothing here refuses a change.
+        """
+
+        if change == QGraphicsItem.GraphicsItemChange.ItemSelectedChange:
+            self.prepareGeometryChange()
+        return super().itemChange(change, value)
 
     def mousePressEvent(self, event) -> None:  # noqa: N802  (Qt naming)
         """Take hold of a shaping handle, or leave the press to the scene.
