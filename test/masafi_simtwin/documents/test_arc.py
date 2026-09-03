@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 
 import pytest
-from PyQt6.QtCore import QEvent, QPointF, Qt
+from PyQt6.QtCore import QEvent, QLineF, QPointF, Qt
 from PyQt6.QtGui import QColor, QKeyEvent, QMouseEvent, QPainterPath
 from PyQt6.QtWidgets import QApplication, QDialog
 
@@ -1196,7 +1196,7 @@ def test_a_curved_arc_covers_and_is_grabbed_along_its_curve(editor, net):
 # ----------------------------------------------------------------------
 
 
-def test_an_arc_offers_its_three_shapes_and_a_way_out(editor, net):
+def test_an_arc_offers_its_four_shapes_and_a_way_out(editor, net):
     """An arc has no entry in the menu bar, so this is where all of them are
     found."""
 
@@ -1208,6 +1208,7 @@ def test_an_arc_offers_its_three_shapes_and_a_way_out(editor, net):
         'Straight',
         'Curved',
         'S-Curved',
+        'L-Shaped',
         'Delete Arc',
     ]
 
@@ -2036,6 +2037,7 @@ def test_an_s_offers_a_point_to_be_added(editor, ess):
         'Straight',
         'Curved',
         'S-Curved',
+        'L-Shaped',
         'Add Point',
         'Delete Arc',
     ]
@@ -2051,6 +2053,7 @@ def test_a_point_of_an_s_offers_to_be_taken_out(editor, ess):
         'Straight',
         'Curved',
         'S-Curved',
+        'L-Shaped',
         'Delete Point',
         'Delete Arc',
     ]
@@ -2085,6 +2088,51 @@ def test_the_menu_adds_the_point_where_it_was_opened(editor, ess):
     assert len(ess.curve_points()) == was + 1
     put = ess.curve_points()[0]
     assert math.hypot(put.x() - on.x(), put.y() - on.y()) < 2.0
+
+
+def test_adding_a_point_leaves_the_arc_in_hand(editor, ess):
+    """A point is put in to be dragged somewhere, and the handle to drag it by
+    is there only while the arc is selected.  A right click does not select what
+    it is aimed at, so without this a person aims at the arc twice for one
+    wish."""
+
+    ess.setSelected(False)
+    on = ess.path().pointAtPercent(0.4)
+    menu = editor.view.arc_menu(ess, on)
+
+    [action for action in menu.actions() if action.text() == 'Add Point'][0].trigger()
+
+    assert ess.isSelected()
+    assert point_handle(0) in ess.handles()
+
+
+def test_taking_a_point_out_leaves_the_arc_in_hand_as_well(editor, ess):
+    """The same wish: a route being worked on goes on being worked on."""
+
+    ess.setSelected(False)
+    corner = ess.curve_points()[0]
+    menu = editor.view.arc_menu(ess, corner)
+
+    [action for action in menu.actions() if action.text() == 'Delete Point'][0].trigger()
+
+    assert ess.isSelected()
+
+
+def test_working_on_an_arc_puts_the_rest_of_the_selection_down(editor, net, ess):
+    """Which is what a click on the arc would have done: what the menu was aimed
+    at is the thing being worked on, and *Delete* afterwards should reach that
+    and nothing else."""
+
+    place, transition = net
+    place.setSelected(True)
+    ess.setSelected(False)
+    on = ess.path().pointAtPercent(0.4)
+    menu = editor.view.arc_menu(ess, on)
+
+    [action for action in menu.actions() if action.text() == 'Add Point'][0].trigger()
+
+    assert ess.isSelected()
+    assert not place.isSelected()
 
 
 def test_the_menu_takes_out_the_point_it_was_aimed_at(editor, ess):
@@ -2129,6 +2177,208 @@ def test_the_menu_says_when_the_arc_is_an_s(editor, net):
     ]
 
     assert checked == [ArcShape.S_CURVED]
+
+
+# ----------------------------------------------------------------------
+# The L, and the corners it turns
+# ----------------------------------------------------------------------
+
+
+@pytest.fixture
+def ell(editor, net):
+    """Give an L-shaped arc, selected, so that its corners are out.
+
+    Parameters
+    ----------
+    editor : masafi_simtwin.documents.petri_net.PetriNetEditor
+        The document.
+    net : tuple
+        The place and the transition.
+
+    Returns
+    -------
+    masafi_simtwin.documents.arc.Arc
+        The arc.
+    """
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    arc.shape_kind = ArcShape.L_SHAPED
+    arc.setSelected(True)
+    return arc
+
+
+def corner_angle(arc) -> float:
+    """Give the angle the arc turns through at its first corner, in degrees.
+
+    Parameters
+    ----------
+    arc : masafi_simtwin.documents.arc.Arc
+        The arc, which must have at least one point.
+
+    Returns
+    -------
+    float
+        The angle between the leg coming in and the leg going out.
+    """
+
+    knots = [arc.line.p1(), *arc.curve_points(), arc.line.p2()]
+    one = (knots[1].x() - knots[0].x(), knots[1].y() - knots[0].y())
+    two = (knots[2].x() - knots[1].x(), knots[2].y() - knots[1].y())
+    dot = one[0] * two[0] + one[1] * two[1]
+    return math.degrees(
+        math.acos(dot / (math.hypot(*one) * math.hypot(*two)))
+    )
+
+
+def test_an_l_is_an_l_as_soon_as_it_is_chosen(ell):
+    """One corner, and a **right** one: half way along the chord and half way
+    across it is on the circle whose diameter is the chord, and every point of
+    that circle sees the chord at a right angle."""
+
+    assert len(ell.curve_points()) == 1
+    assert corner_angle(ell) == pytest.approx(90.0, abs=1e-6)
+
+
+def test_an_l_stays_square_when_the_net_is_dragged_about(ell, net):
+    """The point is kept in the chord's own frame, so the frame turns and
+    scales with the arc and the corner goes on being a right angle."""
+
+    place, transition = net
+    transition.setPos(QPointF(30.0, 90.0))
+    place.setPos(QPointF(95.0, 25.0))
+
+    assert corner_angle(ell) == pytest.approx(90.0, abs=1e-6)
+
+
+def test_an_l_is_straight_between_its_points(ell):
+    """Which is the whole of what makes it an L rather than an S: the line goes
+    from corner to corner and bends nowhere in between."""
+
+    ell.insert_point(ell.path().pointAtPercent(0.75))
+
+    for leg in ell.segment_paths():
+        start = leg.pointAtPercent(0.0)
+        finish = leg.pointAtPercent(1.0)
+        span = math.hypot(finish.x() - start.x(), finish.y() - start.y())
+        for step in range(1, 20):
+            where = leg.pointAtPercent(step / 20.0)
+            across = abs(
+                (finish.x() - start.x()) * (start.y() - where.y())
+                - (start.x() - where.x()) * (finish.y() - start.y())
+            ) / span
+            assert across < 1e-6
+
+
+def test_an_l_and_an_s_are_one_route_drawn_two_ways(editor, net):
+    """They share the points, so changing an arc from one to the other keeps
+    where it goes and changes only whether its corners are rounded off."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    arc.shape_kind = ArcShape.S_CURVED
+    arc.setSelected(True)
+    first = arc.curve_points()[0]
+    arc.move_handle(point_handle(0), QPointF(first.x(), first.y() + 9.0))
+    route = [arc.chord_frame(point) for point in arc.curve_points()]
+
+    arc.shape_kind = ArcShape.L_SHAPED
+
+    assert [arc.chord_frame(point) for point in arc.curve_points()] == route
+
+
+def test_a_shape_led_through_points_starts_as_what_it_is_named(editor, net):
+    """An S comes out an S and an L comes out an L, and a straight arc carries
+    no points at all until it is made one of them."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+
+    assert arc.curve_points() == []
+
+    arc.shape_kind = ArcShape.L_SHAPED
+    assert len(arc.curve_points()) == 1
+
+    other = editor.add_arc(place, transition)
+    other.shape_kind = ArcShape.S_CURVED
+    assert len(other.curve_points()) == 2
+
+
+def test_taking_every_point_out_and_choosing_the_shape_again_starts_over(ell):
+    """Which is the way back from a route that has gone wrong, and it falls out
+    of seeding only when there are none rather than needing a *reset*."""
+
+    while ell.remove_point(0):
+        pass
+    assert ell.curve_points() == []
+
+    ell.shape_kind = ArcShape.STRAIGHT
+    ell.shape_kind = ArcShape.L_SHAPED
+
+    assert len(ell.curve_points()) == 1
+    assert corner_angle(ell) == pytest.approx(90.0, abs=1e-6)
+
+
+def test_a_corner_can_be_put_into_an_l_and_taken_out_again(ell):
+    """The same gesture the S has, on the same points."""
+
+    index = ell.insert_point(ell.path().pointAtPercent(0.25))
+
+    assert index == 0
+    assert len(ell.curve_points()) == 2
+
+    assert ell.remove_point(index)
+    assert len(ell.curve_points()) == 1
+
+
+def test_an_l_carries_a_handle_on_every_corner(ell):
+    """They are the handles, as the S's points are."""
+
+    ell.insert_point(ell.path().pointAtPercent(0.25))
+
+    assert sorted(ell.handles()) == sorted(
+        [point_handle(0), point_handle(1), *END_HANDLES]
+    )
+
+
+def test_a_corner_of_an_l_is_dragged_where_it_is_put(editor, ell):
+    """On the line and under the pointer, snapped to the millimetre."""
+
+    was = ell.curve_points()[0]
+    wants = QPointF(was.x() + 3.4, was.y() - 5.6)
+    snapped = QPointF(editor.view.snap(wants.x()), editor.view.snap(wants.y()))
+
+    ell.move_handle(point_handle(0), wants)
+
+    assert ell.curve_points()[0].x() == pytest.approx(snapped.x(), abs=1e-6)
+    assert ell.curve_points()[0].y() == pytest.approx(snapped.y(), abs=1e-6)
+
+
+def test_the_arrowhead_of_an_l_lies_along_its_last_leg(ell):
+    """A leg is straight, so the head is simply on it — and it is the same head
+    every other shape carries."""
+
+    head = ell.arrow()
+    tip = QPointF(head.elementAt(0).x, head.elementAt(0).y)
+    middle = base_of(head)
+    knots = [ell.line.p1(), *ell.curve_points(), ell.line.p2()]
+    leg = QLineF(knots[-2], knots[-1])
+
+    assert math.hypot(tip.x() - middle.x(), tip.y() - middle.y()) == pytest.approx(
+        ARROW_LENGTH, abs=1e-3
+    )
+    assert off_the_line(ell.path(), middle) < 0.01
+    assert QLineF(middle, tip).angle() == pytest.approx(leg.angle(), abs=0.5)
+
+
+def test_an_l_offers_its_points_in_the_menu(editor, ell):
+    """The same two entries the S has, in the same place, for the same reason."""
+
+    on = ell.path().pointAtPercent(0.25)
+    corner = ell.curve_points()[0]
+
+    assert 'Add Point' in entries(editor.view.arc_menu(ell, on))
+    assert 'Delete Point' in entries(editor.view.arc_menu(ell, corner))
 
 
 # ----------------------------------------------------------------------

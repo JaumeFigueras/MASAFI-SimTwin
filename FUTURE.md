@@ -418,10 +418,11 @@ drawing layer can be built and looked at without it, which is what this is.
 **Now.** `ArcShape.S_CURVED` is led through as many points as it is given, and the curve between them
 is worked out rather than drawn: a uniform Catmull-Rom spline, with the control points of each
 segment fixed at a sixth of the neighbours' chords. So the *route* is a person's to choose and the
-*curvature* is not. Two consequences follow. A **corner** cannot be made — every point is smooth,
-and an arc that should turn a right angle has to be approximated by points close together. And a
-spline through points far apart **overshoots**: pull one point hard away from the line and the curve
-swings past it before coming back, which is the spline doing what a spline does and not a bug.
+*curvature* is not. Two consequences follow. Every corner of one arc is **either all smooth or all
+sharp**: `ArcShape.L_SHAPED` is the same route with straight legs, so a right angle is had by
+choosing it, but an arc with one sharp corner and the rest rounded cannot be drawn. And a spline
+through points far apart **overshoots**: pull one point hard away from the line and the curve swings
+past it before coming back, which is the spline doing what a spline does and not a bug.
 
 **Why it was done this way.** Points that are *on* the curve are the ones a person can aim: putting a
 point on a line means *the line goes here*. A poly-Bézier with its own pair of control handles at
@@ -435,7 +436,8 @@ or a layout so tight that an overshoot puts an arc through the item it was route
 **Options.**
 
 - A per-point tension, or a *sharp / smooth* on each point's context menu, cutting the spline at that
-  knot. Small, and it is where a corner would go.
+  knot. Small, it is where a corner would go, and it is what would let one arc have both — the S and
+  the L would then be defaults for what every point of an arc is rather than two shapes.
 - Centripetal Catmull-Rom rather than uniform, which is the standard fix for the overshoot and is a
   change to one function, `catmull_rom()`.
 - Control handles per point after all, as a fourth shape rather than in place of this one, so the
@@ -443,11 +445,12 @@ or a layout so tight that an overshoot puts an arc through the item it was route
 
 ---
 
-## An arc cannot be led round anything until it is made an S
+## An arc cannot be led round anything until it is made an S or an L
 
-**Now.** *Add Point* and *Delete Point* are offered on an S-curved arc and on no other. A person who
-wants a bend in a straight arc chooses *S-Curved* first — which gives the default S of two points —
-and then adds points where they want them. Two visits to the same menu for what feels like one wish.
+**Now.** *Add Point* and *Delete Point* are offered on the shapes that are led through points — the S
+and the L — and on no other. A person who wants a bend in a straight arc chooses one of them first,
+which gives that shape's own default points, and then adds points where they want them. Two visits to
+the same menu for what feels like one wish.
 
 **Why it was done this way.** A menu entry that silently changes what a thing *is* is worse than one
 that asks. *Add Point* on a straight arc would have to turn it into an S to have anywhere to put the
@@ -463,8 +466,8 @@ the points that follow.
   one being added — so a straight arc gains exactly the bend that was asked for and nothing else.
   That is the smallest change and probably the right one; it was left out only because it makes one
   gesture do two things.
-- Give the S no default points, so choosing it changes nothing until a point is put in. Honest, but
-  then a shape named after its look does not look like it when chosen.
+- Give the S and the L no default points, so choosing one changes nothing until a point is put in.
+  Honest, but then a shape named after its look does not look like it when chosen.
 - Leave it, on the grounds that choosing a shape and shaping it are two decisions.
 
 ---

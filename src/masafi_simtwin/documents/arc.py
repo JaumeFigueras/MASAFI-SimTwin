@@ -31,8 +31,8 @@ geometry is where its ends are.  An item that never moves has nothing to gain
 from a local coordinate system, and a line whose two ends belong to two other
 items has nothing natural to measure from.
 
-An arc is drawn **straight, curved or S-curved**, which is :class:`ArcShape` and
-is chosen from its context menu.  A curve is a cubic Bézier with a control point
+An arc is drawn **straight, curved, S-curved or L-shaped**, which is
+:class:`ArcShape` and is chosen from its context menu.  A curve is a cubic Bézier with a control point
 at each end, and it is **shaped by hand**: selecting a curved arc brings out
 three handles, in the manner of a Bézier in DIA.
 
@@ -62,6 +62,14 @@ out from the arc's context menu: *Add Point* puts one on the line where the
 pointer is, *Delete Point* over a point takes that one out.  That is what lets
 an arc be led **round** something rather than merely leaned away from it, which
 a single bow cannot do.
+
+An **L** is the same route with the corners left sharp: the same points, joined
+by straight lines instead of by a spline, so an arc turns corners rather than
+bending.  It starts as one right-angled corner.  The two shapes share the
+points and :attr:`ArcShape.led_through_points` is what tells them from the other
+two, so an arc changed from one to the other keeps where it goes and changes
+only how it gets there — the route is a person's, and whether the corners are
+rounded off is a choice about the drawing.
 
 A **selected arc of any shape** also carries a handle at each of its two
 ends, ``source`` and ``target``, sitting on the connecting point it is attached
@@ -184,6 +192,15 @@ DEFAULT_S_POINTS = (
     (2.0 / 3.0, -CURVE_BOW),
 )
 
+#: Where the point of an untouched L sits, in the chord's own frame.  Half way
+#: along and half way across is on the circle whose diameter is the chord, and
+#: every point of that circle sees the chord at a **right angle** (Thales), so
+#: the two legs meet square — a real L rather than a dog-leg — and they go on
+#: meeting square when the items are dragged, the frame turning and scaling
+#: with them.  To the left of the way the arc is going, as :data:`CURVE_BOW` is,
+#: so a both-ways pair still goes round opposite sides.
+DEFAULT_L_POINTS = ((0.5, 0.5),)
+
 #: How many places along a segment are looked at when the nearest place on the
 #: curve is wanted — for putting a new point on the line where the pointer is,
 #: which is the only thing that asks.  A curve is not a thing to solve exactly
@@ -227,12 +244,41 @@ class ArcShape(Enum):
         line rather than off it, drawn as one smooth path.  It starts as an S —
         :data:`DEFAULT_S_POINTS` — and a point is put in or taken out from the
         arc's context menu, so an arc can be led round whatever is in its way.
+    L_SHAPED
+        The same points joined by **straight lines**, so the arc turns corners
+        instead of bending.  It starts as an L — :data:`DEFAULT_L_POINTS`, one
+        corner, a right angle.
+
+    The last two are the same route drawn two ways, and they share the points:
+    an arc changed from one to the other keeps where it goes and changes only
+    whether its corners are rounded off.
     """
 
     STRAIGHT = 'straight'
     CURVED = 'curved'
     S_CURVED = 's-curved'
+    L_SHAPED = 'l-shaped'
 
+    @property
+    def led_through_points(self) -> bool:
+        """bool: Whether this shape is led through points a person puts in.
+
+        The one thing anything outside asks about a shape.  Which handles an
+        arc carries, whether a point can be put into it or taken out of it, and
+        what its context menu offers are all this question — asked of the shape
+        rather than written out as a list of shapes in half a dozen places.
+        """
+
+        return self in (ArcShape.S_CURVED, ArcShape.L_SHAPED)
+
+
+#: What each shape that is led through points starts as, when it is chosen on
+#: an arc that has none.  A shape named after what it looks like should look
+#: like it as soon as it is chosen.
+DEFAULT_POINTS = {
+    ArcShape.S_CURVED: DEFAULT_S_POINTS,
+    ArcShape.L_SHAPED: DEFAULT_L_POINTS,
+}
 
 def point_handle(index: int) -> str:
     """Give the name of the handle on one point of an S.
@@ -320,6 +366,40 @@ def catmull_rom(knots: list[QPointF]) -> list[tuple[QPointF, QPointF, QPointF]]:
     return segments
 
 
+def straight_legs(knots: list[QPointF]) -> list[tuple[QPointF, QPointF, QPointF]]:
+    """Join a run of points with **straight** lines, as cubic Béziers.
+
+    A cubic whose two control points lie a third and two thirds of the way along
+    its own chord *is* that chord — the same curve, drawn by the same call — so
+    an arc of straight legs needs no second way of being painted, measured,
+    stroked for grabbing or pointed at.  Everything that reads
+    :meth:`Arc.segments` goes on reading one thing.
+
+    Parameters
+    ----------
+    knots : list of PyQt6.QtCore.QPointF
+        The corners the line turns at, its two ends included, in order.
+
+    Returns
+    -------
+    list of tuple
+        One ``(first control, second control, end)`` for each leg, which is what
+        a ``cubicTo`` takes.
+    """
+
+    legs = []
+    for start, end in zip(knots, knots[1:]):
+        reach = QPointF(end.x() - start.x(), end.y() - start.y())
+        legs.append(
+            (
+                QPointF(start.x() + reach.x() / 3.0, start.y() + reach.y() / 3.0),
+                QPointF(start.x() + reach.x() * 2.0 / 3.0, start.y() + reach.y() * 2.0 / 3.0),
+                QPointF(end),
+            )
+        )
+    return legs
+
+
 class Arc(QGraphicsItem):
     """One arc of a Petri net, from a place to a transition or back.
 
@@ -377,7 +457,7 @@ class Arc(QGraphicsItem):
         self._shape_kind = ArcShape(shape_kind)
         self._snap = snap
         self._controls = [list(control) for control in DEFAULT_CONTROLS]
-        self._points = [list(point) for point in DEFAULT_S_POINTS]
+        self._points: list[list[float]] = []
         self._dragging: str | None = None
         self._line = QLineF()
 
@@ -392,6 +472,7 @@ class Arc(QGraphicsItem):
         self.setZValue(ARC_Z)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
+        self._seed_points()
         self.source.attach(self)
         self.target.attach(self)
         self.route()
@@ -504,7 +585,25 @@ class Arc(QGraphicsItem):
         if value != self._shape_kind:
             self.prepareGeometryChange()
             self._shape_kind = value
+            self._seed_points()
             self.update()
+
+    def _seed_points(self) -> None:
+        """Give the shape its own default points, when the arc has none.
+
+        A shape named after what it looks like should look like it as soon as it
+        is chosen: an S comes out an S and an L comes out an L.  Only when there
+        are **no** points, so that changing an arc from one to the other keeps
+        the route a person drew and changes only whether its corners are
+        rounded off — and so that taking every point out and choosing the shape
+        again is the way back to what it started as.
+        """
+
+        if self._points or not self._shape_kind.led_through_points:
+            return
+        self._points = [
+            list(point) for point in DEFAULT_POINTS[self._shape_kind]
+        ]
 
     @property
     def curved(self) -> bool:
@@ -625,8 +724,13 @@ class Arc(QGraphicsItem):
         """Give the curve as cubic segments, which is what is drawn.
 
         One segment for a single bow, one for every gap between the knots of an
-        S — its two ends and the points it is led through — and none at all for
-        a straight arc, which has no curve to cut up.
+        S or an L — its two ends and the points it is led through — and none at
+        all for a straight arc, which has nothing to cut up.
+
+        A **leg of an L is a cubic too**, one whose control points lie on it:
+        that is the same curve as the straight line between its ends, so one
+        machine draws every shape and a corner is where two legs meet rather
+        than a different way of drawing.
 
         Returns
         -------
@@ -638,9 +742,12 @@ class Arc(QGraphicsItem):
         if self._shape_kind is ArcShape.CURVED:
             first, second = self.control_points()
             return [(first, second, self._line.p2())]
+
+        knots = [self._line.p1(), *self.curve_points(), self._line.p2()]
         if self._shape_kind is ArcShape.S_CURVED:
-            knots = [self._line.p1(), *self.curve_points(), self._line.p2()]
             return catmull_rom(knots)
+        if self._shape_kind is ArcShape.L_SHAPED:
+            return straight_legs(knots)
         return []
 
     def segment_paths(self) -> list[QPainterPath]:
@@ -715,7 +822,7 @@ class Arc(QGraphicsItem):
             led through points.
         """
 
-        if self._shape_kind is not ArcShape.S_CURVED:
+        if not self._shape_kind.led_through_points:
             return None
 
         index, where = self.nearest_on_curve(at)
@@ -775,7 +882,7 @@ class Arc(QGraphicsItem):
             The index of the point, or ``None`` for none of them.
         """
 
-        if self._shape_kind is not ArcShape.S_CURVED:
+        if not self._shape_kind.led_through_points:
             return None
 
         best = None
@@ -796,7 +903,7 @@ class Arc(QGraphicsItem):
             One per point, in order, and none at all on an arc of another shape.
         """
 
-        if self._shape_kind is not ArcShape.S_CURVED:
+        if not self._shape_kind.led_through_points:
             return ()
         return tuple(point_handle(index) for index in range(len(self._points)))
 
@@ -831,7 +938,7 @@ class Arc(QGraphicsItem):
             found['middle'] = self.curve_middle()
             found['source_control'] = first
             found['target_control'] = second
-        elif self._shape_kind is ArcShape.S_CURVED:
+        elif self._shape_kind.led_through_points:
             for index, where in enumerate(self.curve_points()):
                 found[point_handle(index)] = where
         return found
@@ -979,7 +1086,7 @@ class Arc(QGraphicsItem):
 
         index = point_of_handle(name)
         if index is not None:
-            if self._shape_kind is ArcShape.S_CURVED and 0 <= index < len(self._points):
+            if self._shape_kind.led_through_points and 0 <= index < len(self._points):
                 self.prepareGeometryChange()
                 self._points[index] = list(self.chord_frame(point))
                 self.update()
@@ -1333,6 +1440,12 @@ class Arc(QGraphicsItem):
     def paint(self, painter, option, widget=None) -> None:
         """Draw the arc, its arrowhead and its weight.
 
+        The join is **mitered**, as an item's outline is: Qt's default bevel
+        chamfers every corner by the width of the pen, and an L that turns a
+        corner should turn it rather than have it cut off.  Qt's own miter limit
+        takes care of the other end of the range, falling back to a bevel where
+        a corner is so sharp that a mitre would be a spike.
+
         Parameters
         ----------
         painter : PyQt6.QtGui.QPainter
@@ -1348,6 +1461,7 @@ class Arc(QGraphicsItem):
 
         pen = QPen(colour, width)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.MiterJoin)
         painter.setPen(pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawPath(self.path())

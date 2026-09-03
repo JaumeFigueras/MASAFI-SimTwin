@@ -578,13 +578,13 @@ class CanvasView(QGraphicsView):
         done to it.  It acts on the arc under the pointer and on no other, even
         when several are selected — a context menu is aimed at a thing.
 
-        An **S-curved** arc offers its points as well, and which entry it offers
-        is decided by where the menu was opened: *Delete Point* over a point,
-        *Add Point* anywhere else along the line.  They are one question — *is
-        there a point here?* — so they are one place in the menu rather than two
-        entries of which one is always dead.  The other two shapes offer
-        neither: a point is a thing an S is led through, and choosing the shape
-        is the step before putting points into it.
+        A shape that is **led through points** — the S and the L — offers its
+        points as well, and which entry it offers is decided by where the menu
+        was opened: *Delete Point* over a point, *Add Point* anywhere else along
+        the line.  They are one question — *is there a point here?* — so they
+        are one place in the menu rather than two entries of which one is always
+        dead.  The other two shapes offer neither: choosing a shape that is led
+        through points is the step before putting points into it.
 
         Parameters
         ----------
@@ -614,6 +614,7 @@ class CanvasView(QGraphicsView):
             (ArcShape.STRAIGHT, self.tr('Straight')),
             (ArcShape.CURVED, self.tr('Curved')),
             (ArcShape.S_CURVED, self.tr('S-Curved')),
+            (ArcShape.L_SHAPED, self.tr('L-Shaped')),
         ):
             action = menu.addAction(label)
             action.setCheckable(True)
@@ -624,7 +625,7 @@ class CanvasView(QGraphicsView):
                 lambda checked, chosen=shape, one=arc: self.set_arc_shape(one, chosen)
             )
 
-        if arc.shape_kind is ArcShape.S_CURVED:
+        if arc.shape_kind.led_through_points:
             menu.addSeparator()
             point = arc.point_at(at)
             if point is None:
@@ -656,7 +657,8 @@ class CanvasView(QGraphicsView):
         arc.shape_kind = shape
 
     def add_arc_point(self, arc: Arc, at: QPointF) -> None:
-        """Put another point into an S-curved arc, where the menu was opened.
+        """Put another point into an arc, where the menu was opened, and leave
+        the arc in hand.
 
         Kept as a method rather than written into the menu, the way
         :meth:`set_arc_shape` is, so that the menu is the only thing a test of
@@ -671,9 +673,10 @@ class CanvasView(QGraphicsView):
         """
 
         arc.insert_point(at)
+        self.work_on(arc)
 
     def remove_arc_point(self, arc: Arc, index: int) -> None:
-        """Take one point out of an S-curved arc again.
+        """Take one point out of an arc again, and leave the arc in hand.
 
         Parameters
         ----------
@@ -684,6 +687,29 @@ class CanvasView(QGraphicsView):
         """
 
         arc.remove_point(index)
+        self.work_on(arc)
+
+    def work_on(self, arc: Arc) -> None:
+        """Leave one arc selected, and nothing else.
+
+        A point is put in to be dragged somewhere, and the handle to drag it by
+        is there only while the arc is selected — so putting one in and leaving
+        the arc unselected means aiming at the arc twice for one wish.  A right
+        click does not select what it is aimed at, and the menu is opened by one,
+        so this is where that is put right.
+
+        The rest of the selection is **put down**, which is what a click on the
+        arc would have done: what the menu was aimed at is the thing being
+        worked on, and *Delete* afterwards should reach that and nothing else.
+
+        Parameters
+        ----------
+        arc : masafi_simtwin.documents.arc.Arc
+            The arc to leave selected.
+        """
+
+        self.scene().clearSelection()
+        arc.setSelected(True)
 
     def guide_menu(self, guide: Guide | None) -> QMenu | None:
         """Build what is offered over a guide, or over the bare sheet.

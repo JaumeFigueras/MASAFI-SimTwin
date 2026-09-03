@@ -61,27 +61,32 @@
         <translation>Corba en S</translation>
     </message>
     <message>
-        <location filename="../documents/canvas.py" line="631" />
+        <location filename="../documents/canvas.py" line="617" />
+        <source>L-Shaped</source>
+        <translation>Forma de L</translation>
+    </message>
+    <message>
+        <location filename="../documents/canvas.py" line="632" />
         <source>Add Point</source>
         <translation>Afegeix un punt</translation>
     </message>
     <message>
-        <location filename="../documents/canvas.py" line="634" />
+        <location filename="../documents/canvas.py" line="635" />
         <source>Delete Point</source>
         <translation>Suprimeix el punt</translation>
     </message>
     <message>
-        <location filename="../documents/canvas.py" line="638" />
+        <location filename="../documents/canvas.py" line="639" />
         <source>Delete Arc</source>
         <translation>Suprimeix l'arc</translation>
     </message>
     <message>
-        <location filename="../documents/canvas.py" line="710" />
+        <location filename="../documents/canvas.py" line="711" />
         <source>Delete Guide</source>
         <translation>Suprimeix la guia</translation>
     </message>
     <message>
-        <location filename="../documents/canvas.py" line="712" />
+        <location filename="../documents/canvas.py" line="713" />
         <source>Delete All Guides</source>
         <translation>Suprimeix totes les guies</translation>
     </message>
