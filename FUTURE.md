@@ -532,6 +532,75 @@ validation, the model's properties — needs to be told it; and the first time a
 
 ---
 
+## Two arcs may join the same pair only when they are of different kinds
+
+**Now.** SimTwin lets a second arc be drawn from the same place to the same transition, or from the same
+transition to the same place. MASAFI-sim-petri refuses it — *An arc already joins place 'P1' to transition
+'T1'; change its weight instead of adding a second arc* — and so will SimTwin, as part of the save work.
+
+**Decided.** At most **one arc per source, target and kind**. Between a place and a transition that
+allows one normal arc from the place to the transition, one normal arc back, and — once inhibitor arcs
+are built — one inhibitor arc from the place to the transition beside the normal one. A second arc of
+the same kind the same way round is refused **silently**, the way an arc between two places is, in every
+gesture that can make one: drawing an arc, moving an end of one, and `add_arc()`. Wanting *more* of an
+arc is what its weight is for.
+
+**Why.** A second identical arc says nothing a weight does not, and PNML and the library both hold one
+arc per pair and direction.
+
+**What has to change when inhibitor arcs arrive.** The library's rule does not look at the kind: it
+refuses any second arc between a pair in one direction, so the normal and inhibitor pair cannot be built
+until it does. `element_for()` matches an arc on its two ends alone and has the same limit.
+
+---
+
+## Names are unique
+
+**Now.** Places and transitions have no names of their own in SimTwin; the editor invents them, unique by
+construction, until there is somewhere to type one. Two models of a project may share a name — the
+second file is given `_2`. MASAFI-sim-petri identifies a place or a transition by its name, and accepts a
+place and a transition of **the same** name, writing both with one PNML `id`, so the file holds a
+duplicate identifier.
+
+**Decided.** Equal names are forbidden.
+
+**Open, to settle when names become editable.**
+
+- The scope: every place and transition of a net against every other — required, since both become
+  PNML ids — and the models of a project against each other, which retires the `_2` suffix.
+- Whether the comparison ignores case. `Line` and `line` are two names to Python but one file on Windows
+  and macOS, and the names below are meant to become modules.
+- The library should refuse a place and a transition sharing a name, rather than write a file with a
+  duplicate `id`.
+
+---
+
+## Names are Python identifiers
+
+**Now.** A project and a model may be called anything, spaces and digits included — `Bottling Line`,
+`Filling Station` — and a file name is made from a model's name by turning spaces into underscores.
+MASAFI-sim-petri accepts names such as `Buffer 1` and `1st` and writes them as PNML ids, which a PNML id
+may not be.
+
+**Decided.** **No spaces anywhere in a project** — the project, its models, its places and transitions —
+only underscores and CamelCase, and **no digit as the first character**, because the Petri nets built here
+will be turned into Python modules. A name that is already a valid identifier needs no mangling to become a module, a class or
+an attribute, so the name a person chose is the name in the generated code. It also makes every name a
+valid PNML id.
+
+A digit anywhere else is allowed — `Buffer_2`, `Station3` — which is exactly Python's own rule for an
+identifier, so the names the editor invents meanwhile, `P1` and `T1`, already keep it.
+
+**Open, to settle when the rule is enforced.**
+
+- Python's keywords (`class`, `if`, `lambda`) look like identifiers and cannot be module names; the names
+  of the standard library's modules (`random`, `time`) can be, and shadow them. Both need a list to refuse.
+- Letters outside ASCII: Python accepts `Estació`, but file systems and tools handle them unevenly.
+- Where it is enforced: the New Project and Model dialogs now, the properties of places and transitions
+  when they exist. Projects made before the rule are development versions and are not converted.
+
+---
+
 ## Nothing puts an arc's ends back on the points that face each other
 
 **Now.** An arc keeps the connecting point it was attached to at each end until a person moves it:
