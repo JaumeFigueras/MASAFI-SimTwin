@@ -63,6 +63,7 @@ from masafi_simtwin import icons
 from masafi_simtwin.documents.arc import (
     DEFAULT_CONTROLS,
     DEFAULT_POINTS,
+    IMPLEMENTED_ARC_KINDS,
     ArcKind,
     ArcShape,
     arrowhead,
@@ -327,6 +328,9 @@ class ArcToolBar(QToolBar):
             kind: self._add_choice(kind, kind_label(kind), self._kind_group)
             for kind in ArcKind
         }
+        for kind, action in self._kind_actions.items():
+            if kind not in IMPLEMENTED_ARC_KINDS:
+                action.setToolTip(self.tr('{0} (not available yet)').format(kind_label(kind)))
 
         self._shape_group.triggered.connect(self._on_shape_triggered)
         self._kind_group.triggered.connect(self._on_kind_triggered)
@@ -546,8 +550,9 @@ class ArcToolBar(QToolBar):
         allowed : bool
             Whether it may.  A kind is refused where a selected arc could not be
             of it — an arc from a transition to a place cannot be an inhibitor —
-            and a button that is refused is a button greyed out rather than one
-            that is pressed and does nothing.
+            and a kind that is not built yet is refused everywhere; its tool tip
+            says so.  A button that is refused is a button greyed out rather
+            than one that is pressed and does nothing.
         """
 
         self.kind_action(kind).setEnabled(bool(allowed))

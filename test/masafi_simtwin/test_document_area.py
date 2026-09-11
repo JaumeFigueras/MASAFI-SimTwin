@@ -200,10 +200,10 @@ def test_a_document_can_be_retitled_by_its_key(area):
     """A model renamed keeps the tab it is in, under its new name."""
 
     area.add_document(QWidget(), 'Filling Station', key='u1')
-    area.set_document_title('u1', 'Filling', 'models/Filling_Station.mfst')
+    area.set_document_title('u1', 'Filling', 'models/Filling_Station.pnml')
 
     assert area.tabs.tabText(0) == 'Filling'
-    assert area.tabs.tabToolTip(0) == 'models/Filling_Station.mfst'
+    assert area.tabs.tabToolTip(0) == 'models/Filling_Station.pnml'
 
 
 def test_retitling_the_current_document_is_reported(area, qtbot):
@@ -232,8 +232,93 @@ def test_closing_every_document_empties_the_area(area):
 def test_a_tab_carries_a_tool_tip(area):
     """A title too long for the tab bar can still be read under the pointer."""
 
-    area.add_document(QWidget(), 'Filling Station', tool_tip='models/Filling_Station.mfst')
+    area.add_document(QWidget(), 'Filling Station', tool_tip='models/Filling_Station.pnml')
     area.add_document(QWidget(), 'Bare')
 
-    assert area.tabs.tabToolTip(0) == 'models/Filling_Station.mfst'
+    assert area.tabs.tabToolTip(0) == 'models/Filling_Station.pnml'
     assert area.tabs.tabToolTip(1) == 'Bare'
+
+
+# ----------------------------------------------------------------------
+# Asking before a tab closes
+# ----------------------------------------------------------------------
+
+
+def close_button(area, index: int = 0):
+    """Give the close button of one tab.
+
+    Parameters
+    ----------
+    area : masafi_simtwin.document_area.DocumentArea
+        The area.
+    index : int, optional
+        Which tab.
+
+    Returns
+    -------
+    PyQt6.QtWidgets.QToolButton
+        The button.
+    """
+
+    return area.tabs.tabBar().tabButton(index, QTabBar.ButtonPosition.RightSide)
+
+
+def test_the_close_button_asks_before_the_tab_goes(area):
+    """With the document's key, and the tab stays when the answer is no."""
+
+    asked = []
+    area.add_document(QWidget(), 'Filling', key='u1')
+    area.may_close = lambda key: asked.append(key) or False
+
+    close_button(area).click()
+
+    assert asked == ['u1']
+    assert area.document_count == 1
+
+
+def test_a_yes_lets_the_tab_close(area):
+    """Which is what saving it successfully comes to."""
+
+    area.add_document(QWidget(), 'Filling', key='u1')
+    area.may_close = lambda key: True
+
+    assert area.request_close(0)
+    assert area.document_count == 0
+
+
+def test_closing_in_code_does_not_ask(area):
+    """Deleting a model is not a moment to save it."""
+
+    area.add_document(QWidget(), 'Filling', key='u1')
+    area.add_document(QWidget(), 'Capping', key='u2')
+    area.may_close = lambda key: False
+
+    area.close_document_for('u1')
+    area.close_all_documents()
+
+    assert area.document_count == 0
+
+
+def test_a_document_without_a_key_is_not_asked_about(area):
+    """There is nothing to ask about it by."""
+
+    asked = []
+    area.add_document(QWidget(), 'Scratch')
+    area.may_close = lambda key: asked.append(key) or False
+
+    close_button(area).click()
+
+    assert asked == []
+    assert area.document_count == 0
+
+
+def test_the_open_documents_are_found_by_their_keys(area):
+    """Which is how the window knows what to save."""
+
+    first, second = QWidget(), QWidget()
+    area.add_document(first, 'Filling', key='u1')
+    area.add_document(second, 'Capping', key='u2')
+
+    assert area.keyed_documents == {'u1': first, 'u2': second}
+    assert area.key_of(second) == 'u2'
+    assert area.key_of(QWidget()) is None

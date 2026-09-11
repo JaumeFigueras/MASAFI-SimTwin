@@ -22,7 +22,7 @@ MODEL = {
     'uuid': '7f3f9c6a',
     'name': 'Filling Station',
     'kind': 'petri-net',
-    'file': 'models/Filling_Station.mfst',
+    'file': 'models/Filling_Station.pnml',
     'units': {'time': 's'},
 }
 

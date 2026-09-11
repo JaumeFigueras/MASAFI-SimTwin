@@ -76,6 +76,9 @@ class Place(NetItem):
     #: What it may be joined to.  A Petri net is bipartite.
     CONNECTS_TO = ('transition',)
 
+    #: What an invented name begins with: ``P1``, ``P2`` and so on.
+    NAME_PREFIX = 'P'
+
     @staticmethod
     def port_angles() -> list[float]:
         """Give the angle of every connecting point, in degrees.

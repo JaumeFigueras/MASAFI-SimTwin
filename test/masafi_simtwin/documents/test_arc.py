@@ -11,12 +11,14 @@ from PyQt6.QtWidgets import QApplication, QDialog
 
 from masafi_simtwin.documents import petri_net
 from masafi_simtwin.documents.arc import (
+    KIND_DIRECTIONS,
     ARROW_LENGTH,
     ARROW_WIDTH,
     CURVE_BOW,
     DEFAULT_WEIGHT,
     END_HANDLES,
     HANDLE_SIZE,
+    IMPLEMENTED_ARC_KINDS,
     INHIBITOR_RADIUS,
     SHAPE_HANDLES,
     Arc,
@@ -29,6 +31,7 @@ from masafi_simtwin.documents.net_item import ARC_Z, ITEM_Z, NetItem
 from masafi_simtwin.documents.place import Place
 from masafi_simtwin.documents.transition import Transition
 from masafi_simtwin.theme import DARK_COLORS, LIGHT_COLORS
+from simtwin_core import petri_net as core
 
 #: The two schemes the pixel tests are run against.
 SCHEMES = [LIGHT_COLORS, DARK_COLORS]
@@ -272,10 +275,10 @@ def test_an_end_that_was_asked_for_is_taken_even_if_it_is_busy(editor, net):
 
     place, transition = net
     first = editor.add_arc(place, transition)
-    second = editor.add_arc(place, transition, source_port=first.source_port)
+    second = editor.add_arc(transition, place, target_port=first.source_port)
 
-    assert second.source_port == first.source_port
-    assert second.target_port != first.target_port
+    assert second.target_port == first.source_port
+    assert second.source_port != first.target_port
 
 
 def test_removing_one_arc_leaves_the_other_where_it_was(editor, net):
@@ -595,10 +598,11 @@ def test_the_arc_lands_on_the_point_it_was_let_go_nearest(editor, net):
     binds to different points."""
 
     place, transition = net
+    other = editor.add_element('pt-petri-net', 'place', QPointF(20.0, 60.0))
     far = len(transition.ports()) // 2
 
     first = drag_onto_port(editor.view, place, 0, transition, 0)
-    second = drag_onto_port(editor.view, place, 6, transition, far)
+    second = drag_onto_port(editor.view, other, 0, transition, far)
 
     assert first.target_port == 0
     assert second.target_port == far
@@ -640,11 +644,11 @@ def test_landing_on_a_point_that_is_busy_is_allowed(editor, net):
     preview showed where it was going, so a person who does it meant to."""
 
     place, transition = net
-    first = editor.add_arc(place, transition, source_port=0, target_port=3)
-    second = drag_onto_port(editor.view, place, 6, transition, 3)
+    first = editor.add_arc(transition, place, source_port=3, target_port=6)
+    second = drag_onto_port(editor.view, place, 0, transition, 3)
 
     assert second is not None
-    assert second.target_port == first.target_port == 3
+    assert second.target_port == first.source_port == 3
 
 
 def test_the_line_being_dragged_ends_on_the_point_it_would_bind_to(editor, net):
@@ -1101,8 +1105,9 @@ def test_every_arrowhead_is_the_same_size(editor, net):
     shorter than the bend."""
 
     place, transition = net
+    other = editor.add_element('pt-petri-net', 'place', QPointF(20.0, 60.0))
     heads = {}
-    arc = editor.add_arc(place, transition)
+    arc = editor.add_arc(other, transition)
     heads['straight'] = arc.arrow()
     arc.shape_kind = ArcShape.CURVED
     heads['curved'] = arc.arrow()
@@ -2302,7 +2307,7 @@ def test_a_shape_led_through_points_starts_as_what_it_is_named(editor, net):
     arc.shape_kind = ArcShape.L_SHAPED
     assert len(arc.curve_points()) == 1
 
-    other = editor.add_arc(place, transition)
+    other = editor.add_arc(transition, place)
     other.shape_kind = ArcShape.S_CURVED
     assert len(other.curve_points()) == 2
 
@@ -3052,3 +3057,109 @@ def test_the_preview_is_painted_with_its_points_and_its_ring(editor, net):
     )
 
     assert not editor.view.viewport().grab().isNull()
+
+
+# ----------------------------------------------------------------------
+# One arc per source, target and kind
+# ----------------------------------------------------------------------
+
+
+def test_a_second_arc_the_same_way_round_is_refused(editor, net):
+    """Wanting more of an arc is what its weight is for."""
+
+    place, transition = net
+    first = editor.add_arc(place, transition)
+
+    assert editor.add_arc(place, transition) is None
+    assert editor.arcs == [first]
+
+
+def test_an_arc_each_way_round_is_an_ordinary_pair(editor, net):
+    """From the place to the transition and back are two different arcs."""
+
+    place, transition = net
+
+    assert editor.add_arc(place, transition) is not None
+    assert editor.add_arc(transition, place) is not None
+
+
+def test_a_normal_and_an_inhibitor_arc_may_share_a_pair(editor, net):
+    """One of each kind, and still no second of either."""
+
+    place, transition = net
+    editor.add_arc(place, transition)
+
+    assert editor.add_arc(place, transition, kind=ArcKind.INHIBITOR) is not None
+    assert editor.add_arc(place, transition, kind=ArcKind.INHIBITOR) is None
+
+
+def test_a_second_arc_drawn_the_same_way_lights_nothing_up(editor, net):
+    """Refused while there is still time to aim somewhere else, as a place
+    aimed at a place is."""
+
+    place, transition = net
+    editor.add_arc(place, transition, source_port=0)
+    start = viewport_point(editor.view, place.scene_ports()[4])
+    over = viewport_point(editor.view, transition.scenePos())
+
+    editor.view.mousePressEvent(mouse(QEvent.Type.MouseButtonPress, start))
+    editor.view.mouseMoveEvent(mouse(QEvent.Type.MouseMove, over))
+
+    assert editor.view.connection_target is None
+    assert not transition.ports_visible
+
+    editor.view.mouseReleaseEvent(mouse(QEvent.Type.MouseButtonRelease, over))
+
+    assert len(editor.arcs) == 1
+
+
+def test_an_end_cannot_be_moved_onto_a_pair_already_joined(editor):
+    """Moving an arc is making it again, under the same rule."""
+
+    place = editor.add_element('pt-petri-net', 'place', QPointF(20.0, 40.0))
+    first = editor.add_element('pt-petri-net', 'transition', QPointF(60.0, 20.0))
+    second = editor.add_element('pt-petri-net', 'transition', QPointF(60.0, 60.0))
+    moved = editor.add_arc(place, first)
+    standing = editor.add_arc(place, second)
+    moved.setSelected(True)
+
+    drag_end(editor.view, moved, 'target', second, 0)
+
+    assert moved.target is first
+    assert second.arcs == [standing]
+
+
+def test_an_arc_does_not_stand_in_its_own_way(editor, net):
+    """An end put on another point of the item it is on is the same pair."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition, source_port=0)
+
+    assert arc.reattach('source', place, 5)
+    assert arc.can_be(ArcKind.NORMAL)
+
+
+def test_an_arc_cannot_become_a_kind_already_there(editor, net):
+    """Changing a kind is making an arc of that kind."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    editor.add_arc(place, transition, kind=ArcKind.INHIBITOR)
+
+    assert not arc.can_be(ArcKind.INHIBITOR)
+    assert not arc.set_kind(ArcKind.INHIBITOR)
+
+
+def test_only_the_normal_arc_is_built_yet():
+    """The inhibitor arc waits for MASAFI-sim-petri to have one."""
+
+    assert IMPLEMENTED_ARC_KINDS == (ArcKind.NORMAL,)
+
+
+def test_the_editor_names_shapes_and_kinds_as_the_core_does():
+    """The description of a net holds them as text, and the text is the value
+    the editor's own enums carry — in the same order."""
+
+    assert tuple(shape.value for shape in ArcShape) == core.SHAPES
+    assert tuple(kind.value for kind in ArcKind) == core.KINDS
+    assert {kind.value: groups for kind, groups in KIND_DIRECTIONS.items()} == core.DIRECTIONS

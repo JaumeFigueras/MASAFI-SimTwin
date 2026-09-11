@@ -12,6 +12,15 @@ second one, and renaming or deleting a model finds its tab without knowing where
 the user has dragged it to.  The area gives no meaning to a key beyond that; it
 is the window that decides what one stands for.
 
+Closing a tab **by hand asks first**: the close button calls
+:attr:`DocumentArea.may_close` with the document's key, and the tab stays when the
+answer is no.  That is where the window saves a model before its tab goes, and
+where it can refuse when the model cannot be saved and the user would rather keep
+it.  Closing in code — :meth:`DocumentArea.close_document_for`,
+:meth:`DocumentArea.close_all_documents` — does not ask: the window closes a
+model's tab that way when the model is deleted, which is not a moment to save it,
+and when a project closes, having saved everything already.
+
 Like a tool pane, the documents are drawn as one rounded card — tab bar included,
 so the tabs belong to the card rather than floating on the ground beside it —
 inset by :data:`~masafi_simtwin.theme.PANE_GAP`.  The area itself is only the
@@ -19,6 +28,8 @@ transparent holder of that gap.
 """
 
 from __future__ import annotations
+
+from collections.abc import Callable
 
 from PyQt6.QtCore import QSize, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
@@ -52,6 +63,12 @@ class DocumentArea(QWidget):
     current_document_changed : PyQt6.QtCore.pyqtSignal
         Emitted with the title of the document that became current, or with an
         empty string once the last one is closed.
+    may_close : collections.abc.Callable, optional
+        Asked, with its key, whether a document may close when its close button
+        is pressed; the tab stays when it answers false.  ``None`` lets every
+        document close, and a document opened without a key is never asked
+        about.  A plain callable rather than a signal, because it answers a
+        question rather than reporting a fact.
     """
 
     current_document_changed = pyqtSignal(str)
@@ -74,6 +91,7 @@ class DocumentArea(QWidget):
         #: The document each key stands for.  Widgets rather than indices,
         #: because a tab that is dragged changes its index and not its widget.
         self._documents: dict[str, QWidget] = {}
+        self.may_close: Callable[[str], bool] | None = None
 
         self._stack = QStackedWidget(self)
         self._stack.addWidget(self._placeholder)
@@ -184,7 +202,7 @@ class DocumentArea(QWidget):
         button.setFixedSize(QSize(CLOSE_ICON_SIZE + 4, CLOSE_ICON_SIZE + 4))
         button.setToolTip(self.tr('Close'))
         icons.set_icon(button, 'close')
-        button.clicked.connect(lambda: self.close_document(self._tabs.indexOf(document)))
+        button.clicked.connect(lambda: self.request_close(self._tabs.indexOf(document)))
         return button
 
     # ------------------------------------------------------------------
@@ -196,6 +214,32 @@ class DocumentArea(QWidget):
         """list: Every open document, in the order the tabs are in."""
 
         return [self._tabs.widget(index) for index in range(self._tabs.count())]
+
+    @property
+    def keyed_documents(self) -> dict[str, QWidget]:
+        """dict: Every document opened under a key, by its key, in no particular
+        order."""
+
+        return dict(self._documents)
+
+    def key_of(self, widget: QWidget) -> str | None:
+        """Give the key a document was opened under.
+
+        Parameters
+        ----------
+        widget : PyQt6.QtWidgets.QWidget
+            The document.
+
+        Returns
+        -------
+        str, optional
+            Its key, or ``None`` when it was opened without one or is not open.
+        """
+
+        for key, document in self._documents.items():
+            if document is widget:
+                return key
+        return None
 
     def document(self, key: str) -> QWidget | None:
         """Give the document opened under a key.
@@ -261,8 +305,31 @@ class DocumentArea(QWidget):
     # Closing
     # ------------------------------------------------------------------
 
+    def request_close(self, index: int) -> bool:
+        """Close one document the way its close button does: asking first.
+
+        Parameters
+        ----------
+        index : int
+            Index of the tab to close.
+
+        Returns
+        -------
+        bool
+            Whether it closed.  It did not when :attr:`may_close` said no.
+        """
+
+        widget = self._tabs.widget(index)
+        if widget is None:
+            return False
+        key = self.key_of(widget)
+        if key is not None and self.may_close is not None and not self.may_close(key):
+            return False
+        self.close_document(index)
+        return True
+
     def close_document(self, index: int) -> None:
-        """Close one document.
+        """Close one document, without asking.
 
         Parameters
         ----------

@@ -15,6 +15,27 @@ import pytest
 from masafi_simtwin import __version__, project
 
 
+def empty_net(identifier: str) -> bytes:
+    """Stand in for the file of a new model.
+
+    What a model's file holds is its kind's business; the project only keeps it.
+    So the tests of the project give it something that says whose file it is and
+    nothing else.
+
+    Parameters
+    ----------
+    identifier : str
+        The model's UUID.
+
+    Returns
+    -------
+    bytes
+        The file.
+    """
+
+    return f'<net model="{identifier}"/>'.encode('utf-8')
+
+
 @pytest.fixture
 def created(tmp_path):
     """Write a project to work on.
@@ -637,7 +658,7 @@ def test_a_model_change_moves_an_old_history_too(legacy):
     """Every write leaves a project in the current format."""
 
     path, entries = legacy
-    project.add_model(path, 'Line', project.ModelKind.PETRI_NET, {'time': 's'})
+    project.add_model(path, 'Line', project.ModelKind.PETRI_NET, {'time': 's'}, document=empty_net)
 
     assert 'history' not in project.read_manifest(path)
     history = project.read_history(path)
@@ -751,7 +772,7 @@ def test_a_model_can_be_changed_in_a_project_whose_log_is_damaged(created):
 
     damage(created, b'garbage\n')
 
-    model = project.add_model(created, 'Line', project.ModelKind.PETRI_NET, {'time': 's'})
+    model = project.add_model(created, 'Line', project.ModelKind.PETRI_NET, {'time': 's'}, document=empty_net)
 
     assert project.read_history(created)[-1]['model'] == model['uuid']
     assert b'garbage\n' in log_of(created)
@@ -794,10 +815,10 @@ def test_blank_lines_in_the_log_are_passed_over(created):
 @pytest.mark.parametrize(
     ('name', 'expected'),
     [
-        ('Bottling Line', 'Bottling_Line.mfst'),
-        ('  spaced  ', 'spaced.mfst'),
-        ('a/b', 'a_b.mfst'),
-        ('???', 'model.mfst'),
+        ('Bottling Line', 'Bottling_Line.pnml'),
+        ('  spaced  ', 'spaced.pnml'),
+        ('a/b', 'a_b.pnml'),
+        ('???', 'model.pnml'),
     ],
 )
 def test_a_model_file_is_named_after_the_model(name, expected):
@@ -811,24 +832,19 @@ def test_a_model_is_written_into_the_models_folder(created):
     """Where an archive tool will show it, under the name it was given."""
 
     model = project.add_model(
-        created, 'Filling Station', project.ModelKind.PETRI_NET, {'time': 's'}
+        created, 'Filling Station', project.ModelKind.PETRI_NET, {'time': 's'}, document=empty_net
     )
 
-    assert model['file'] == 'models/Filling_Station.mfst'
+    assert model['file'] == 'models/Filling_Station.pnml'
     with zipfile.ZipFile(created) as archive:
-        document = json.loads(archive.read(model['file']))
-
-    assert document['format'] == project.MODEL_FORMAT_NAME
-    assert document['kind'] == 'petri-net'
-    assert document['units'] == {'time': 's'}
-    assert document['content'] == {}
+        assert archive.read(model['file']) == empty_net(model['uuid'])
 
 
 def test_a_model_is_recorded_in_the_manifest(created):
     """The manifest is what the project pane is built from."""
 
     model = project.add_model(
-        created, 'Filling Station', project.ModelKind.PETRI_NET, {'time': 's'}
+        created, 'Filling Station', project.ModelKind.PETRI_NET, {'time': 's'}, document=empty_net
     )
     stored = project.models_of(created)
 
@@ -840,33 +856,30 @@ def test_a_model_is_recorded_in_the_manifest(created):
 def test_two_models_of_one_name_get_files_of_their_own(created):
     """Two models may share a name; two zip entries may not."""
 
-    first = project.add_model(created, 'Line', project.ModelKind.PETRI_NET, {'time': 's'})
-    second = project.add_model(created, 'Line', project.ModelKind.PETRI_NET, {'time': 's'})
+    first = project.add_model(created, 'Line', project.ModelKind.PETRI_NET, {'time': 's'}, document=empty_net)
+    second = project.add_model(created, 'Line', project.ModelKind.PETRI_NET, {'time': 's'}, document=empty_net)
 
     assert first['file'] != second['file']
-    assert second['file'] == 'models/Line_2.mfst'
+    assert second['file'] == 'models/Line_2.pnml'
 
 
-def test_changing_a_model_changes_its_document_too(created):
-    """The manifest and the file must not drift apart."""
+def test_changing_a_model_changes_the_manifest_and_not_its_file(created):
+    """A model's name and units are the manifest's; its file holds the model."""
 
-    model = project.add_model(created, 'Line', project.ModelKind.PETRI_NET, {'time': 's'})
+    model = project.add_model(created, 'Line', project.ModelKind.PETRI_NET, {'time': 's'}, document=empty_net)
     project.update_model(created, model['uuid'], name='Filling', units={'time': 'h'})
 
     stored = project.models_of(created)[0]
-    with zipfile.ZipFile(created) as archive:
-        document = json.loads(archive.read(model['file']))
 
     assert stored['name'] == 'Filling'
     assert stored['units'] == {'time': 'h'}
-    assert document['name'] == 'Filling'
-    assert document['units'] == {'time': 'h'}
+    assert project.read_model(created, model['uuid']) == empty_net(model['uuid'])
 
 
 def test_a_renamed_model_keeps_its_file_and_its_identity(created):
     """Its UUID is what it is; the file name is only where it lives."""
 
-    model = project.add_model(created, 'Line', project.ModelKind.PETRI_NET, {'time': 's'})
+    model = project.add_model(created, 'Line', project.ModelKind.PETRI_NET, {'time': 's'}, document=empty_net)
     project.update_model(created, model['uuid'], name='Filling')
 
     assert project.models_of(created)[0]['uuid'] == model['uuid']
@@ -876,7 +889,7 @@ def test_a_renamed_model_keeps_its_file_and_its_identity(created):
 def test_removing_a_model_takes_its_file_with_it(created):
     """Otherwise a project would grow files nothing points at."""
 
-    model = project.add_model(created, 'Line', project.ModelKind.PETRI_NET, {'time': 's'})
+    model = project.add_model(created, 'Line', project.ModelKind.PETRI_NET, {'time': 's'}, document=empty_net)
     project.remove_model(created, model['uuid'])
 
     assert project.models_of(created) == []
@@ -887,8 +900,8 @@ def test_removing_a_model_takes_its_file_with_it(created):
 def test_removing_one_model_leaves_the_others(created):
     """The rewrite carries across everything it was not told to drop."""
 
-    first = project.add_model(created, 'One', project.ModelKind.PETRI_NET, {'time': 's'})
-    second = project.add_model(created, 'Two', project.ModelKind.PETRI_NET, {'time': 's'})
+    first = project.add_model(created, 'One', project.ModelKind.PETRI_NET, {'time': 's'}, document=empty_net)
+    second = project.add_model(created, 'Two', project.ModelKind.PETRI_NET, {'time': 's'}, document=empty_net)
     project.remove_model(created, first['uuid'])
 
     with zipfile.ZipFile(created) as archive:
@@ -910,7 +923,7 @@ def test_removing_one_model_leaves_the_others(created):
 def test_every_change_to_a_model_is_logged(created, action, event):
     """Created, updated or deleted, it goes into the project's history."""
 
-    model = project.add_model(created, 'Line', project.ModelKind.PETRI_NET, {'time': 's'})
+    model = project.add_model(created, 'Line', project.ModelKind.PETRI_NET, {'time': 's'}, document=empty_net)
     if action == 'update':
         project.update_model(created, model['uuid'], name='Filling')
     elif action == 'remove':
@@ -926,7 +939,7 @@ def test_every_change_to_a_model_is_logged(created, action, event):
 def test_the_history_stays_chained_across_model_changes(created):
     """A model change is one write of the archive, and one link in the chain."""
 
-    model = project.add_model(created, 'Line', project.ModelKind.PETRI_NET, {'time': 's'})
+    model = project.add_model(created, 'Line', project.ModelKind.PETRI_NET, {'time': 's'}, document=empty_net)
     project.update_model(created, model['uuid'], name='Filling')
     project.remove_model(created, model['uuid'])
 
@@ -944,6 +957,166 @@ def test_acting_on_a_model_that_is_not_there_is_refused(created, operation):
     act = project.update_model if operation == 'update' else project.remove_model
     with pytest.raises(project.ProjectError, match='holds no model'):
         act(created, 'not-a-uuid')
+
+
+def test_the_project_keeps_a_model_file_without_reading_it(created):
+    """Whatever the file holds is its kind's business."""
+
+    model = project.add_model(
+        created,
+        'Line',
+        project.ModelKind.PETRI_NET,
+        {'time': 's'},
+        document=lambda identifier: b'\x00 not even text \xff',
+    )
+
+    assert project.read_model(created, model['uuid']) == b'\x00 not even text \xff'
+
+
+def test_the_file_of_a_new_model_is_made_from_its_uuid(created):
+    """So a file can carry its model's identity, and the right one."""
+
+    given = []
+    model = project.add_model(
+        created,
+        'Line',
+        project.ModelKind.PETRI_NET,
+        {'time': 's'},
+        document=lambda identifier: given.append(identifier) or b'net',
+    )
+
+    assert given == [model['uuid']]
+
+
+def test_reading_a_model_the_project_does_not_hold_is_refused(created):
+    """Rather than reading some other file."""
+
+    with pytest.raises(project.ProjectError, match='holds no model'):
+        project.read_model(created, 'not-a-uuid')
+
+
+@pytest.fixture
+def two_models(created):
+    """Put two models in the project.
+
+    Parameters
+    ----------
+    created : pathlib.Path
+        The project file.
+
+    Returns
+    -------
+    tuple
+        The project file and the two models' entries.
+    """
+
+    first = project.add_model(created, 'One', project.ModelKind.PETRI_NET, {'time': 's'}, document=empty_net)
+    second = project.add_model(created, 'Two', project.ModelKind.PETRI_NET, {'time': 's'}, document=empty_net)
+    return created, first, second
+
+
+def writes_of(monkeypatch) -> list:
+    """Count the times a project archive is written.
+
+    Every write puts a new archive over the old one with ``os.replace``, so that
+    is what is counted.
+
+    Parameters
+    ----------
+    monkeypatch : pytest.MonkeyPatch
+        The pytest patcher.
+
+    Returns
+    -------
+    list
+        One entry per write, filled in as they happen.
+    """
+
+    written = []
+    real = project.os.replace
+
+    def replace(source, target):
+        written.append(target)
+        real(source, target)
+
+    monkeypatch.setattr(project.os, 'replace', replace)
+    return written
+
+
+def test_saving_writes_every_model_given_in_one_write(two_models, monkeypatch):
+    """However many models are open, the project is rewritten once."""
+
+    path, first, second = two_models
+    written = writes_of(monkeypatch)
+
+    saved = project.write_models(path, {first['uuid']: b'A', second['uuid']: b'B'})
+
+    assert saved == [first['uuid'], second['uuid']]
+    assert len(written) == 1
+    assert project.read_model(path, first['uuid']) == b'A'
+    assert project.read_model(path, second['uuid']) == b'B'
+
+
+def test_a_model_whose_file_has_not_changed_is_not_written(two_models, monkeypatch):
+    """A save of a project nobody has changed writes nothing at all."""
+
+    path, first, _ = two_models
+    before = path.read_bytes()
+    written = writes_of(monkeypatch)
+
+    saved = project.write_models(path, {first['uuid']: empty_net(first['uuid'])})
+
+    assert saved == []
+    assert written == []
+    assert path.read_bytes() == before
+
+
+def test_only_the_models_that_changed_are_written(two_models):
+    """And the rest are carried across as they were."""
+
+    path, first, second = two_models
+
+    saved = project.write_models(
+        path, {first['uuid']: empty_net(first['uuid']), second['uuid']: b'changed'}
+    )
+
+    assert saved == [second['uuid']]
+    assert project.read_model(path, first['uuid']) == empty_net(first['uuid'])
+
+
+def test_saving_adds_nothing_to_the_history(two_models):
+    """The history records sessions and changes to what a project holds, and a
+    save is neither."""
+
+    path, first, _ = two_models
+    before = project.read_history(path)
+
+    project.write_models(path, {first['uuid']: b'changed'})
+
+    assert project.read_history(path) == before
+
+
+def test_saving_leaves_the_manifest_as_it_was(two_models):
+    """What a project holds has not changed, only what one model is."""
+
+    path, first, _ = two_models
+    before = project.read_manifest(path)
+
+    project.write_models(path, {first['uuid']: b'changed'})
+
+    assert project.read_manifest(path) == before
+
+
+def test_saving_a_model_the_project_does_not_hold_writes_nothing(two_models):
+    """Not even the models that are the project's."""
+
+    path, first, _ = two_models
+    before = path.read_bytes()
+
+    with pytest.raises(project.ProjectError, match='holds no model'):
+        project.write_models(path, {first['uuid']: b'changed', 'not-a-uuid': b'X'})
+
+    assert path.read_bytes() == before
 
 
 def test_a_graph_has_no_distance_unit():

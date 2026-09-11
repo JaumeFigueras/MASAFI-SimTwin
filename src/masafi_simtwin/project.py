@@ -49,6 +49,7 @@ import re
 import socket
 import uuid
 import zipfile
+from collections.abc import Callable
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
@@ -97,8 +98,10 @@ EVENT_MODEL_ADDED = 'model-added'
 EVENT_MODEL_UPDATED = 'model-updated'
 EVENT_MODEL_REMOVED = 'model-removed'
 
-#: What a model file is called at the end.
-MODEL_SUFFIX = '.mfst'
+#: What a model file is called at the end.  A model's file is written by
+#: whatever knows its kind — a Petri net's is PNML — and this module never reads
+#: what is in it: a project is a container, and the formats are the documents'.
+MODEL_SUFFIX = '.pnml'
 
 #: The folder inside a project that models live in.
 MODELS_FOLDER = 'models/'
@@ -106,11 +109,6 @@ MODELS_FOLDER = 'models/'
 #: What is appended to a project's name to make the file that holds its lock.
 LOCK_SUFFIX = '.lock'
 
-#: The value of ``format`` in a model file.
-MODEL_FORMAT_NAME = 'masafi-simtwin-model'
-
-#: The version of the layout inside a model file.
-MODEL_FORMAT_VERSION = 1
 
 #: What is put in place of anything that has no business in a file name.
 _UNSAFE = re.compile(r'[^\w.-]+', re.UNICODE)
@@ -380,44 +378,6 @@ def file_name_for(name: str) -> str:
 
     stem = _UNSAFE.sub('_', name.strip()).strip('_.') or 'model'
     return f'{stem}{MODEL_SUFFIX}'
-
-
-def model_document(name: str, kind: ModelKind, units: dict, identifier: str) -> dict:
-    """Build the contents of a new model file.
-
-    Parameters
-    ----------
-    name : str
-        What the model is called.
-    kind : ModelKind
-        What kind of model it is.
-    units : dict
-        The units it is expressed in, ``time`` and possibly ``distance``.
-    identifier : str
-        The model's UUID, which is also its entry in the manifest.
-
-    Returns
-    -------
-    dict
-        The document, ready to be written as JSON.
-
-    Notes
-    -----
-    ``content`` is empty and its shape is still to be designed — that is the
-    next piece of work.  ``format_version`` is written from the first model
-    onwards so that whatever shape it takes can be recognised later.
-    """
-
-    return {
-        'format': MODEL_FORMAT_NAME,
-        'format_version': MODEL_FORMAT_VERSION,
-        'uuid': identifier,
-        'name': name,
-        'kind': kind.value,
-        'units': dict(units),
-        'created': datetime.now(timezone.utc).isoformat(timespec='seconds'),
-        'content': {},
-    }
 
 
 def _canonical(entry: dict) -> str:
@@ -864,8 +824,16 @@ def add_model(
     units: dict,
     author: str = '',
     install: str = '',
+    *,
+    document: Callable[[str], bytes],
 ) -> dict:
     """Add a model to a project, writing its file and recording it.
+
+    What the file holds is given rather than made here, because it is a
+    document of the model's kind — PNML for a Petri net — and this module knows
+    containers, not formats.  It is given as something that makes the file from
+    the model's UUID, so that the UUID is still decided here, once, and a file
+    that carries its model's identity can carry the right one.
 
     Parameters
     ----------
@@ -881,6 +849,8 @@ def add_model(
         Whoever is adding it, for the history.
     install : str, optional
         Which installation they are using, for the history.
+    document : collections.abc.Callable
+        What makes the new model's file, given its UUID.
 
     Returns
     -------
@@ -910,9 +880,7 @@ def add_model(
         path,
         content,
         log=_appended(log, entry),
-        added={model['file']: json.dumps(
-            model_document(name, kind, units, model['uuid']), indent=2
-        )},
+        added={model['file']: bytes(document(model['uuid']))},
     )
     return model
 
@@ -927,9 +895,11 @@ def update_model(
 ) -> dict:
     """Change a model's name or units, leaving its kind and its file alone.
 
-    The file keeps the name it was created with.  A model's identity is its
-    UUID, and renaming the entry inside the archive on every rename would make
-    a project's history harder to follow, not easier.
+    Only the manifest changes.  The file keeps the name it was created with — a
+    model's identity is its UUID, and renaming the entry inside the archive on
+    every rename would make a project's history harder to follow, not easier —
+    and what is in it is not touched either: a model's name and units are the
+    manifest's, and its file holds the model itself.
 
     Parameters
     ----------
@@ -969,18 +939,97 @@ def update_model(
     if units is not None:
         model['units'] = dict(units)
 
-    document = json.loads(_read_entry(path, model['file']))
-    document['name'] = model['name']
-    document['units'] = dict(model['units'])
-
     entry = _record_into(entries, content, EVENT_MODEL_UPDATED, author, install, model)
-    _rewrite_manifest(
-        path,
-        content,
-        log=_appended(log, entry),
-        added={model['file']: json.dumps(document, indent=2)},
-    )
+    _rewrite_manifest(path, content, log=_appended(log, entry))
     return model
+
+
+def read_model(path: str | Path, identifier: str) -> bytes:
+    """Read the file a model is kept in.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        The project file.
+    identifier : str
+        The model's UUID.
+
+    Returns
+    -------
+    bytes
+        What the file holds, exactly as it was written.
+
+    Raises
+    ------
+    ProjectError
+        When the project holds no such model, or its file is not there.
+    """
+
+    model = next((m for m in models_of(path) if m.get('uuid') == identifier), None)
+    if model is None:
+        raise ProjectError(f'{Path(path)} holds no model {identifier}')
+    return _read_entry(path, model['file'])
+
+
+def write_models(path: str | Path, contents: dict[str, bytes]) -> list[str]:
+    """Write the files of some models back, in one write of the archive.
+
+    Saving is this: every open model given at once, so a project is rewritten
+    **once** however many of its models are open.  A model whose file has not
+    changed is not written, and when none has the archive is not touched at all
+    — a save of a project nobody has changed writes nothing, which is what the
+    numbered backups a save will leave behind are going to count on.
+
+    **No history entry is made.**  The history records sessions and the changes
+    to what a project holds — a model added, renamed, removed — and saving is
+    neither: it is how often somebody pressed a key, or how often a timer ran.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        The project file.
+    contents : dict
+        What each model's file is to hold, by the model's UUID.
+
+    Returns
+    -------
+    list of str
+        The UUIDs of the models whose files were written, in the order given.
+
+    Raises
+    ------
+    ProjectError
+        When a model is not the project's — in which case nothing is written —
+        or the project cannot be read or written back.
+    """
+
+    content = read_manifest(path)
+    files = {model.get('uuid'): model.get('file') for model in content.get('models') or []}
+    unknown = [identifier for identifier in contents if identifier not in files]
+    if unknown:
+        raise ProjectError(f'{Path(path)} holds no model {unknown[0]}')
+
+    target = Path(path)
+    try:
+        with zipfile.ZipFile(target) as archive:
+            names = set(archive.namelist())
+            stored = {
+                identifier: archive.read(files[identifier]) if files[identifier] in names else None
+                for identifier in contents
+            }
+    except (OSError, zipfile.BadZipFile) as error:
+        raise ProjectError(f'{target} could not be read: {error}') from error
+
+    changed = [
+        identifier for identifier, data in contents.items() if stored[identifier] != bytes(data)
+    ]
+    if changed:
+        _rewrite_manifest(
+            path,
+            content,
+            added={files[identifier]: bytes(contents[identifier]) for identifier in changed},
+        )
+    return changed
 
 
 def remove_model(

@@ -193,6 +193,13 @@ class NetItem(QGraphicsItem):
     uuid : str
         What an arc names this item by.  Generated when the item is made; a
         document read back out of a project assigns the one it was saved under.
+    name : str
+        What the net calls it, unique in its net: the name MASAFI-sim-petri
+        knows it by.  Empty until the editor gives it one — see
+        :meth:`~masafi_simtwin.documents.petri_net.PetriNetEditor.next_name`.
+    NAME_PREFIX : str
+        What a name invented for one begins with.  A subclass says it, and two
+        kinds of item with different prefixes cannot be given the same name.
     GROUP : str
         What this item counts as when it is joined to another.  A subclass says
         it; two items of the same group are two of the same kind of thing
@@ -209,6 +216,9 @@ class NetItem(QGraphicsItem):
     #: The groups it may be joined to.
     CONNECTS_TO: tuple[str, ...] = ()
 
+    #: What a name invented for one begins with.
+    NAME_PREFIX: str = ''
+
     def __init__(
         self,
         snap: Callable[[float], float] | None = None,
@@ -221,6 +231,7 @@ class NetItem(QGraphicsItem):
         self._ports_visible = False
         self._arcs: list = []
         self.uuid = str(uuid4())
+        self.name = ''
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)

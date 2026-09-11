@@ -7,6 +7,8 @@ PyQt6>=6.6
 pyqt6-sip>=13.12.0
 qt-material-icons>=0.4.1
 qtpy>=2.4  # Qt binding shim required by qt-material-icons; no extra Qt is pulled in
+# Backend libraries, installed editable from their sibling checkouts
+-e ../MASAFI-sim-petri
 # Testing dependencies
 pytest>=8.4.2
 pytest-cov>=7.0.0

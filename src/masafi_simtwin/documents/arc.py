@@ -124,6 +124,7 @@ import math
 
 from collections.abc import Callable
 from enum import Enum
+from uuid import uuid4
 
 from PyQt6.QtCore import QCoreApplication, QLineF, QPointF, QRectF, Qt
 from PyQt6.QtGui import QFont, QPainterPath, QPainterPathStroker, QPen, QTransform
@@ -368,6 +369,13 @@ KIND_DIRECTIONS = {
     ArcKind.INHIBITOR: ('place', 'transition'),
 }
 
+#: The kinds of arc that can be built yet.  The rest are offered on the tool bar
+#: and refused there, greyed out, the way
+#: :data:`~masafi_simtwin.project.IMPLEMENTED_KINDS` offers four kinds of model and
+#: builds one: MASAFI-sim-petri has no inhibitor arcs until its P/T nets are
+#: finished, so a net holding one could be drawn and not saved.
+IMPLEMENTED_ARC_KINDS: tuple[ArcKind, ...] = (ArcKind.NORMAL,)
+
 
 def shape_label(shape: ArcShape) -> str:
     """Give what a shape is called, in the language of the interface.
@@ -395,6 +403,46 @@ def shape_label(shape: ArcShape) -> str:
         ArcShape.L_SHAPED: QCoreApplication.translate('Arc', 'L-Shaped'),
     }
     return labels[ArcShape(shape)]
+
+
+def arc_between(source, target, kind: ArcKind, besides=None):
+    """Find the arc of a kind that already runs from one item to another.
+
+    **One arc per source, target and kind.**  Between a place and a transition
+    that allows a normal arc each way, and an inhibitor arc from the place beside
+    the normal one — a second arc of the same kind the same way round says
+    nothing its weight does not, and MASAFI-sim-petri refuses one.  This is the
+    one place the rule is written; everything that can make an arc, or move one,
+    asks it.
+
+    Parameters
+    ----------
+    source : masafi_simtwin.documents.net_item.NetItem
+        Where the arc would leave.
+    target : masafi_simtwin.documents.net_item.NetItem
+        Where it would enter.
+    kind : ArcKind
+        What kind of arc it would be.
+    besides : Arc, optional
+        An arc not to count: the one being moved, which may be put on another
+        point of the item it is already on without standing in its own way.
+
+    Returns
+    -------
+    Arc, optional
+        The arc already there, or ``None`` when one may be made.
+    """
+
+    kind = ArcKind(kind)
+    for arc in source.arcs:
+        if (
+            arc is not besides
+            and arc.source is source
+            and arc.target is target
+            and arc.kind is kind
+        ):
+            return arc
+    return None
 
 
 def kind_label(kind: ArcKind) -> str:
@@ -928,6 +976,9 @@ class Arc(QGraphicsItem):
         was being drawn.  Kept in the chord's own frame like every point of an
         arc, and read only while the shape is one that is led through points.
         Left out, a shape led through points starts from its own defaults.
+    uuid : str, optional
+        The arc's identity: the one it was saved under when it is read back, a
+        new one when it is drawn.
     snap : collections.abc.Callable, optional
         What to round a handle to as it is dragged.  The canvas passes its own,
         which is the millimetre at every zoom; without one a handle goes where
@@ -945,6 +996,10 @@ class Arc(QGraphicsItem):
         arc is drawn and never changed by anything moving.
     kind : ArcKind
         Whether it is normal or inhibitor.
+    uuid : str
+        The arc's identity, which a document names it by.  An arc is a relation
+        and has no name of its own, so this is the only thing that tells two
+        arcs apart once they are written down.
     """
 
     def __init__(
@@ -959,8 +1014,10 @@ class Arc(QGraphicsItem):
         points: list[QPointF] | None = None,
         snap: Callable[[float], float] | None = None,
         parent: QGraphicsItem | None = None,
+        uuid: str | None = None,
     ) -> None:
         super().__init__(parent)
+        self.uuid = uuid or str(uuid4())
         self.source = source
         self.target = target
         self._weight = int(weight)
@@ -1061,10 +1118,16 @@ class Arc(QGraphicsItem):
         -------
         bool
             Whether the kind permits an arc from this source to this target —
-            an arc from a transition to a place cannot be an inhibitor.
+            an arc from a transition to a place cannot be an inhibitor — and no
+            other arc of that kind already runs that way (see
+            :func:`arc_between`).
         """
 
-        return ArcKind(kind).permits(self.source, self.target)
+        kind = ArcKind(kind)
+        return (
+            kind.permits(self.source, self.target)
+            and arc_between(self.source, self.target, kind, besides=self) is None
+        )
 
     def set_kind(self, kind: ArcKind) -> bool:
         """Make the arc a kind of arc from now on, if it may be one.
@@ -1247,6 +1310,36 @@ class Arc(QGraphicsItem):
         frame, in order from the source."""
 
         return tuple(tuple(point) for point in self._points)
+
+    def restore_bends(self, controls=None, points=None) -> None:
+        """Give the arc the bends it was written down with.
+
+        Both are in the chord's own frame, which is how they are kept and how
+        they are written, so what is restored is exactly what was saved and not
+        something near it.
+
+        Parameters
+        ----------
+        controls : collections.abc.Sequence, optional
+            The two control points of a single bow.  ``None`` is *untouched*:
+            :data:`DEFAULT_CONTROLS`.
+        points : collections.abc.Sequence, optional
+            The points an S or an L is led through, in order from the source.
+            ``None`` is *untouched*: the shape's own defaults, given as they are
+            when the shape is chosen.  An empty sequence is kept empty — an S
+            whose every point was taken out is not given its defaults back by
+            being read.
+        """
+
+        self.prepareGeometryChange()
+        chosen = DEFAULT_CONTROLS if controls is None else controls
+        self._controls = [list(control) for control in chosen]
+        if points is None:
+            self._points = []
+            self._seed_points()
+        else:
+            self._points = [list(point) for point in points]
+        self.update()
 
     def curve_middle(self) -> QPointF:
         """Give the half-way point of the arc as it is drawn.
@@ -1582,7 +1675,8 @@ class Arc(QGraphicsItem):
             Whether the arc was changed.  It is not when the end would be put
             where it already is, nor when the two ends would become the same
             item — an arc from a thing to itself is not an arc — nor when the
-            arc's kind may not run the way it would then run.
+            arc's kind may not run the way it would then run, nor when another arc
+            of its kind already runs that way.
         """
 
         if end not in END_HANDLES:
@@ -1593,6 +1687,8 @@ class Arc(QGraphicsItem):
             return False
         source, target = (item, other) if end == 'source' else (other, item)
         if not self._kind.permits(source, target):
+            return False
+        if arc_between(source, target, self._kind, besides=self) is not None:
             return False
 
         was = self.source if end == 'source' else self.target

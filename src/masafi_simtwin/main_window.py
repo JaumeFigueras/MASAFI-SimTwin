@@ -109,6 +109,15 @@ class MainWindow(QMainWindow):
         self.clear_recent_projects_action = QAction(self.tr('Clear Recent Projects'), self)
         self.clear_recent_projects_action.triggered.connect(self.clear_recent_projects)
 
+        self.save_action = QAction(self.tr('Save'), self)
+        self.save_action.setShortcut(QKeySequence.StandardKey.Save)
+        self.save_action.setEnabled(False)
+        self.save_action.triggered.connect(self.save_project)
+        #: Held by the window as well as by *File*, so that the shortcut works
+        #: while the menu bar is folded away behind the hamburger button — which
+        #: is most of the time, and always while a net is being drawn.
+        self.addAction(self.save_action)
+
         self.close_project_action = QAction(self.tr('Close Project'), self)
         self.close_project_action.setEnabled(False)
         self.close_project_action.triggered.connect(self.close_project)
@@ -202,6 +211,7 @@ class MainWindow(QMainWindow):
         file_menu.addAction(self.open_project_action)
         self._recent_menu = file_menu.addMenu(self.tr('Open Recent'))
         file_menu.addSeparator()
+        file_menu.addAction(self.save_action)
         file_menu.addAction(self.close_project_action)
         file_menu.addSeparator()
         file_menu.addAction(self.settings_action)
@@ -407,6 +417,7 @@ class MainWindow(QMainWindow):
         """Build the tabbed document area and make it the central widget."""
 
         self._document_area = DocumentArea(self)
+        self._document_area.may_close = self._may_close_document
         self._document_area.current_document_changed.connect(self._on_document_changed)
         self.setCentralWidget(self._document_area)
 
@@ -530,6 +541,8 @@ class MainWindow(QMainWindow):
 
         if path == self._project_path:
             return
+        if not self._save_before_closing():
+            return
 
         try:
             project.acquire(path)
@@ -556,6 +569,7 @@ class MainWindow(QMainWindow):
         self._top_bar.set_project_name(self._project_name)
         self.setWindowTitle(f'{self._project_name} — {APPLICATION_NAME}')
         self.close_project_action.setEnabled(True)
+        self.save_action.setEnabled(True)
         self._update_menus_for_project()
         self._project_tree.set_project(name, project.models_of(path))
         self.show_pane('project')
@@ -578,13 +592,23 @@ class MainWindow(QMainWindow):
                 return str(parent)
         return ''
 
-    def close_project(self) -> None:
-        """Close the open project and put the chrome back to its empty state.
+    def close_project(self) -> bool:
+        """Save and close the open project, and put the chrome back to its empty
+        state.
 
         The Project pane goes with the project it was opened for: it holds
         nothing else, so leaving it behind would leave an empty panel taking up
         the side of the window.
+
+        Returns
+        -------
+        bool
+            Whether the project closed.  It stays open when one of its models
+            could not be saved and the user chose to keep it.
         """
+
+        if not self._save_before_closing():
+            return False
 
         self._end_session()
         self._document_area.close_all_documents()
@@ -593,10 +617,12 @@ class MainWindow(QMainWindow):
         self._top_bar.set_project_name(self.tr('No Project'))
         self.setWindowTitle(APPLICATION_NAME)
         self.close_project_action.setEnabled(False)
+        self.save_action.setEnabled(False)
         self._update_menus_for_project()
         self._project_tree.clear()
         self.hide_pane('project')
         self.statusBar().showMessage(self.tr('Project closed'), 4000)
+        return True
 
     def _remember_project(self, path: str) -> None:
         """Move a project to the head of the recent list and persist it.
@@ -697,14 +723,18 @@ class MainWindow(QMainWindow):
             self._report(self.tr('The project history could not be written'))
 
     def closeEvent(self, event) -> None:  # noqa: N802  (Qt naming)
-        """Close the open project's session before the window goes.
+        """Save the open project and close its session before the window goes.
 
         Parameters
         ----------
         event : PyQt6.QtGui.QCloseEvent
-            The close event, always accepted.
+            The close event, refused when a model could not be saved and the
+            user chose to keep the window, and accepted otherwise.
         """
 
+        if not self._save_before_closing():
+            event.ignore()
+            return
         self._end_session()
         super().closeEvent(event)
 
@@ -793,6 +823,7 @@ class MainWindow(QMainWindow):
                 dialog.units(),
                 project.current_user(),
                 install_id(),
+                document=lambda identifier: documents.new_model_file(dialog.kind, identifier),
             ),
             self.tr('The model could not be added'),
         )
@@ -861,9 +892,10 @@ class MainWindow(QMainWindow):
     def _change_models(self, change, failure: str) -> dict | None:
         """Apply a change to the project's models and show the result.
 
-        Every change is written to the project as it is made — there is no save
-        step — so a failure to write is the only thing that can go wrong, and it
-        is reported rather than raised.
+        A change to *what the project holds* — a model added, renamed or
+        removed — is written as it is made, so a failure to write is the only
+        thing that can go wrong, and it is reported rather than raised.  What a
+        model *is* — the net drawn in it — is written when the project is saved.
 
         Parameters
         ----------
@@ -972,12 +1004,159 @@ class MainWindow(QMainWindow):
             )
             return
 
+        try:
+            documents.load_file(editor, project.read_model(self._project_path, identifier))
+        except (project.ProjectError, ValueError) as error:
+            editor.deleteLater()
+            QMessageBox.critical(self, self.tr('The model could not be opened'), str(error))
+            return
+
         self._document_area.add_document(
             editor,
             model.get('name', ''),
             key=identifier,
             tool_tip=model.get('file', ''),
         )
+
+    # ------------------------------------------------------------------
+    # Saving
+    # ------------------------------------------------------------------
+
+    def save_project(self) -> bool:
+        """Save every model open in the project, and say what could not be saved.
+
+        Returns
+        -------
+        bool
+            Whether everything was saved.
+        """
+
+        problems = self._write_documents()
+        if problems:
+            QMessageBox.warning(
+                self, self.tr('The project could not be saved'), '\n'.join(problems)
+            )
+            return False
+        if self._project_path is not None:
+            self._report(self.tr('The project was saved'))
+        return True
+
+    def _write_documents(self, keys=None) -> list[str]:
+        """Write open models to the project, and say which could not be written.
+
+        Every model given goes into **one** write of the project, and a model
+        whose file has not changed is not written at all — see
+        :func:`~masafi_simtwin.project.write_models`.  A model that cannot be
+        written yet — a net holding an inhibitor arc — is left out and named,
+        and the others are written all the same: one refusal does not cost the
+        rest their work.
+
+        Parameters
+        ----------
+        keys : collections.abc.Iterable of str, optional
+            The UUIDs of the models to write, every open one when left out.
+
+        Returns
+        -------
+        list of str
+            One translated sentence for each model that was not saved, and
+            nothing when every one was.
+        """
+
+        if self._project_path is None:
+            return []
+        wanted = None if keys is None else set(keys)
+
+        contents: dict[str, bytes] = {}
+        problems: list[str] = []
+        for key, document in self._document_area.keyed_documents.items():
+            if wanted is not None and key not in wanted:
+                continue
+            try:
+                data = documents.file_of(document)
+            except ValueError as error:
+                problems.append(self._not_saved(key, error))
+                continue
+            if data is not None:
+                contents[key] = data
+
+        if contents:
+            try:
+                project.write_models(self._project_path, contents)
+            except project.ProjectError as error:
+                problems.extend(self._not_saved(key, error) for key in contents)
+        return problems
+
+    def _not_saved(self, key: str, error: Exception) -> str:
+        """Say that one model was not saved, and why.
+
+        Parameters
+        ----------
+        key : str
+            The model's UUID.
+        error : Exception
+            What stopped it.
+
+        Returns
+        -------
+        str
+            The translated sentence.
+        """
+
+        model = self._model(key) or {}
+        return self.tr('{0} could not be saved: {1}').format(model.get('name', key), error)
+
+    def _save_before_closing(self, keys=None) -> bool:
+        """Save before something closes, and ask when that cannot be done.
+
+        Closing is a moment the project is saved at — a tab, the project, the
+        window — and a model that cannot be saved must not be lost without the
+        user having said so.  So what could not be saved is shown, and closing
+        goes ahead only when the user chooses to discard it.
+
+        Parameters
+        ----------
+        keys : collections.abc.Iterable of str, optional
+            The UUIDs of the models that are closing, every open one when left
+            out.
+
+        Returns
+        -------
+        bool
+            Whether closing may go ahead: everything was saved, or the user
+            chose to close without saving.
+        """
+
+        problems = self._write_documents(keys)
+        if not problems:
+            return True
+        answer = QMessageBox.question(
+            self,
+            self.tr('Close without saving?'),
+            '\n'.join(problems),
+            QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,
+        )
+        return answer == QMessageBox.StandardButton.Discard
+
+    def _may_close_document(self, key: str) -> bool:
+        """Save a model as its tab is closed by hand, asking when it cannot be.
+
+        Connected to the document area as its :attr:`~DocumentArea.may_close`,
+        and a bound method for the reason every connection of the window is one.
+
+        Parameters
+        ----------
+        key : str
+            The model's UUID.
+
+        Returns
+        -------
+        bool
+            Whether its tab may close.
+        """
+
+        return self._save_before_closing([key])
 
     def _retitle_document(self, model: dict) -> None:
         """Put a model's new name on its tab, if it is open.

@@ -11,7 +11,14 @@ from PyQt6.QtCore import QEvent, QPointF, QSize, Qt
 from PyQt6.QtGui import QColor, QMouseEvent, QPalette
 from PyQt6.QtWidgets import QApplication, QLabel
 
-from masafi_simtwin.documents.arc import ArcKind, ArcShape, kind_label, shape_label
+from masafi_simtwin.documents import petri_net
+from masafi_simtwin.documents.arc import (
+    IMPLEMENTED_ARC_KINDS,
+    ArcKind,
+    ArcShape,
+    kind_label,
+    shape_label,
+)
 from masafi_simtwin.documents.arc_toolbar import ICON_SIZE, ArcToolBar
 
 
@@ -153,7 +160,7 @@ def test_a_kind_is_named_without_saying_arc_again(qtbot):
     qtbot.addWidget(bar)
 
     assert bar.captions == ('Arc Shape', 'Arc Type')
-    assert bar.kind_action(ArcKind.INHIBITOR).toolTip() == 'Inhibitor'
+    assert kind_label(ArcKind.INHIBITOR) == 'Inhibitor'
     assert bar.kind_action(ArcKind.NORMAL).toolTip() == 'Normal'
 
 
@@ -190,7 +197,7 @@ def test_each_button_is_named_as_the_menu_names_it(qtbot):
 
     for shape in ArcShape:
         assert bar.shape_action(shape).toolTip() == shape_label(shape)
-    for kind in ArcKind:
+    for kind in IMPLEMENTED_ARC_KINDS:
         assert bar.kind_action(kind).toolTip() == kind_label(kind)
 
 
@@ -280,6 +287,46 @@ def test_the_icons_are_painted_again_when_the_theme_changes(qtbot):
 # ----------------------------------------------------------------------
 
 
+@pytest.fixture
+def every_kind_built(monkeypatch, editor):
+    """Pretend every kind of arc is built.
+
+    Only the normal arc is built today, so the inhibitor's button is greyed out
+    and a press on it does nothing.  What the bar does with a kind that *is*
+    built — the next arc drawn, a selection that may not be of it — is tested by
+    pretending they all are.
+
+    Parameters
+    ----------
+    monkeypatch : pytest.MonkeyPatch
+        The pytest patcher.
+    editor : masafi_simtwin.documents.petri_net.PetriNetEditor
+        The document, whose bar is shown again under the pretence.
+    """
+
+    monkeypatch.setattr(petri_net, 'IMPLEMENTED_ARC_KINDS', tuple(ArcKind))
+    editor.show_arc_choice()
+
+
+def test_a_kind_not_built_yet_is_greyed_out_and_says_so(editor):
+    """Offered and refused, as the kinds of model are."""
+
+    inhibitor = editor.arc_tool_bar.kind_action(ArcKind.INHIBITOR)
+
+    assert not inhibitor.isEnabled()
+    assert inhibitor.toolTip() == 'Inhibitor (not available yet)'
+    assert editor.arc_tool_bar.kind_action(ArcKind.NORMAL).isEnabled()
+
+
+def test_a_kind_not_built_yet_stays_greyed_out_over_a_selection(editor, net):
+    """An arc that could be an inhibitor still cannot be made one yet."""
+
+    place, transition = net
+    editor.add_arc(place, transition).setSelected(True)
+
+    assert not editor.arc_tool_bar.kind_action(ArcKind.INHIBITOR).isEnabled()
+
+
 def test_the_bar_sits_along_the_top_of_the_sheet(editor):
     """Above the rulers, where the choice is made before the arc is drawn."""
 
@@ -298,7 +345,7 @@ def test_with_nothing_selected_the_bar_shows_the_next_arc(editor):
     assert bar.checked_kind is ArcKind.NORMAL
 
 
-def test_the_next_arc_is_drawn_as_the_bar_says(editor, net):
+def test_the_next_arc_is_drawn_as_the_bar_says(editor, net, every_kind_built):
     """Which is the whole of what the bar is for."""
 
     place, transition = net
@@ -378,7 +425,7 @@ def test_a_mixed_selection_checks_no_shape(editor, net):
     assert editor.arc_tool_bar.checked_kind is ArcKind.NORMAL
 
 
-def test_inhibitor_is_greyed_out_for_an_arc_that_runs_the_wrong_way(editor, net):
+def test_inhibitor_is_greyed_out_for_an_arc_that_runs_the_wrong_way(editor, net, every_kind_built):
     """An arc from a transition to a place cannot be an inhibitor, and a button
     that would do nothing is a button that cannot be pressed."""
 
@@ -418,7 +465,7 @@ def test_a_shape_chosen_from_the_menu_shows_on_the_bar(editor, net):
     assert editor.arc_tool_bar.checked_shape is ArcShape.S_CURVED
 
 
-def test_a_kind_chosen_while_drawing_changes_what_lights_up(editor, net):
+def test_a_kind_chosen_while_drawing_changes_what_lights_up(editor, net, every_kind_built):
     """An inhibitor arc drawn out of a transition may be joined to nothing, so
     the place it is aimed at puts its connecting points away at once."""
 

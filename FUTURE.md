@@ -82,25 +82,27 @@ Worth doing before the first statistic that counts something is shown.
 
 **Now.** The `.mfstz` container lives in `masafi_simtwin/project.py`, inside the GUI package.
 
-**Why.** `simtwin_core` does not exist yet, and creating it for one module would settle more about
-that package than has been designed.
+**Why.** It was true that `simtwin_core` did not exist. It does now — it holds `petri_net.py`, the
+description of a drawn net — so what keeps `project.py` where it is is only that moving it is a piece
+of work of its own, and there has been a feature in flight ever since.
 
 **Cost of waiting: none.** The module is stdlib only — `zipfile` and `json` — and a test asserts that
 no Qt name appears in it, so the move is a rename when the time comes.
 
 ---
 
-## The project archive holds only its manifest
+## The archive holds models, and nothing else yet
 
-**Now.** A new `.mfstz` contains `manifest.json` and nothing else: `format`, `format_version`, the
-name, when it was made and by which version.
+**Now.** A `.mfstz` holds its manifest, the four folders, the history log and one `.pnml` file per
+model. `simulations/` and `statistics/` are empty, and nothing in the archive records which version of
+which library a project's models were built against.
 
-**Why.** There is no model to put in it. What matters is that `format_version` is written from the
-first file onwards, so a reader can always tell what it is looking at.
+**Why.** A simulation and a statistic are what running a net leaves behind, and nothing runs one yet.
+The library question waits until there is more than one library to be built against.
 
-**Still to design.** Everything else: where the flow model goes, how sub-models are laid out, whether
-the block library a project was built against is recorded in it. Also **Save** — the word means
-nothing until there is something to write.
+**Still to design.** What a simulation is as a file — its parameters, its seed, and how much of a run
+is worth keeping — and what a statistic is beside it. And whether a project records the library it was
+built for, which is what would let a net saved today be read with certainty in five years.
 
 ---
 
@@ -172,22 +174,24 @@ model.
 
 ---
 
-## Saving is write-through, and will not stay that way
+## Saving happens at boundaries, and the journal is the next step
 
-**Now.** Every change to a project is written as it is made: adding, renaming or deleting a model
-rewrites the whole archive at once. There is no Save, and none is wanted.
+**Now.** What a project *holds* — a model added, renamed, removed — is written as it is made. What a
+model *is* — the net drawn on its sheet — is written at **boundaries**: *File → Save* (`Ctrl+S`),
+closing a tab, closing the project, opening another, and quitting. Every open model goes into **one**
+rewrite of the archive, and a model whose bytes have not changed is not written at all. There is no
+timer, no journal and no numbered backups, so **a crash loses everything drawn since the last
+boundary**. That was accepted rather than overlooked: the journal is the next piece of work.
 
-**Why it will not last.** The cost is not that saving is slow — it is that **a zip must be rewritten
-whole**. A single entry cannot be updated in place. Adding a model is a rare, deliberate act, so
-paying a full-archive write for it is right. Dragging a place three pixels is not, and once a model
-canvas exists there will be hundreds of small mutations a minute against an archive that may be tens
-of megabytes.
+**Why not simply write more often.** The cost is not that saving is slow — it is that **a zip must be
+rewritten whole**. A single entry cannot be updated in place. Adding a model is a rare, deliberate
+act, so paying a full-archive write for it is right; dragging a place three pixels is not, and a
+canvas produces hundreds of small changes a minute against an archive that may be tens of megabytes.
 
-**The decided shape**, in the order it should be built:
+**The decided shape**, in the order it is being built:
 
-1. **The document lives in memory.** Full writes happen on a timer *and* at boundaries — closing the
-   project, quitting, before a simulation run, and on an explicit save. Keep `Ctrl+S` as "write now"
-   even though nothing needs it; people reach for it. The interval is a preference.
+1. **The document lives in memory**, written in full at the boundaries above — *done*. What is left is
+   the **timer**: a full write every so often, its interval a preference.
 2. **Journal every mutation.** An append-only side record, one small entry per edit — O(1) rather
    than O(project). Replayed on open if it is there, and deleted after a successful full write. This
    is what makes a crash lose nothing while keeping writes proportionate; simply lengthening the
@@ -195,17 +199,18 @@ of megabytes.
 3. **The undo stack stays in memory only.** Recovering *to* the crash point is enough — nobody needs
    to undo past it, and persisting undo is a great deal of machinery for almost none.
 
-**Build it with the editor, not before.** The journal records *operations* and undo inverts them, and
-neither exists until the Petri net canvas does. Undo needs `(operation, inverse)` records; the
-journal needs `(operation)` — so building undo properly makes journalling one line per push, while
+**Undo comes before the journal.** The journal records *operations* and undo inverts them. The editor
+exists now and undo does not, so undo is what comes next: it needs `(operation, inverse)` records and
+the journal needs `(operation)`, so building undo properly makes journalling one line per push, while
 building the journal first means writing the operation representation twice.
 
 **Two things that must not be buffered.** The **authorship history** is tiny and rare — session
 open/close, model added/updated/removed — so it was never the cost, but buffering it puts gaps in the
 chain, which is exactly the evidence that matters. It goes in the journal instead, folded into the
-history log at the next full write, ordered because the journal is append-only. **Simulation output**
-streams straight into `logs/`, beside the history log, as it is produced; it is large, write-once, and a crashed run is re-run
-rather than recovered.
+history log at the next full write, ordered because the journal is append-only. Note that a *save*
+writes no history entry at all, and should not: how often somebody pressed `Ctrl+S` is not evidence of
+anything. **Simulation output** streams straight into `logs/`, beside the history log, as it is
+produced; it is large, write-once, and a crashed run is re-run rather than recovered.
 
 ---
 
@@ -373,7 +378,8 @@ stack that every change to the sheet has to go through, and writing one before t
 for it to restore *into* would be designing the model layer from the wrong end.
 
 **When it will not be enough.** As soon as a net is big enough that redrawing part of it is real
-work, which is the same moment saving matters. The two arrive together.
+work. Saving has arrived and undo has not, so that moment is now: a mistaken *Delete* followed by
+`Ctrl+S` is a loss that nothing can put back.
 
 **Options.**
 
@@ -387,32 +393,57 @@ work, which is the same moment saving matters. The two arrive together.
 
 ---
 
-## Nothing on the sheet is saved
+## A net drawn by another tool loses the way its arcs were drawn
 
-**Now.** A place, a transition or an arc drawn on a Petri net document lives on the
-`QGraphicsScene` and nowhere else. An item carries a `uuid` — arcs name their ends by it, so identity
-now exists — but nothing writes it anywhere.
-Closing the tab loses it; there is no `content` in the `.mfst` model document for it to be written
-to, and `PetriNetEditor` does not mark the model as changed, because there is nothing to change.
-Guides are in the same position, and for the same reason.
+**Now.** A PNML file gives an arc the points it bends at, and `from_pnml()` reads them into
+`ArcData.route` — where the editor never looks. An arc carrying no tool data of SimTwin's own is drawn
+**straight**, between the connecting points that face each other. Saved again, the route written is
+the editor's own, so the corners the other tool drew are gone for good.
 
-**Why it was done this way.** The document format is the piece that has not been designed, and a
-drawing written into a format chosen in passing is a format that has to be migrated later. The
-drawing layer can be built and looked at without it, which is what this is.
+**Why it was done this way.** A route on the sheet and what SimTwin keeps are not the same thing. The
+editor keeps a shape, two control points and a run of points in the arc's own chord frame, with its
+ends attached to numbered connecting points. Turning a run of absolute positions back into that means
+guessing which shape was meant — straight legs through the points, or a curve through them — and where
+on each item the arc was attached. Reading a foreign net and drawing it *tidily* was judged better
+than reading it and drawing it *wrongly*.
 
-**When it will not be enough.** The moment a net is worth more than the session it was drawn in.
+**When it will not be enough.** Importing a net laid out by hand in another tool, where the routes are
+the work that was done.
 
 **Options.**
 
-- Give the model document a `content` holding the net — the places and transitions with their UUIDs
-  and their positions in millimetres, then the arcs, which are two UUIDs and a weight and no geometry
-  at all — and the guides beside it, since a guide is part of the drawing even though it is not part
-  of the net. That an arc has nothing to store but its ends is the clearest sign the split is the
-  right one. Write-through, like the rest of
-  the project (see *Saving is write-through*).
-- Put the drawing in `simtwin_core` from the start, as the document the adapters will read, so that
-  the editor is given a document rather than being one. That is where a document format belongs and
-  it is where `project.py` is going anyway.
+- Take a foreign arc's positions as the points of an L: `route` is already read, one conversion puts
+  them in the frame the editor wants, and straight legs are the safest reading of a polyline. A dozen
+  lines in the adapter.
+- Ask, once per file: *keep the routes as corners, or draw the arcs straight?*
+- Leave it, on the grounds that a net from elsewhere is read to be worked on rather than preserved.
+
+---
+
+## What a model file does not remember
+
+**Now.** A model's file holds the net and the guides — everything that decides what the drawing looks
+like. It does not hold which models were open, which tab was on top, or where each sheet was scrolled
+and at what zoom. Opening a project opens no tabs at all, and a model opened again opens on the top
+left corner of its sheet.
+
+**Why it was done this way.** That is the state of a *session*, not of a model. A file that changed
+because somebody scrolled would be a file that cannot be compared, and two people sharing a project
+would trade scroll positions in every diff — against a history whose whole value is that a change to
+it means something.
+
+**When it will not be enough.** A sheet four metres wide on which finding the part being worked on is
+itself work, and a project of a dozen models where opening the right four is the first minute of every
+session.
+
+**Options.**
+
+- Per machine, in `QSettings`, keyed by the project's UUID — the idiom the recent projects list already
+  uses. Nothing enters the file, and it follows the person rather than the project.
+- In the project, under a section per user, so that it follows the project between machines. It puts
+  session state into a file whose point is that it changes only when the work does.
+- In the model file, as `toolspecific`. Simplest, and rejected: it shares one person's scroll position
+  with everybody.
 
 ---
 
@@ -504,7 +535,11 @@ which is more likely than it sounds, the handles being small and the sheet being
 ## Every net is offered inhibitor arcs, and there are no reset arcs
 
 **Now.** The arc tool bar along the top of a Petri net document offers two kinds of arc — normal and
-inhibitor — on every net, whatever it is. `ArcKind` has no reset member. Nothing records which type
+inhibitor — on every net, whatever it is, and greys the inhibitor out with a *not available yet* tool tip:
+`IMPLEMENTED_ARC_KINDS` is the normal arc alone, because a net holding an inhibitor arc could not be saved
+while MASAFI-sim-petri has none, and none will be added until its P/T nets are finished. `add_arc()` still builds one when asked, for the tests and for later, and
+`pnml.to_pnml()` refuses a net holding one with `UnsupportedNet`, so saving names the model rather than
+writing a file that is not the net drawn. `ArcKind` has no reset member. Nothing records which type
 of net a model is, P/T, timed or attributed timed, so nothing could say that a plain P/T net has no
 business with an inhibitor arc. The kind is chosen on the bar and nowhere else: an arc's context menu
 offers its shapes, its points and *Delete Arc* but not its kind, and the Libraries pane still lists no
@@ -534,9 +569,10 @@ validation, the model's properties — needs to be told it; and the first time a
 
 ## Two arcs may join the same pair only when they are of different kinds
 
-**Now.** SimTwin lets a second arc be drawn from the same place to the same transition, or from the same
-transition to the same place. MASAFI-sim-petri refuses it — *An arc already joins place 'P1' to transition
-'T1'; change its weight instead of adding a second arc* — and so will SimTwin, as part of the save work.
+**Now.** SimTwin refuses a second arc of one kind from the same place to the same transition, or from the
+same transition to the same place — as MASAFI-sim-petri does: *An arc already joins place 'P1' to
+transition 'T1'; change its weight instead of adding a second arc*. `arc_between()` in `arc.py` is the one
+place the rule is written.
 
 **Decided.** At most **one arc per source, target and kind**. Between a place and a transition that
 allows one normal arc from the place to the transition, one normal arc back, and — once inhibitor arcs

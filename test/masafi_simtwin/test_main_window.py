@@ -9,16 +9,20 @@ from pathlib import Path
 
 import pytest
 from PyQt6 import sip
-from PyQt6.QtCore import QSizeF, Qt
+from PyQt6.QtCore import QPointF, QSizeF, Qt
+from PyQt6.QtGui import QKeySequence
 from PyQt6.QtWidgets import QDialog, QDockWidget, QMessageBox, QTabBar
 
 from masafi_simtwin import APPLICATION_NAME, paper, project
 from masafi_simtwin.documents import PetriNetEditor
+from masafi_simtwin.documents.arc import ArcKind
 from masafi_simtwin.library_tree import LibraryTree
 from masafi_simtwin.main_window import MAX_RECENT_PROJECTS, MainWindow
 from masafi_simtwin.preferences import install_id
 from masafi_simtwin.project_tree import NodeKind
 from masafi_simtwin.top_bar import TopBar
+from simtwin_adapters.sim_petri import pnml
+from simtwin_core.petri_net import NetDocument
 
 
 @pytest.fixture
@@ -152,10 +156,12 @@ def test_the_file_menu_opens_with_new_open_and_recent(window):
     assert entries[0] is window.new_project_action
     assert entries[1] is window.open_project_action
     assert entries[2] is window._recent_menu.menuAction()
-    assert entries[3] is window.close_project_action
-    assert entries[4] is window.settings_action
-    assert entries[5] is window.quit_action
+    assert entries[3] is window.save_action
+    assert entries[4] is window.close_project_action
+    assert entries[5] is window.settings_action
+    assert entries[6] is window.quit_action
     assert not window.close_project_action.isEnabled()
+    assert not window.save_action.isEnabled()
 
 
 def test_the_simulation_controls_live_on_the_top_bar_alone(window):
@@ -1314,7 +1320,10 @@ def test_a_new_model_is_written_and_shown(window, opened, monkeypatch):
 
     models = project.models_of(opened)
     assert [model['name'] for model in models] == ['Filling Station']
-    assert models[0]['file'] == 'models/Filling_Station.mfst'
+    assert models[0]['file'] == 'models/Filling_Station.pnml'
+    assert pnml.from_pnml(project.read_model(opened, models[0]['uuid'])) == NetDocument(
+        model_uuid=models[0]['uuid']
+    )
     assert [item.text(0) for item in window._project_tree.model_items()] == [
         'Filling Station'
     ]
@@ -1654,7 +1663,7 @@ def test_a_model_of_a_kind_that_is_not_built_is_not_opened(window, opened):
     """It is reported instead, which is what an unimplemented kind deserves."""
 
     model = project.add_model(
-        opened, 'Flow', project.ModelKind.PROCESS_FLOW, {'time': 's'}
+        opened, 'Flow', project.ModelKind.PROCESS_FLOW, {'time': 's'}, document=lambda _: b''
     )
     window.open_model(model['uuid'])
 
@@ -1812,3 +1821,335 @@ def test_the_libraries_pane_holds_the_library_tree(window):
 
     assert pane is not None
     assert pane.findChild(LibraryTree) is window._library_tree
+
+
+# ----------------------------------------------------------------------
+# Saving
+# ----------------------------------------------------------------------
+
+
+def editor_of(window, model: dict):
+    """Give the editor a model is open in.
+
+    Parameters
+    ----------
+    window : masafi_simtwin.main_window.MainWindow
+        The window.
+    model : dict
+        The model's entry in the manifest.
+
+    Returns
+    -------
+    masafi_simtwin.documents.petri_net.PetriNetEditor
+        The editor.
+    """
+
+    return window.document_area.document(model['uuid'])
+
+
+def draw(editor):
+    """Draw a small net: a place, a transition and an arc between them.
+
+    Parameters
+    ----------
+    editor : masafi_simtwin.documents.petri_net.PetriNetEditor
+        Where to draw it.
+
+    Returns
+    -------
+    simtwin_core.petri_net.NetDocument
+        What was drawn.
+    """
+
+    place = editor.add_element('pt-petri-net', 'place', QPointF(20.0, 20.0))
+    transition = editor.add_element('pt-petri-net', 'transition', QPointF(60.0, 20.0))
+    editor.add_arc(place, transition).weight = 2
+    return editor.to_document()
+
+
+def inhibit(editor):
+    """Draw a net that cannot be saved yet: one holding an inhibitor arc.
+
+    Parameters
+    ----------
+    editor : masafi_simtwin.documents.petri_net.PetriNetEditor
+        Where to draw it.
+
+    Returns
+    -------
+    masafi_simtwin.documents.arc.Arc
+        The inhibitor arc, so that a test can take it away again before the
+        window closes.
+    """
+
+    place = editor.add_element('pt-petri-net', 'place', QPointF(20.0, 60.0))
+    transition = editor.add_element('pt-petri-net', 'transition', QPointF(60.0, 60.0))
+    return editor.add_arc(place, transition, kind=ArcKind.INHIBITOR)
+
+
+def saved(path: str, model: dict):
+    """Read the net a model's file holds.
+
+    Parameters
+    ----------
+    path : str
+        The project file.
+    model : dict
+        The model's entry in the manifest.
+
+    Returns
+    -------
+    simtwin_core.petri_net.NetDocument
+        The net.
+    """
+
+    return pnml.from_pnml(project.read_model(path, model['uuid']))
+
+
+def writes_of(monkeypatch) -> list:
+    """Count the times the project archive is written.
+
+    Parameters
+    ----------
+    monkeypatch : pytest.MonkeyPatch
+        The patcher.
+
+    Returns
+    -------
+    list
+        One entry per write, filled in as they happen.
+    """
+
+    written = []
+    real = project.os.replace
+
+    def replace(source, target):
+        written.append(target)
+        real(source, target)
+
+    monkeypatch.setattr(project.os, 'replace', replace)
+    return written
+
+
+def answer(monkeypatch, button) -> list:
+    """Answer the window's questions without asking them.
+
+    Parameters
+    ----------
+    monkeypatch : pytest.MonkeyPatch
+        The patcher.
+    button : PyQt6.QtWidgets.QMessageBox.StandardButton
+        The answer.
+
+    Returns
+    -------
+    list
+        The titles of the questions asked.
+    """
+
+    asked = []
+    monkeypatch.setattr(
+        'masafi_simtwin.main_window.QMessageBox.question',
+        lambda *arguments, **keywords: asked.append(arguments[1]) or button,
+    )
+    return asked
+
+
+def test_saving_needs_a_project(window, make_project):
+    """And is the standard shortcut, held by the window itself so it works with
+    the menu bar folded away."""
+
+    assert not window.save_action.isEnabled()
+
+    window.open_project_path(make_project('Bottling Line'))
+
+    assert window.save_action.isEnabled()
+    assert window.save_action.shortcut() == QKeySequence(QKeySequence.StandardKey.Save)
+    assert window.save_action in window.actions()
+
+
+def test_saving_writes_what_is_drawn(window, opened, monkeypatch):
+    """The net on the sheet is the net in the file."""
+
+    model = add_model(window, monkeypatch)
+    drawn = draw(editor_of(window, model))
+
+    window.save_action.trigger()
+
+    assert saved(opened, model) == drawn
+    assert 'saved' in window.statusBar().currentMessage()
+
+
+def test_saving_writes_every_open_model_in_one_write(window, opened, monkeypatch):
+    """However many are open, the project is rewritten once."""
+
+    first = add_model(window, monkeypatch, 'Filling Station')
+    second = add_model(window, monkeypatch, 'Capping')
+    drawn = {model['uuid']: draw(editor_of(window, model)) for model in (first, second)}
+    written = writes_of(monkeypatch)
+
+    window.save_action.trigger()
+
+    assert len(written) == 1
+    assert {model['uuid']: saved(opened, model) for model in (first, second)} == drawn
+
+
+def test_saving_a_project_nobody_changed_writes_nothing(window, opened, monkeypatch):
+    """An empty net saved is the empty net it was made as."""
+
+    add_model(window, monkeypatch)
+    written = writes_of(monkeypatch)
+
+    window.save_action.trigger()
+
+    assert written == []
+
+
+def test_a_saved_net_is_there_when_the_project_is_opened_again(window, opened, monkeypatch):
+    """Which is the whole of saving."""
+
+    model = add_model(window, monkeypatch)
+    drawn = draw(editor_of(window, model))
+    window.save_action.trigger()
+    window.close_project()
+
+    window.open_project_path(opened)
+    window.open_model(model['uuid'])
+
+    assert editor_of(window, model).to_document() == drawn
+
+
+def test_closing_a_tab_saves_its_model(window, opened, monkeypatch):
+    """A tab closed by hand is a model put away."""
+
+    model = add_model(window, monkeypatch)
+    drawn = draw(editor_of(window, model))
+
+    window.document_area.tabs.tabBar().tabButton(0, QTabBar.ButtonPosition.RightSide).click()
+
+    assert window.document_area.document_count == 0
+    assert saved(opened, model) == drawn
+
+
+def test_closing_the_project_saves_its_models(window, opened, monkeypatch):
+    """Before the tabs go."""
+
+    model = add_model(window, monkeypatch)
+    drawn = draw(editor_of(window, model))
+
+    assert window.close_project()
+    assert saved(opened, model) == drawn
+
+
+def test_opening_another_project_saves_the_first(window, opened, monkeypatch, make_project):
+    """Switching projects is closing one."""
+
+    model = add_model(window, monkeypatch)
+    drawn = draw(editor_of(window, model))
+
+    window.open_project_path(make_project('Packing Line'))
+
+    assert saved(opened, model) == drawn
+
+
+def test_closing_the_window_saves_its_models(window, opened, monkeypatch):
+    """Quitting is closing too."""
+
+    model = add_model(window, monkeypatch)
+    drawn = draw(editor_of(window, model))
+
+    window.close()
+
+    assert saved(opened, model) == drawn
+
+
+def test_a_model_that_cannot_be_read_is_reported_and_not_opened(window, opened, monkeypatch):
+    """An empty editor would save nothing over the damaged file when it closed."""
+
+    model = add_model(window, monkeypatch)
+    window.document_area.close_document_for(model['uuid'])
+    project.write_models(opened, {model['uuid']: b'not a net'})
+    reported = []
+    monkeypatch.setattr(
+        'masafi_simtwin.main_window.QMessageBox.critical',
+        lambda *arguments, **keywords: reported.append(arguments[1]),
+    )
+
+    window.open_model(model['uuid'])
+
+    assert window.document_area.document_count == 0
+    assert reported == ['The model could not be opened']
+    assert project.read_model(opened, model['uuid']) == b'not a net'
+
+
+def test_a_net_that_cannot_be_saved_is_named_on_saving(window, opened, monkeypatch):
+    """And the models that can be saved are saved all the same."""
+
+    held = add_model(window, monkeypatch, 'Filling Station')
+    fine = add_model(window, monkeypatch, 'Capping')
+    arc = inhibit(editor_of(window, held))
+    drawn = draw(editor_of(window, fine))
+    warned = []
+    monkeypatch.setattr(
+        'masafi_simtwin.main_window.QMessageBox.warning',
+        lambda *arguments, **keywords: warned.append(arguments[2]),
+    )
+
+    assert not window.save_project()
+
+    assert len(warned) == 1
+    assert 'Filling Station' in warned[0]
+    assert saved(opened, fine) == drawn
+    editor_of(window, held).view.remove(arc)
+
+
+def test_closing_a_project_that_cannot_be_saved_can_be_cancelled(window, opened, monkeypatch):
+    """Nothing is lost without the user saying so."""
+
+    model = add_model(window, monkeypatch)
+    inhibit(editor_of(window, model))
+    asked = answer(monkeypatch, QMessageBox.StandardButton.Cancel)
+
+    assert not window.close_project()
+
+    assert asked == ['Close without saving?']
+    assert window.document_area.document_count == 1
+    assert project.EVENT_CLOSED not in events(opened)
+
+    answer(monkeypatch, QMessageBox.StandardButton.Discard)
+
+    assert window.close_project()
+    assert events(opened)[-1] == project.EVENT_CLOSED
+
+
+def test_closing_the_window_can_be_cancelled_too(window, opened, monkeypatch):
+    """The window stays, and so does the project's session."""
+
+    model = add_model(window, monkeypatch)
+    inhibit(editor_of(window, model))
+    answer(monkeypatch, QMessageBox.StandardButton.Cancel)
+
+    assert not window.close()
+    assert project.EVENT_CLOSED not in events(opened)
+
+    answer(monkeypatch, QMessageBox.StandardButton.Discard)
+
+    assert window.close()
+
+
+def test_closing_a_tab_that_cannot_be_saved_asks_first(window, opened, monkeypatch):
+    """And discarding leaves the file as it was last saved."""
+
+    model = add_model(window, monkeypatch)
+    inhibit(editor_of(window, model))
+    button = window.document_area.tabs.tabBar().tabButton(0, QTabBar.ButtonPosition.RightSide)
+    answer(monkeypatch, QMessageBox.StandardButton.Cancel)
+
+    button.click()
+    assert window.document_area.document_count == 1
+
+    answer(monkeypatch, QMessageBox.StandardButton.Discard)
+    button.click()
+
+    assert window.document_area.document_count == 0
+    assert saved(opened, model) == NetDocument(model_uuid=model['uuid'])

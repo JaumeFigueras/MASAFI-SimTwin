@@ -64,6 +64,7 @@ from masafi_simtwin.documents.arc import (
     Arc,
     ArcKind,
     ArcShape,
+    arc_between,
     arrowhead,
     chord_point,
     ring_centre,
@@ -947,6 +948,12 @@ class CanvasView(QGraphicsView):
         arc's: the gesture runs from the end that stays, so moving a source
         runs it backwards.
 
+        And **no arc of that kind may run that way already** — one arc per
+        source, target and kind, see
+        :func:`~masafi_simtwin.documents.arc.arc_between`.  An arc being moved
+        does not count against itself, so an end can still be put on another
+        point of the item it is on.
+
         Parameters
         ----------
         start : masafi_simtwin.documents.net_item.NetItem
@@ -965,8 +972,14 @@ class CanvasView(QGraphicsView):
         if self._moving_end is not None:
             arc, moving = self._moving_end
             source, target = (end, start) if moving == 'source' else (start, end)
-            return arc.kind.permits(source, target)
-        return self._new_arc_kind.permits(start, end)
+            return (
+                arc.kind.permits(source, target)
+                and arc_between(source, target, arc.kind, besides=arc) is None
+            )
+        return (
+            self._new_arc_kind.permits(start, end)
+            and arc_between(start, end, self._new_arc_kind) is None
+        )
 
     @property
     def laid_points(self) -> list[QPointF]:

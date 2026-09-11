@@ -103,6 +103,9 @@ class Transition(NetItem):
     #: What it may be joined to.  A Petri net is bipartite.
     CONNECTS_TO = ('place',)
 
+    #: What an invented name begins with: ``T1``, ``T2`` and so on.
+    NAME_PREFIX = 'T'
+
     @staticmethod
     def port_offsets_along_an_edge() -> list[float]:
         """Give how far along a long edge each of its points is, from the middle.
