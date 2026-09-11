@@ -52,11 +52,26 @@ from PyQt6.QtWidgets import (
     QGraphicsView,
     QGridLayout,
     QMenu,
+    QVBoxLayout,
     QWidget,
 )
 
 from masafi_simtwin import preferences
-from masafi_simtwin.documents.arc import END_HANDLES, Arc, ArcShape
+from masafi_simtwin.documents.arc import (
+    END_HANDLES,
+    HANDLE_SIZE,
+    INHIBITOR_RADIUS,
+    Arc,
+    ArcKind,
+    ArcShape,
+    arrowhead,
+    chord_point,
+    ring_centre,
+    route_path,
+    route_segments,
+    shape_label,
+    untouched_segments,
+)
 from masafi_simtwin.documents.guide import Guide
 from masafi_simtwin.documents.net_item import PORT_GRAB, NetItem
 from masafi_simtwin.documents.ruler import MILLIMETRES, Ruler, RulerCorner, RulerUnit
@@ -194,18 +209,24 @@ class CanvasView(QGraphicsView):
         Emitted with the two :class:`~masafi_simtwin.documents.net_item.NetItem`
         an arc has been drawn between — the one it was started from first — and
         the indices of the connecting point it leaves by and the one it enters
-        by, which are where it is attached for good.  The view runs the gesture and checks that the
-        two may be joined at all; what the connection *is* — an arc of a Petri
-        net, and of which kind — is the document's, for the same reason a drop
-        is.
+        by, which are where it is attached for good — and the points laid on the
+        bare sheet on the way, in scene millimetres, which is a list and most
+        often an empty one.  The view runs the gesture and checks that the two
+        may be joined at all, and by an arc of :attr:`new_arc_kind`; making the
+        arc is the document's, for the same reason a drop is.
+    arc_reshaped : PyQt6.QtCore.pyqtSignal
+        Emitted with an arc whose shape has just been changed through
+        :meth:`set_arc_shape`, which is what its context menu does, so that
+        whatever shows the shape of the selection can show it again.
     """
 
     view_changed = pyqtSignal()
     pointer_moved = pyqtSignal(QPointF)
     pointer_left = pyqtSignal()
     element_dropped = pyqtSignal(str, str, QPointF)
-    connection_drawn = pyqtSignal(object, object, int, int)
+    connection_drawn = pyqtSignal(object, object, int, int, object)
     item_activated = pyqtSignal(object)
+    arc_reshaped = pyqtSignal(object)
 
     def __init__(self, page: QSizeF | None = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -237,6 +258,9 @@ class CanvasView(QGraphicsView):
         self._moving_end: tuple[Arc, str] | None = None
         self._connecting_at = QPointF()
         self._connecting_pressed_at: QPointF | None = None
+        self._connecting_points: list[QPointF] = []
+        self._new_arc_shape = ArcShape.STRAIGHT
+        self._new_arc_kind = ArcKind.NORMAL
         self.scale(PIXELS_PER_MM, PIXELS_PER_MM)
         self.scroll_to_origin()
 
@@ -487,12 +511,20 @@ class CanvasView(QGraphicsView):
         """Delete what is selected on *Delete* or *Backspace*, and abandon an
         arc being drawn on *Escape*.
 
+        While an arc is being drawn with points laid for it, *Backspace* takes
+        the last of them back instead, the way it does in every tool that draws
+        a line click by click: a point laid in the wrong place should cost one
+        key rather than the whole route.
+
         Parameters
         ----------
         event : PyQt6.QtGui.QKeyEvent
             The key event.
         """
 
+        if event.key() == Qt.Key.Key_Backspace and self.take_back_point():
+            event.accept()
+            return
         if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
             if self.delete_selection():
                 event.accept()
@@ -512,11 +544,21 @@ class CanvasView(QGraphicsView):
         when the *Edit* menu grows a *Delete* it should come here rather than
         repeat this.
 
+        While an arc is being drawn a right click **gives it up** instead, and
+        offers nothing.  A click of the left button on the bare sheet lays a
+        point for the arc to be led through, so the right button is the mouse's
+        way out, beside *Escape*.
+
         Parameters
         ----------
         event : PyQt6.QtGui.QContextMenuEvent
             The context menu event.
         """
+
+        if self._connecting_from is not None:
+            self.abandon_connection()
+            event.accept()
+            return
 
         menu = self.arc_menu(self.arc_at(event.pos()), self.mapToScene(event.pos()))
         if menu is None:
@@ -610,13 +652,8 @@ class CanvasView(QGraphicsView):
         menu = QMenu(self)
         shapes = QActionGroup(menu)
         shapes.setExclusive(True)
-        for shape, label in (
-            (ArcShape.STRAIGHT, self.tr('Straight')),
-            (ArcShape.CURVED, self.tr('Curved')),
-            (ArcShape.S_CURVED, self.tr('S-Curved')),
-            (ArcShape.L_SHAPED, self.tr('L-Shaped')),
-        ):
-            action = menu.addAction(label)
+        for shape in ArcShape:
+            action = menu.addAction(shape_label(shape))
             action.setCheckable(True)
             action.setChecked(arc.shape_kind is shape)
             action.setData(shape)
@@ -655,6 +692,7 @@ class CanvasView(QGraphicsView):
         """
 
         arc.shape_kind = shape
+        self.arc_reshaped.emit(arc)
 
     def add_arc_point(self, arc: Arc, at: QPointF) -> None:
         """Put another point into an arc, where the menu was opened, and leave
@@ -841,6 +879,137 @@ class CanvasView(QGraphicsView):
 
         return self._connecting_over
 
+    @property
+    def new_arc_shape(self) -> ArcShape:
+        """ArcShape: The shape the next arc drawn will be.
+
+        Held on the view rather than on the document because the view draws the
+        line previewed while an arc is being drawn, and a preview of another arc
+        than the one that will be made is worse than none.  The document reads
+        it back when the arc lands.
+        """
+
+        return self._new_arc_shape
+
+    @new_arc_shape.setter
+    def new_arc_shape(self, shape: ArcShape) -> None:
+        """Draw the next arc in a shape.
+
+        The preview is drawn again at once, so a shape can be chosen in the
+        middle of drawing an arc click by click and seen before it lands.
+
+        Parameters
+        ----------
+        shape : ArcShape
+            The shape.
+        """
+
+        self._new_arc_shape = ArcShape(shape)
+        self.viewport().update()
+
+    @property
+    def new_arc_kind(self) -> ArcKind:
+        """ArcKind: The kind the next arc drawn will be.
+
+        It decides what the arc may be aimed at as well as what it is: an
+        inhibitor arc runs from a place to a transition, so one drawn out of a
+        transition lights up nothing.
+        """
+
+        return self._new_arc_kind
+
+    @new_arc_kind.setter
+    def new_arc_kind(self, kind: ArcKind) -> None:
+        """Make the next arc of a kind.
+
+        An arc being drawn is aimed again, so an item it may no longer be joined
+        to puts its connecting points away at once rather than at the next move.
+
+        Parameters
+        ----------
+        kind : ArcKind
+            The kind.
+        """
+
+        self._new_arc_kind = ArcKind(kind)
+        if self._connecting_from is not None:
+            self.aim_at(self.mapFromScene(self._connecting_at))
+        self.viewport().update()
+
+    def may_join(self, start: NetItem, end: NetItem) -> bool:
+        """Say whether the gesture under way may join two items.
+
+        Both questions have to be answered yes: the items' own — a Petri net is
+        bipartite — and the arc's kind, which may run only one way.  Which kind
+        that is depends on what the gesture is doing.  Drawing a new arc, it is
+        :attr:`new_arc_kind`, from ``start`` to ``end``.  Putting an end of an
+        arc somewhere else, it is **that arc's** kind, and the direction is the
+        arc's: the gesture runs from the end that stays, so moving a source
+        runs it backwards.
+
+        Parameters
+        ----------
+        start : masafi_simtwin.documents.net_item.NetItem
+            What the gesture runs from.
+        end : masafi_simtwin.documents.net_item.NetItem
+            What it would land on.
+
+        Returns
+        -------
+        bool
+            Whether it may land there.
+        """
+
+        if start is None or not start.may_connect_to(end):
+            return False
+        if self._moving_end is not None:
+            arc, moving = self._moving_end
+            source, target = (end, start) if moving == 'source' else (start, end)
+            return arc.kind.permits(source, target)
+        return self._new_arc_kind.permits(start, end)
+
+    @property
+    def laid_points(self) -> list[QPointF]:
+        """list: The points laid for the arc being drawn, in scene millimetres,
+        in the order they were laid."""
+
+        return [QPointF(point) for point in self._connecting_points]
+
+    def lay_point(self, at: QPointF) -> None:
+        """Lay a point for the arc being drawn to be led through.
+
+        This is what a click on the bare sheet does while an arc is being drawn
+        click by click: the route is laid out **while the net is in front of the
+        person laying it**, round whatever is in the way, rather than drawn
+        straight through it and shaped afterwards.  The point is snapped like
+        every other position on the sheet.
+
+        Parameters
+        ----------
+        at : PyQt6.QtCore.QPointF
+            Where, in scene millimetres.
+        """
+
+        if self._connecting_from is None or self._moving_end is not None:
+            return
+        self._connecting_points.append(QPointF(self.snap(at.x()), self.snap(at.y())))
+        self.viewport().update()
+
+    def take_back_point(self) -> bool:
+        """Take back the last point laid for the arc being drawn.
+
+        Returns
+        -------
+        bool
+            Whether there was one to take back.
+        """
+
+        if not self._connecting_points:
+            return False
+        self._connecting_points.pop()
+        self.viewport().update()
+        return True
+
     def landing_port(self, target: NetItem, at: QPointF) -> int:
         """Give which connecting point of an item an arc let go there binds to.
 
@@ -898,8 +1067,10 @@ class CanvasView(QGraphicsView):
         being made.  They go again as soon as the arc is taken off it.
 
         Only an item the arc **may** be joined to lights up: a Petri net is
-        bipartite, so a place aimed at a place shows nothing, and that is the
-        refusal made visible while there is still time to aim somewhere else.
+        bipartite, so a place aimed at a place shows nothing, and an inhibitor
+        arc runs from a place to a transition, so one aimed back at a place
+        shows nothing either.  That is the refusal made visible while there is
+        still time to aim somewhere else.  See :meth:`may_join`.
 
         Parameters
         ----------
@@ -914,7 +1085,7 @@ class CanvasView(QGraphicsView):
 
         source = self._connecting_from
         found = self.item_at(position) if source is not None else None
-        if found is not None and not source.may_connect_to(found):
+        if found is not None and not self.may_join(source, found):
             found = None
 
         if found is self._connecting_over:
@@ -1107,6 +1278,7 @@ class CanvasView(QGraphicsView):
         self._connecting_from = None
         self._connecting_over = None
         self._connecting_pressed_at = None
+        self._connecting_points = []
         self._moving_end = None
         self.viewport().update()
 
@@ -1123,8 +1295,8 @@ class CanvasView(QGraphicsView):
         bool
             Whether an arc was drawn.  It was not if the pointer is over nothing,
             over the item the arc came from, or over one this one may not be
-            joined to — a Petri net is bipartite, and a refusal is silent
-            because the arc simply is not there.
+            joined to — a Petri net is bipartite, an inhibitor arc runs one way
+            only, and a refusal is silent because the arc simply is not there.
 
         Notes
         -----
@@ -1140,12 +1312,13 @@ class CanvasView(QGraphicsView):
 
         source = self._connecting_from
         target = self.item_at(position)
-        if source is None or target is None or not source.may_connect_to(target):
+        if source is None or target is None or not self.may_join(source, target):
             return False
 
         leaving = self._connecting_port
         arriving = self.landing_port(target, self.mapToScene(position))
         moving = self._moving_end
+        points = self.laid_points
         self.abandon_connection()
 
         if moving is not None:
@@ -1153,16 +1326,65 @@ class CanvasView(QGraphicsView):
             arc.reattach(end, target, arriving)
             return True
 
-        self.connection_drawn.emit(source, target, leaving, arriving)
+        self.connection_drawn.emit(source, target, leaving, arriving, points)
         return True
+
+    def preview_route(self) -> tuple | None:
+        """Give the arc the gesture under way would make if it landed now.
+
+        **The arc itself, not a line near it**: its shape, the points laid for
+        it and the mark it ends in, so that what a person sees while aiming is
+        what they will get — which is the whole point of choosing the shape
+        before the arc is drawn rather than after.  Two cases:
+
+        * **drawing a new arc**, it is an untouched arc of :attr:`new_arc_shape`
+          led through the points laid so far — :attr:`ArcShape.routed`, once
+          there are any, which is what the document makes of them;
+        * **moving an end**, it is the arc being moved, with its own shape and
+          its own points kept in its own chord's frame, along the chord it would
+          have — the gesture runs from the end that stays, so moving a source
+          turns the chord the arc's way round again.
+
+        Returns
+        -------
+        tuple, optional
+            The chord, the segments along it and the kind of arc, or ``None``
+            while no arc is being drawn.
+        """
+
+        source = self._connecting_from
+        if source is None:
+            return None
+
+        here = source.scene_port(self._connecting_port)
+        there = self.connection_endpoint()
+        if self._moving_end is not None:
+            arc, end = self._moving_end
+            line = QLineF(there, here) if end == 'source' else QLineF(here, there)
+            controls = [chord_point(line, *frame) for frame in arc.control_frames]
+            points = [chord_point(line, *frame) for frame in arc.point_frames]
+            return line, route_segments(line, arc.shape_kind, controls, points), arc.kind
+
+        line = QLineF(here, there)
+        shape = self._new_arc_shape
+        if self._connecting_points:
+            shape = shape.routed
+        return line, untouched_segments(line, shape, self._connecting_points), self._new_arc_kind
 
     def _draw_connection(self, painter) -> None:
         """Draw the arc being dragged, from its point to the pointer.
 
         It runs from the point that was pressed to the point it would bind to,
-        so the preview is the arc that would be made rather than something near
-        it.  Where it is over nothing it follows the pointer instead, there
-        being no point to end on yet.
+        and it is drawn in the shape it will have, ending in the mark it will
+        end in — see :meth:`preview_route` — so the preview is the arc that
+        would be made rather than something near it.  Where it is over nothing
+        it follows the pointer instead, there being no point to end on yet.
+
+        The line is **dashed** and the mark at its end is not: the line says
+        *not made yet*, and a dashed arrowhead two millimetres long is a smudge.
+        The points laid for it are drawn the way an arc's handles are, a square
+        of the accent around the colour of the paper, because once the arc is
+        made that is exactly what they will be.
 
         It is drawn in the view's foreground rather than as an item, because it
         is not one: nothing is on the sheet until the arc lands, and a preview
@@ -1174,17 +1396,37 @@ class CanvasView(QGraphicsView):
             The painter of the view.
         """
 
-        source = self._connecting_from
-        if source is None:
+        route = self.preview_route()
+        if route is None:
             return
 
+        line, segments, kind = route
+        path = route_path(line, segments)
         colour = self.palette().color(QPalette.ColorRole.Link)
+        paper = self.palette().color(QPalette.ColorRole.Base)
+
+        painter.save()
         pen = QPen(colour, 0)
         pen.setStyle(Qt.PenStyle.DashLine)
         painter.setPen(pen)
-        painter.drawLine(
-            QLineF(source.scene_port(self._connecting_port), self.connection_endpoint())
-        )
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawPath(path)
+
+        painter.setPen(QPen(colour, 0))
+        if kind is ArcKind.INHIBITOR:
+            painter.setBrush(paper)
+            painter.drawEllipse(
+                ring_centre(line, path, bool(segments)), INHIBITOR_RADIUS, INHIBITOR_RADIUS
+            )
+        else:
+            painter.setBrush(colour)
+            painter.drawPath(arrowhead(line, path, bool(segments)))
+
+        painter.setBrush(paper)
+        half = HANDLE_SIZE / 2.0
+        for point in self._connecting_points:
+            painter.drawRect(QRectF(point.x() - half, point.y() - half, HANDLE_SIZE, HANDLE_SIZE))
+        painter.restore()
 
     # ------------------------------------------------------------------
     # Panning, and where the pointer is
@@ -1206,7 +1448,12 @@ class CanvasView(QGraphicsView):
         **click-click**: an
         arc can be drawn by holding the button down and dragging, or by clicking
         once at each end — which is the one that works when the two items are
-        far enough apart that the sheet has to be scrolled between them.
+        far enough apart that the sheet has to be scrolled between them.  What
+        such a press does is :meth:`_press_while_connecting`.
+
+        A press of the right button while an arc is being drawn is kept from
+        the scene, which would otherwise put the selection down under it: the
+        context menu that follows it is what gives the arc up.
 
         Parameters
         ----------
@@ -1220,11 +1467,14 @@ class CanvasView(QGraphicsView):
             event.accept()
             return
 
+        if event.button() == Qt.MouseButton.RightButton and self._connecting_from is not None:
+            event.accept()
+            return
+
         if event.button() == Qt.MouseButton.LeftButton:
             spot = event.position().toPoint()
             if self._connecting_from is not None:
-                if not self.finish_connection(spot):
-                    self.abandon_connection()
+                self._press_while_connecting(spot, event.position())
                 event.accept()
                 return
             moving = self.arc_end_at(spot)
@@ -1244,6 +1494,42 @@ class CanvasView(QGraphicsView):
                 return
 
         super().mousePressEvent(event)
+
+    def _press_while_connecting(self, spot, position) -> None:
+        """Land the arc being drawn, lay a point for it, or leave it be.
+
+        Three answers, by what is under the press:
+
+        * **an item it may join** — the arc lands there;
+        * **the bare sheet** — a point is laid for the arc to be led through,
+          and the arc goes on being drawn.  That is what lets a route be laid
+          out round the net while it is being drawn, and it is why a click on
+          nothing no longer gives an arc up: *Escape* and the right button do;
+        * **an item it may not join** — nothing.  A route of a dozen points is
+          not thrown away because the last click fell on the wrong place, and
+          the item not lighting up has already said it would be refused.
+
+        Moving an end has no route to lay — an arc keeps its own points — so
+        there a press anywhere but on an item the end may go to gives the move
+        up, as it always did.
+
+        Parameters
+        ----------
+        spot : PyQt6.QtCore.QPoint
+            Where the press landed, in the viewport's coordinates.
+        position : PyQt6.QtCore.QPointF
+            The same, as the event gave it, which is kept so the release can
+            tell a click from a drag.
+        """
+
+        if self.finish_connection(spot):
+            return
+        if self._moving_end is not None:
+            self.abandon_connection()
+            return
+        if self.item_at(spot) is None:
+            self.lay_point(self.mapToScene(spot))
+            self._connecting_pressed_at = QPointF(position)
 
     def mouseMoveEvent(self, event) -> None:  # noqa: N802  (Qt naming)
         """Drag the sheet while the middle button is down, and say where the
@@ -1279,10 +1565,13 @@ class CanvasView(QGraphicsView):
         """Stop panning when the middle button comes back up, and land an arc
         that was dragged onto something.
 
-        Letting go anywhere else does **not** abandon the arc: it leaves it
-        being drawn with the button up, which is what turns a drag that missed
-        into a click-click and what lets the sheet be scrolled between the two
-        ends.  *Escape*, or a click on nothing, is what gives one up.
+        A click — a press and a release in one place — leaves the arc being
+        drawn with the button up, which is what makes a click-click and what
+        lets the sheet be scrolled between the two ends.  A **drag** let go on
+        nothing it may land on gives the arc up, a drag that missed being a drag
+        that missed — unless points have already been laid for it, when it goes
+        on being drawn: a route is not thrown away by a slip of the hand.
+        *Escape* and the right button are what give one up.
 
         Parameters
         ----------
@@ -1297,11 +1586,13 @@ class CanvasView(QGraphicsView):
             return
 
         if event.button() == Qt.MouseButton.LeftButton and self._connecting_from is not None:
-            if self._dragged_since_press(event.position()):
-                if not self.finish_connection(event.position().toPoint()):
-                    self.abandon_connection()
-            else:
+            if not self._dragged_since_press(event.position()):
                 self._connecting_pressed_at = None
+            elif not self.finish_connection(event.position().toPoint()):
+                if self._connecting_points:
+                    self._connecting_pressed_at = None
+                else:
+                    self.abandon_connection()
             event.accept()
             return
 
@@ -1567,6 +1858,11 @@ class Canvas(QWidget):
     canvas makes it on the press and moves it with the pointer, so that what is
     being dragged is the guide itself rather than a preview of one; letting go
     without leaving the ruler is a click on a ruler and leaves nothing behind.
+
+    A document may put **tool bars** along the top, above the rulers, with
+    :meth:`add_tool_bar`.  The sheet is shared by every drawn document and what
+    each draws *with* is not, so the canvas has a place for a bar and the
+    document says what goes in it.
     """
 
     def __init__(
@@ -1583,13 +1879,18 @@ class Canvas(QWidget):
         self.vertical_ruler = Ruler(Qt.Orientation.Vertical, self.view, unit, self)
         self.corner = RulerCorner(unit, self)
 
-        layout = QGridLayout(self)
+        self._stack = QVBoxLayout(self)
+        self._stack.setContentsMargins(0, 0, 0, 0)
+        self._stack.setSpacing(0)
+
+        layout = QGridLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self.corner, 0, 0)
         layout.addWidget(self.horizontal_ruler, 0, 1)
         layout.addWidget(self.vertical_ruler, 1, 0)
         layout.addWidget(self.view, 1, 1)
+        self._stack.addLayout(layout)
 
         self._new_guide: Guide | None = None
 
@@ -1654,6 +1955,18 @@ class Canvas(QWidget):
         """Put the sheet back to life size."""
 
         self.view.reset_zoom()
+
+    def add_tool_bar(self, bar: QWidget) -> None:
+        """Put a tool bar along the top of the sheet, above the rulers.
+
+        Parameters
+        ----------
+        bar : PyQt6.QtWidgets.QWidget
+            The bar.  Bars are stacked in the order they are added, the first
+            at the top.
+        """
+
+        self._stack.insertWidget(self._stack.count() - 1, bar)
 
     @property
     def rulers(self) -> tuple[Ruler, Ruler]:

@@ -26,6 +26,38 @@
         <translation>Publicat sota la Llicència Pública General de GNU, versió 3 o posterior.</translation>
     </message>
 </context><context>
+    <name>Arc</name>
+    <message>
+        <location filename="../documents/arc.py" line="392" />
+        <source>Straight</source>
+        <translation>Recta</translation>
+    </message>
+    <message>
+        <location filename="../documents/arc.py" line="393" />
+        <source>Curved</source>
+        <translation>Corba</translation>
+    </message>
+    <message>
+        <location filename="../documents/arc.py" line="394" />
+        <source>S-Curved</source>
+        <translation>Corba en S</translation>
+    </message>
+    <message>
+        <location filename="../documents/arc.py" line="395" />
+        <source>L-Shaped</source>
+        <translation>Forma de L</translation>
+    </message>
+    <message>
+        <location filename="../documents/arc.py" line="418" />
+        <source>Normal</source>
+        <translation>Normal</translation>
+    </message>
+    <message>
+        <location filename="../documents/arc.py" line="419" />
+        <source>Inhibitor</source>
+        <translation>Inhibidor</translation>
+    </message>
+</context><context>
     <name>ArcDialog</name>
     <message>
         <location filename="../dialogs/forms/arc.ui" line="0" />
@@ -44,49 +76,51 @@
         <translation>Quants testimonis transporta l'arc. Un pes d'un no es dibuixa.</translation>
     </message>
 </context><context>
+    <name>ArcToolBar</name>
+    <message>
+        <location filename="../documents/arc_toolbar.py" line="316" />
+        <source>Arc Shape</source>
+        <translation>Forma de l'arc</translation>
+    </message>
+    <message>
+        <location filename="../documents/arc_toolbar.py" line="324" />
+        <source>Arc Type</source>
+        <translation>Tipus d'arc</translation>
+    </message>
+    <message>
+        <location filename="../documents/arc_toolbar.py" line="473" />
+        <source>New Arc</source>
+        <translation>Arc nou</translation>
+    </message>
+    <message>
+        <location filename="../documents/arc_toolbar.py" line="474" />
+        <source>Selected Arcs: {0}</source>
+        <translation>Arcs seleccionats: {0}</translation>
+    </message>
+</context><context>
     <name>CanvasView</name>
     <message>
-        <location filename="../documents/canvas.py" line="614" />
-        <source>Straight</source>
-        <translation>Recta</translation>
-    </message>
-    <message>
-        <location filename="../documents/canvas.py" line="615" />
-        <source>Curved</source>
-        <translation>Corba</translation>
-    </message>
-    <message>
-        <location filename="../documents/canvas.py" line="616" />
-        <source>S-Curved</source>
-        <translation>Corba en S</translation>
-    </message>
-    <message>
-        <location filename="../documents/canvas.py" line="617" />
-        <source>L-Shaped</source>
-        <translation>Forma de L</translation>
-    </message>
-    <message>
-        <location filename="../documents/canvas.py" line="632" />
+        <location filename="../documents/canvas.py" line="669" />
         <source>Add Point</source>
         <translation>Afegeix un punt</translation>
     </message>
     <message>
-        <location filename="../documents/canvas.py" line="635" />
+        <location filename="../documents/canvas.py" line="672" />
         <source>Delete Point</source>
         <translation>Suprimeix el punt</translation>
     </message>
     <message>
-        <location filename="../documents/canvas.py" line="639" />
+        <location filename="../documents/canvas.py" line="676" />
         <source>Delete Arc</source>
         <translation>Suprimeix l'arc</translation>
     </message>
     <message>
-        <location filename="../documents/canvas.py" line="711" />
+        <location filename="../documents/canvas.py" line="774" />
         <source>Delete Guide</source>
         <translation>Suprimeix la guia</translation>
     </message>
     <message>
-        <location filename="../documents/canvas.py" line="713" />
+        <location filename="../documents/canvas.py" line="776" />
         <source>Delete All Guides</source>
         <translation>Suprimeix totes les guies</translation>
     </message>
@@ -745,7 +779,7 @@
 </context><context>
     <name>PetriNetEditor</name>
     <message>
-        <location filename="../documents/petri_net.py" line="79" />
+        <location filename="../documents/petri_net.py" line="88" />
         <source>Drag an element out of the Libraries pane</source>
         <translation>Arrossegueu un element des del plafó de Biblioteques</translation>
     </message>

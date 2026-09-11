@@ -6,7 +6,7 @@ import math
 
 import pytest
 from PyQt6.QtCore import QEvent, QLineF, QPointF, Qt
-from PyQt6.QtGui import QColor, QKeyEvent, QMouseEvent, QPainterPath
+from PyQt6.QtGui import QColor, QContextMenuEvent, QKeyEvent, QMouseEvent, QPainterPath
 from PyQt6.QtWidgets import QApplication, QDialog
 
 from masafi_simtwin.documents import petri_net
@@ -17,10 +17,13 @@ from masafi_simtwin.documents.arc import (
     DEFAULT_WEIGHT,
     END_HANDLES,
     HANDLE_SIZE,
+    INHIBITOR_RADIUS,
     SHAPE_HANDLES,
     Arc,
+    ArcKind,
     ArcShape,
     point_handle,
+    route_path,
 )
 from masafi_simtwin.documents.net_item import ARC_Z, ITEM_Z, NetItem
 from masafi_simtwin.documents.place import Place
@@ -2609,3 +2612,443 @@ def test_a_shaping_handle_is_not_an_end_handle(editor, net):
     assert arc.handle_at(arc.handles()['middle'], END_HANDLES) is None
     assert arc.handle_at(arc.handles()['source'], END_HANDLES) == 'source'
     assert arc.handle_at(arc.handles()['source'], SHAPE_HANDLES) is None
+
+
+# ----------------------------------------------------------------------
+# Normal or inhibitor
+# ----------------------------------------------------------------------
+
+
+def test_an_arc_is_normal_unless_it_is_told_otherwise(editor, net):
+    """Which is every arc of a P/T net."""
+
+    place, transition = net
+
+    assert editor.add_arc(place, transition).kind is ArcKind.NORMAL
+
+
+def test_an_inhibitor_arc_runs_from_a_place_to_a_transition(editor, net):
+    """And from nothing else to nothing else: it inhibits a transition by what
+    a place holds."""
+
+    place, transition = net
+
+    assert editor.add_arc(place, transition, kind=ArcKind.INHIBITOR) is not None
+    assert editor.add_arc(transition, place, kind=ArcKind.INHIBITOR) is None
+
+
+def test_the_direction_is_declared_by_the_groups(editor, net):
+    """As which items join is: a timed transition will be a transition for this
+    purpose however it is drawn."""
+
+    place, transition = net
+
+    assert ArcKind.INHIBITOR.permits(place, transition)
+    assert not ArcKind.INHIBITOR.permits(transition, place)
+    assert ArcKind.NORMAL.permits(transition, place)
+
+
+def test_an_arc_that_runs_the_wrong_way_cannot_be_made_an_inhibitor(editor, net):
+    """The kind is a rule, not a look, so it is refused rather than drawn."""
+
+    place, transition = net
+    forwards = editor.add_arc(place, transition)
+    backwards = editor.add_arc(transition, place)
+
+    assert forwards.set_kind(ArcKind.INHIBITOR)
+    assert not backwards.set_kind(ArcKind.INHIBITOR)
+    assert backwards.kind is ArcKind.NORMAL
+    assert not forwards.set_kind(ArcKind.INHIBITOR)
+
+
+def test_an_inhibitor_arc_ends_in_a_ring_touching_its_point(editor, net):
+    """The ring is centred on the line a radius back from the tip, so it
+    touches the connecting point the way an arrowhead's point does."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition, kind=ArcKind.INHIBITOR)
+    ring = arc.ring().boundingRect()
+    tip = arc.line.p2()
+
+    assert ring.width() == pytest.approx(INHIBITOR_RADIUS * 2.0)
+    assert QLineF(ring.center(), tip).length() == pytest.approx(INHIBITOR_RADIUS)
+    assert arc.head() == arc.ring()
+
+
+def test_the_ring_of_a_curved_inhibitor_sits_on_its_curve(editor, net):
+    """The same rule an arrowhead follows, for the same reason."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition, shape_kind=ArcShape.S_CURVED, kind=ArcKind.INHIBITOR)
+    centre = arc.ring().boundingRect().center()
+
+    assert off_the_line(arc.path(), centre) < 0.01
+
+
+def test_an_inhibitor_arc_is_taken_hold_of_by_its_ring(editor, net):
+    """Its end is the ring, not an arrowhead that is not drawn."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition, kind=ArcKind.INHIBITOR)
+
+    assert arc.shape().contains(arc.ring().boundingRect().center())
+
+
+@pytest.mark.parametrize('colors', SCHEMES, ids=SCHEME_NAMES)
+def test_a_ring_is_ink_around_the_paper(editor, ink, colors):
+    """So the line is seen to run into it and stop, rather than through it."""
+
+    place = editor.add_element('pt-petri-net', 'place', QPointF(0.0, 0.0))
+    transition = editor.add_element('pt-petri-net', 'transition', QPointF(30.0, 0.0))
+    arc = editor.add_arc(place, transition, kind=ArcKind.INHIBITOR)
+    centre = arc.ring().boundingRect().center()
+    close = ink.close_up(centre.x(), centre.y(), 40.0)
+    image = close.painted(arc, colors)
+    paper, text = QColor(colors.editor), QColor(colors.text)
+
+    assert ink.nearest(close.at(image), paper, text) == paper
+    assert ink.holds(close.window(image, 0.0, -INHIBITOR_RADIUS, 0.1), text)
+
+
+def test_setting_the_kind_takes_effect_as_it_is_set(editor, net):
+    """And changes what the arc ends in."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    assert arc.head() == arc.arrow()
+
+    arc.set_kind(ArcKind.INHIBITOR)
+
+    assert arc.head() == arc.ring()
+
+
+# ----------------------------------------------------------------------
+# What the next arc is drawn as, and the line that previews it
+# ----------------------------------------------------------------------
+
+
+def test_a_route_keeps_whether_it_is_straight_or_curved():
+    """Straight lines between points are an L; a curve through them is an S."""
+
+    assert ArcShape.STRAIGHT.routed is ArcShape.L_SHAPED
+    assert ArcShape.CURVED.routed is ArcShape.S_CURVED
+    assert ArcShape.S_CURVED.routed is ArcShape.S_CURVED
+    assert ArcShape.L_SHAPED.routed is ArcShape.L_SHAPED
+
+
+def test_the_next_arc_is_drawn_in_the_view_shape_and_kind(editor, net):
+    """Which is what the tool bar sets."""
+
+    place, transition = net
+    editor.view.new_arc_shape = ArcShape.S_CURVED
+    editor.view.new_arc_kind = ArcKind.INHIBITOR
+
+    drag_arc(editor.view, place, transition)
+
+    assert editor.arcs[0].shape_kind is ArcShape.S_CURVED
+    assert editor.arcs[0].kind is ArcKind.INHIBITOR
+
+
+def test_an_inhibitor_drawn_out_of_a_transition_lights_up_nothing(editor, net):
+    """The refusal made visible, as for two places."""
+
+    place, transition = net
+    editor.view.new_arc_kind = ArcKind.INHIBITOR
+    start = viewport_point(editor.view, transition.scene_ports()[0])
+    over = viewport_point(editor.view, place.scenePos())
+
+    editor.view.mousePressEvent(mouse(QEvent.Type.MouseButtonPress, start))
+    editor.view.mouseMoveEvent(mouse(QEvent.Type.MouseMove, over))
+
+    assert editor.view.connection_target is None
+    assert not place.ports_visible
+
+    editor.view.mouseReleaseEvent(mouse(QEvent.Type.MouseButtonRelease, over))
+
+    assert editor.arcs == []
+
+
+def same_path(first: QPainterPath, second: QPainterPath) -> bool:
+    """Say whether two paths run through the same places.
+
+    Parameters
+    ----------
+    first, second : PyQt6.QtGui.QPainterPath
+        The two paths.
+
+    Returns
+    -------
+    bool
+        Whether they agree, to a thousandth of a millimetre, at every tenth of
+        the way along.
+    """
+
+    for step in range(11):
+        one = first.pointAtPercent(step / 10.0)
+        other = second.pointAtPercent(step / 10.0)
+        if QLineF(one, other).length() > 0.001:
+            return False
+    return True
+
+
+@pytest.mark.parametrize('shape', list(ArcShape), ids=[shape.value for shape in ArcShape])
+def test_the_preview_is_the_arc_that_will_be_made(editor, net, shape):
+    """In the shape it will have, ending where it will end: what a person sees
+    while aiming is what they will get."""
+
+    place, transition = net
+    editor.view.new_arc_shape = shape
+    start = viewport_point(editor.view, place.scene_ports()[0])
+    over = viewport_point(editor.view, transition.scene_ports()[5])
+    editor.view.mousePressEvent(mouse(QEvent.Type.MouseButtonPress, start))
+    editor.view.mouseMoveEvent(mouse(QEvent.Type.MouseMove, over))
+    line, segments, kind = editor.view.preview_route()
+
+    editor.view.mouseReleaseEvent(mouse(QEvent.Type.MouseButtonRelease, over))
+
+    arc = place.arcs[-1]
+    assert same_path(route_path(line, segments), arc.path())
+    assert kind is arc.kind
+
+
+def test_the_preview_of_a_moved_end_is_that_arc(editor, net):
+    """With its own shape and its own points, along the chord it would have."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition, source_port=0, shape_kind=ArcShape.S_CURVED)
+    arc.setSelected(True)
+    start = viewport_point(editor.view, arc.handles()['source'])
+    over = viewport_point(editor.view, place.scene_ports()[6])
+    editor.view.mousePressEvent(mouse(QEvent.Type.MouseButtonPress, start))
+    editor.view.mouseMoveEvent(mouse(QEvent.Type.MouseMove, over))
+    line, segments, _ = editor.view.preview_route()
+
+    editor.view.mouseReleaseEvent(mouse(QEvent.Type.MouseButtonRelease, over))
+
+    assert arc.source_port == 6
+    assert same_path(route_path(line, segments), arc.path())
+
+
+def test_there_is_no_preview_while_nothing_is_drawn(editor, net):
+    """Nothing is being aimed."""
+
+    assert editor.view.preview_route() is None
+
+
+# ----------------------------------------------------------------------
+# Laying points while an arc is drawn
+# ----------------------------------------------------------------------
+
+
+def click(view, scene: QPointF) -> None:
+    """Press and let go in one place, which is a click.
+
+    Parameters
+    ----------
+    view : masafi_simtwin.documents.canvas.CanvasView
+        The view.
+    scene : PyQt6.QtCore.QPointF
+        Where, in scene millimetres.
+    """
+
+    spot = viewport_point(view, scene)
+    view.mousePressEvent(mouse(QEvent.Type.MouseButtonPress, spot))
+    view.mouseReleaseEvent(mouse(QEvent.Type.MouseButtonRelease, spot))
+
+
+def test_a_click_on_the_bare_sheet_lays_a_point(editor, net):
+    """And the arc goes on being drawn."""
+
+    place, _ = net
+    click(editor.view, place.scene_ports()[0])
+    click(editor.view, QPointF(40.0, 50.0))
+
+    assert editor.view.connecting is place
+    assert editor.view.laid_points == [QPointF(40.0, 50.0)]
+
+
+def test_a_laid_point_is_snapped(editor, net):
+    """To the millimetre, like everything else put on the sheet."""
+
+    place, _ = net
+    click(editor.view, place.scene_ports()[0])
+    click(editor.view, QPointF(40.3, 49.8))
+
+    point = editor.view.laid_points[0]
+    assert (round(point.x(), 6), round(point.y(), 6)) == (40.0, 50.0)
+
+
+def test_a_straight_arc_laid_through_points_is_an_l(editor, net):
+    """Straight lines between the points it was led through."""
+
+    place, transition = net
+    click(editor.view, place.scene_ports()[0])
+    click(editor.view, QPointF(40.0, 50.0))
+    click(editor.view, QPointF(60.0, 50.0))
+    click(editor.view, transition.scenePos())
+
+    arc = place.arcs[-1]
+    assert arc.shape_kind is ArcShape.L_SHAPED
+    assert [(round(p.x(), 6), round(p.y(), 6)) for p in arc.curve_points()] == [
+        (40.0, 50.0),
+        (60.0, 50.0),
+    ]
+    assert editor.view.connecting is None
+
+
+def test_a_curved_arc_laid_through_points_is_an_s(editor, net):
+    """A curve through them."""
+
+    place, transition = net
+    editor.view.new_arc_shape = ArcShape.CURVED
+    click(editor.view, place.scene_ports()[0])
+    click(editor.view, QPointF(40.0, 50.0))
+    click(editor.view, transition.scenePos())
+
+    assert place.arcs[-1].shape_kind is ArcShape.S_CURVED
+    assert len(place.arcs[-1].curve_points()) == 1
+
+
+def test_an_arc_laid_through_no_points_is_the_shape_chosen(editor, net):
+    """Nothing was laid, so nothing changes what the bar said."""
+
+    place, transition = net
+    click(editor.view, place.scene_ports()[0])
+    click(editor.view, transition.scenePos())
+
+    assert place.arcs[-1].shape_kind is ArcShape.STRAIGHT
+
+
+def test_the_preview_runs_through_the_points_laid(editor, net):
+    """So the route can be seen as it is laid."""
+
+    place, _ = net
+    click(editor.view, place.scene_ports()[0])
+    click(editor.view, QPointF(40.0, 50.0))
+    line, segments, _ = editor.view.preview_route()
+
+    ends = [end for _, _, end in segments]
+    assert QPointF(40.0, 50.0) in ends
+
+
+def test_backspace_takes_back_the_last_point(editor, net):
+    """A point laid in the wrong place costs one key, not the whole route."""
+
+    place, _ = net
+    click(editor.view, place.scene_ports()[0])
+    click(editor.view, QPointF(40.0, 50.0))
+    click(editor.view, QPointF(60.0, 50.0))
+
+    editor.view.keyPressEvent(
+        QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Backspace, Qt.KeyboardModifier.NoModifier)
+    )
+
+    assert editor.view.laid_points == [QPointF(40.0, 50.0)]
+    assert editor.view.connecting is place
+
+
+def test_backspace_with_no_point_laid_still_deletes_the_selection(editor, net):
+    """It takes back a point only when there is one to take back."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    arc.setSelected(True)
+
+    editor.view.keyPressEvent(
+        QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Backspace, Qt.KeyboardModifier.NoModifier)
+    )
+
+    assert editor.arcs == []
+
+
+def test_escape_gives_up_the_points_with_the_arc(editor, net):
+    """Nothing is left behind for the next arc to be led through."""
+
+    place, _ = net
+    click(editor.view, place.scene_ports()[0])
+    click(editor.view, QPointF(40.0, 50.0))
+
+    editor.view.keyPressEvent(
+        QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Escape, Qt.KeyboardModifier.NoModifier)
+    )
+
+    assert editor.view.connecting is None
+    assert editor.view.laid_points == []
+
+
+def test_a_right_click_gives_the_arc_up(editor, net):
+    """A left click on the bare sheet lays a point now, so the right button is
+    the mouse's way out."""
+
+    place, _ = net
+    click(editor.view, place.scene_ports()[0])
+    click(editor.view, QPointF(40.0, 50.0))
+    spot = viewport_point(editor.view, QPointF(60.0, 60.0)).toPoint()
+
+    editor.view.contextMenuEvent(
+        QContextMenuEvent(QContextMenuEvent.Reason.Mouse, spot, editor.view.mapToGlobal(spot))
+    )
+
+    assert editor.view.connecting is None
+    assert editor.view.laid_points == []
+    assert editor.arcs == []
+
+
+def test_a_click_on_something_that_may_not_be_joined_keeps_drawing(editor, net):
+    """A route is not thrown away because the last click fell in the wrong
+    place, and the item not lighting up has already said why."""
+
+    place, _ = net
+    other = editor.add_element('pt-petri-net', 'place', QPointF(20.0, 80.0))
+    click(editor.view, place.scene_ports()[0])
+    click(editor.view, QPointF(40.0, 50.0))
+    click(editor.view, other.scenePos())
+
+    assert editor.view.connecting is place
+    assert editor.view.laid_points == [QPointF(40.0, 50.0)]
+
+
+def test_a_missed_drag_keeps_a_route_already_laid(editor, net):
+    """A drag that missed gives an arc up only while there is nothing to lose."""
+
+    place, _ = net
+    click(editor.view, place.scene_ports()[0])
+    click(editor.view, QPointF(40.0, 50.0))
+    start = viewport_point(editor.view, QPointF(50.0, 60.0))
+    end = viewport_point(editor.view, QPointF(80.0, 90.0))
+    editor.view.mousePressEvent(mouse(QEvent.Type.MouseButtonPress, start))
+    editor.view.mouseMoveEvent(mouse(QEvent.Type.MouseMove, end))
+    editor.view.mouseReleaseEvent(mouse(QEvent.Type.MouseButtonRelease, end))
+
+    assert editor.view.connecting is place
+    assert len(editor.view.laid_points) == 2
+
+
+def test_moving_an_end_lays_no_points(editor, net):
+    """An arc keeps its own route, so a click on nothing gives the move up."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition, source_port=0)
+    arc.setSelected(True)
+    click(editor.view, arc.handles()['source'])
+    assert editor.view.moving_end == (arc, 'source')
+
+    click(editor.view, QPointF(40.0, 80.0))
+
+    assert editor.view.moving_end is None
+    assert editor.view.connecting is None
+    assert (arc.source, arc.source_port) == (place, 0)
+
+
+def test_the_preview_is_painted_with_its_points_and_its_ring(editor, net):
+    """Painting it, points, ring and all, is no trouble to the view."""
+
+    place, transition = net
+    editor.view.new_arc_kind = ArcKind.INHIBITOR
+    click(editor.view, place.scene_ports()[0])
+    click(editor.view, QPointF(40.0, 50.0))
+    editor.view.mouseMoveEvent(
+        mouse(QEvent.Type.MouseMove, viewport_point(editor.view, transition.scenePos()))
+    )
+
+    assert not editor.view.viewport().grab().isNull()

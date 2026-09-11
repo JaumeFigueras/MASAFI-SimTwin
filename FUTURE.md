@@ -61,7 +61,9 @@ restart and must keep it.
 
 ## Plural strings would break the translation gate
 
-**Now.** No user-facing string uses `%n`. The first one will fail `make test-i18n`.
+**Now.** No user-facing string uses `%n`. The first one will fail `make test-i18n`. The first string
+that counts something — the arc tool bar's *Selected Arcs: {0}* — is worded as a label and a number
+for exactly that reason, where *3 selected arcs* would have read better.
 
 **Why.** `pylupdate6` emits a numerus message as `<translation type="unfinished"><numerusform /></translation>`
 — an element with no text of its own. Two things then go wrong: `fill_from_source` in
@@ -445,12 +447,14 @@ or a layout so tight that an overshoot puts an arc through the item it was route
 
 ---
 
-## An arc cannot be led round anything until it is made an S or an L
+## A drawn arc cannot be given a bend until it is made an S or an L
 
-**Now.** *Add Point* and *Delete Point* are offered on the shapes that are led through points — the S
-and the L — and on no other. A person who wants a bend in a straight arc chooses one of them first,
-which gives that shape's own default points, and then adds points where they want them. Two visits to
-the same menu for what feels like one wish.
+**Now.** An arc can be **routed as it is drawn**: while it is drawn click by click, a click on the bare
+sheet lays a point, and the arc comes out led through the points laid — an L when *Straight* is
+chosen on the tool bar, an S when *Curved* is. Once an arc is on the sheet, though, *Add Point* and
+*Delete Point* are offered on the S and the L and on no other shape. A person who wants a bend in a
+straight arc already drawn chooses one of them first, which gives that shape's own default points, and
+then adds points where they want them. Two visits to the same menu for what feels like one wish.
 
 **Why it was done this way.** A menu entry that silently changes what a thing *is* is worse than one
 that asks. *Add Point* on a straight arc would have to turn it into an S to have anywhere to put the
@@ -496,29 +500,34 @@ which is more likely than it sounds, the handles being small and the sheet being
 
 ---
 
-## There is nowhere to choose a kind of arc
+## Every net is offered inhibitor arcs, and there are no reset arcs
 
-**Now.** Every arc is an ordinary arc. `Arc` has no `kind`, and the Libraries pane deliberately does
-not list arcs at all — an arc is a relation, not an element taken from a palette, which is the rule
-that was chosen.
+**Now.** The arc tool bar along the top of a Petri net document offers two kinds of arc — normal and
+inhibitor — on every net, whatever it is. `ArcKind` has no reset member. Nothing records which type
+of net a model is, P/T, timed or attributed timed, so nothing could say that a plain P/T net has no
+business with an inhibitor arc. The kind is chosen on the bar and nowhere else: an arc's context menu
+offers its shapes, its points and *Delete Arc* but not its kind, and the Libraries pane still lists no
+arcs, an arc being a relation rather than an element taken from a palette.
 
-**Why it was done this way.** The P/T library has one kind of arc, so there is nothing to choose
-between, and inventing a chooser for a choice of one is inventing chrome.
+**Why it was done this way.** The libraries are going to be simplified: every kind of Petri net will be
+available on every sheet, and the type of a net will be **inferred from the elements it holds** rather
+than chosen when the model is made — a net with an inhibitor arc in it is a net with inhibitor arcs.
+Offering the inhibitor arc everywhere is that decision taken early. Reset arcs were left for later. The
+kind was kept off the context menu because the bar already shows what a selected arc is and changes
+it, and a menu of six checkable entries before *Delete Arc* is a menu to read rather than to use.
 
-**When it will not be enough.** The attributed timed library, which has inhibitor and reset arcs.
-They are genuinely different elements of a family, and something has to say which one the next arc
-will be.
+**When it will not be enough.** When the type of a net is inferred and something — a backend, a
+validation, the model's properties — needs to be told it; and the first time a reset arc is wanted.
 
 **Options.**
 
-- A small chooser on the document — a segmented control or a drop-down over the canvas — holding the
-  kinds the open model's library offers. It is where the choice is used, and it does not make the
-  Libraries pane lie about what an arc is.
-- Draw an ordinary arc and change its kind afterwards, in the properties pane. No chooser at all, one
-  more step per inhibitor arc, and it keeps every gesture the same.
-- Relax the rule and let the pane list arcs after all, as kinds rather than as drags. It was
-  considered and turned down; it would have to be turned down again for the same reason or accepted
-  for a new one.
+- Infer the type in one function over the items and the `ArcKind`s on the sheet, beside the editor,
+  and let whatever needs the type ask it rather than keep a copy.
+- Reset arcs as `ArcKind.RESET`: an entry in `KIND_DIRECTIONS` (a place to a transition, as for an
+  inhibitor), an end mark of its own — a double arrowhead is the usual one — and a label. The bar builds
+  its buttons from `ArcKind`, so the button comes with the kind.
+- The kind on the context menu after all, as a second exclusive group under the shapes, if the bar
+  turns out to be too far from where people work.
 
 ---
 

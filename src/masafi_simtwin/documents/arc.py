@@ -99,6 +99,20 @@ beside the line only when it is not one, which is the convention of every drawn
 Petri net: an arc without a number is an arc of weight one, and writing the one
 in would put a number on nearly every arc of nearly every net.
 
+An arc is **normal or inhibitor**, which is :class:`ArcKind`.  An inhibitor arc
+runs from a place to a transition and nowhere else — :data:`KIND_DIRECTIONS`
+declares that, the way the items declare which groups they join — and it ends in
+a small **ring** instead of an arrowhead, which is how every drawing of a net
+tells the two apart.  The kind is a rule and not only a look, so it is held
+wherever an arc can come to run the other way: an arc is refused the kind it may
+not have, and an end is refused a move that would break it.
+
+The geometry is kept in **module functions** — :func:`chord_point`,
+:func:`route_segments`, :func:`arrival` and the rest — rather than in the arc
+alone, because three things draw an arc and must draw the same one: the arc
+itself, the line previewed while an arc is being drawn, and the icons of the
+tool bar an arc's shape is chosen from.
+
 Colours are the palette's, by :func:`~masafi_simtwin.documents.net_item.ink_colour`
 — ``Text``, or ``Link`` when the arc is selected — the same rule the items
 follow, so a net reads as one drawing in either scheme.
@@ -111,7 +125,7 @@ import math
 from collections.abc import Callable
 from enum import Enum
 
-from PyQt6.QtCore import QLineF, QPointF, QRectF, Qt
+from PyQt6.QtCore import QCoreApplication, QLineF, QPointF, QRectF, Qt
 from PyQt6.QtGui import QFont, QPainterPath, QPainterPathStroker, QPen, QTransform
 from PyQt6.QtWidgets import QGraphicsItem
 
@@ -134,6 +148,11 @@ ARC_GRAB = 1.5
 #: nor longer than a straight one's.
 ARROW_LENGTH = 2.4
 ARROW_WIDTH = 1.8
+
+#: How big the ring an inhibitor arc ends in is, in millimetres of radius.  As
+#: wide across as an arrowhead is, so the two kinds of arc end in marks of one
+#: size and are told apart by their shape alone.
+INHIBITOR_RADIUS = ARROW_WIDTH / 2.0
 
 #: How far back along the line the base of the arrowhead is looked for, as a
 #: multiple of how far away it is to be.  A curve doubling back on itself covers
@@ -271,6 +290,22 @@ class ArcShape(Enum):
 
         return self in (ArcShape.S_CURVED, ArcShape.L_SHAPED)
 
+    @property
+    def routed(self) -> ArcShape:
+        """ArcShape: What this shape is once it is led through points.
+
+        A straight arc led through points is straight lines between them, which
+        is an L; a curved one is a curve through them, which is an S; the two
+        that are led through points already stay what they are.  This is what
+        an arc drawn with points laid on the way comes out as: *straight* or
+        *curved* is kept, and only the route is the person's.
+        """
+
+        return {
+            ArcShape.STRAIGHT: ArcShape.L_SHAPED,
+            ArcShape.CURVED: ArcShape.S_CURVED,
+        }.get(self, self)
+
 
 #: What each shape that is led through points starts as, when it is chosen on
 #: an arc that has none.  A shape named after what it looks like should look
@@ -279,6 +314,111 @@ DEFAULT_POINTS = {
     ArcShape.S_CURVED: DEFAULT_S_POINTS,
     ArcShape.L_SHAPED: DEFAULT_L_POINTS,
 }
+
+
+class ArcKind(Enum):
+    """What an arc does to the transition at one end of it.
+
+    Attributes
+    ----------
+    NORMAL
+        The arc of every Petri net.  Out of a place it takes tokens when the
+        transition fires, and into a place it puts them.
+    INHIBITOR
+        An arc from a place to a transition that **stops** the transition
+        firing while the place holds as many tokens as the arc's weight, and
+        takes nothing when it fires.  It is drawn ending in a ring rather than
+        an arrowhead.
+    """
+
+    NORMAL = 'normal'
+    INHIBITOR = 'inhibitor'
+
+    def permits(self, source, target) -> bool:
+        """Say whether an arc of this kind may run from one item to another.
+
+        Only the direction is asked about here.  Whether the two may be joined
+        at all is the items' own question —
+        :meth:`~masafi_simtwin.documents.net_item.NetItem.may_connect_to` — and
+        both have to be answered yes.
+
+        Parameters
+        ----------
+        source : masafi_simtwin.documents.net_item.NetItem
+            What the arc would leave.
+        target : masafi_simtwin.documents.net_item.NetItem
+            What it would enter.
+
+        Returns
+        -------
+        bool
+            Whether :data:`KIND_DIRECTIONS` allows it, which it always does for
+            a kind it does not name.
+        """
+
+        wanted = KIND_DIRECTIONS.get(self)
+        return wanted is None or (source.GROUP, target.GROUP) == wanted
+
+
+#: Which way round each kind of arc may run, as the groups of its source and of
+#: its target.  A kind not named here runs whichever way the items allow.
+#: Declared rather than written into a check, the way an item's
+#: :attr:`~masafi_simtwin.documents.net_item.NetItem.CONNECTS_TO` is.
+KIND_DIRECTIONS = {
+    ArcKind.INHIBITOR: ('place', 'transition'),
+}
+
+
+def shape_label(shape: ArcShape) -> str:
+    """Give what a shape is called, in the language of the interface.
+
+    One place for the name, because two things say it — an arc's context menu
+    and the tool bar a shape is chosen from — and a shape called one thing in
+    one of them and another thing in the other would be two shapes to a person
+    reading them.
+
+    Parameters
+    ----------
+    shape : ArcShape
+        The shape.
+
+    Returns
+    -------
+    str
+        Its name.
+    """
+
+    labels = {
+        ArcShape.STRAIGHT: QCoreApplication.translate('Arc', 'Straight'),
+        ArcShape.CURVED: QCoreApplication.translate('Arc', 'Curved'),
+        ArcShape.S_CURVED: QCoreApplication.translate('Arc', 'S-Curved'),
+        ArcShape.L_SHAPED: QCoreApplication.translate('Arc', 'L-Shaped'),
+    }
+    return labels[ArcShape(shape)]
+
+
+def kind_label(kind: ArcKind) -> str:
+    """Give what a kind of arc is called, in the language of the interface.
+
+    The name of the kind alone — *Inhibitor*, not *Inhibitor Arc* — because it is
+    said where *arc* has been said already: under the tool bar's *Arc Type*.
+
+    Parameters
+    ----------
+    kind : ArcKind
+        The kind.
+
+    Returns
+    -------
+    str
+        Its name.
+    """
+
+    labels = {
+        ArcKind.NORMAL: QCoreApplication.translate('Arc', 'Normal'),
+        ArcKind.INHIBITOR: QCoreApplication.translate('Arc', 'Inhibitor'),
+    }
+    return labels[ArcKind(kind)]
 
 def point_handle(index: int) -> str:
     """Give the name of the handle on one point of an S.
@@ -400,6 +540,363 @@ def straight_legs(knots: list[QPointF]) -> list[tuple[QPointF, QPointF, QPointF]
     return legs
 
 
+def chord_point(line: QLineF, along: float, across: float) -> QPointF:
+    """Turn a place in a chord's own frame into a place on the sheet.
+
+    The frame is the chord's two ends: ``along`` runs from nought at the first
+    to one at the second, and ``across`` is at right angles to it, to the **left
+    of the way the chord is going**.  Both are fractions of the chord's length,
+    so a shape kept in this frame turns and scales with the chord rather than
+    coming apart when an end moves.
+
+    Parameters
+    ----------
+    line : PyQt6.QtCore.QLineF
+        The chord, in scene millimetres.
+    along : float
+        How far along, as a fraction.
+    across : float
+        How far across, as a fraction.
+
+    Returns
+    -------
+    PyQt6.QtCore.QPointF
+        The place, in scene millimetres.
+    """
+
+    length = line.length()
+    origin = line.p1()
+    if not length:
+        return QPointF(origin)
+
+    forward = QPointF(line.dx() / length, line.dy() / length)
+    sideways = QPointF(-forward.y(), forward.x())
+    return QPointF(
+        origin.x() + (forward.x() * along + sideways.x() * across) * length,
+        origin.y() + (forward.y() * along + sideways.y() * across) * length,
+    )
+
+
+def chord_frame(line: QLineF, point: QPointF) -> tuple[float, float]:
+    """Turn a place on the sheet into a place in a chord's own frame.
+
+    The other half of :func:`chord_point`.
+
+    Parameters
+    ----------
+    line : PyQt6.QtCore.QLineF
+        The chord, in scene millimetres.
+    point : PyQt6.QtCore.QPointF
+        The place, in scene millimetres.
+
+    Returns
+    -------
+    tuple of float
+        How far along and how far across, as fractions of the chord.
+    """
+
+    length = line.length()
+    if not length:
+        return 0.0, 0.0
+
+    forward = QPointF(line.dx() / length, line.dy() / length)
+    sideways = QPointF(-forward.y(), forward.x())
+    reach = point - line.p1()
+    return (
+        (reach.x() * forward.x() + reach.y() * forward.y()) / length,
+        (reach.x() * sideways.x() + reach.y() * sideways.y()) / length,
+    )
+
+
+def route_segments(
+    line: QLineF,
+    shape: ArcShape,
+    controls: list[QPointF],
+    points: list[QPointF],
+) -> list[tuple[QPointF, QPointF, QPointF]]:
+    """Give the cubic segments a shape of arc is drawn as along a chord.
+
+    One segment for a single bow, one for every gap between the knots of an S or
+    an L — the chord's two ends and the points between them — and none at all
+    for a straight arc, which has nothing to cut up.  A **leg of an L is a cubic
+    too**, one whose control points lie on it (see :func:`straight_legs`), so one
+    machine draws every shape.
+
+    Parameters
+    ----------
+    line : PyQt6.QtCore.QLineF
+        From the source's connecting point to the target's.
+    shape : ArcShape
+        How it is drawn.
+    controls : list of PyQt6.QtCore.QPointF
+        The two control points of a single bow, in scene millimetres.  Read
+        only when the shape is :attr:`ArcShape.CURVED`.
+    points : list of PyQt6.QtCore.QPointF
+        The points an S or an L is led through, in order from the source, in
+        scene millimetres.  Read only for those two.
+
+    Returns
+    -------
+    list of tuple
+        One ``(first control, second control, end)`` for each segment.
+    """
+
+    if shape is ArcShape.CURVED:
+        first, second = controls
+        return [(QPointF(first), QPointF(second), line.p2())]
+
+    knots = [line.p1(), *points, line.p2()]
+    if shape is ArcShape.S_CURVED:
+        return catmull_rom(knots)
+    if shape is ArcShape.L_SHAPED:
+        return straight_legs(knots)
+    return []
+
+
+def untouched_segments(
+    line: QLineF, shape: ArcShape, points=()
+) -> list[tuple[QPointF, QPointF, QPointF]]:
+    """Give the segments a new arc of a shape is drawn as, before it is shaped.
+
+    The default bow for a curve; and for a shape led through points, the points
+    given or — when there are none — the shape's own defaults, which is what an
+    arc of that shape is made with.  This is what the line previewed while an arc
+    is being drawn is, so that it is the arc that will be made.
+
+    Parameters
+    ----------
+    line : PyQt6.QtCore.QLineF
+        From the source's connecting point to the target's.
+    shape : ArcShape
+        How it is drawn.
+    points : collections.abc.Sequence of PyQt6.QtCore.QPointF, optional
+        Points laid for it to be led through, in scene millimetres.
+
+    Returns
+    -------
+    list of tuple
+        One ``(first control, second control, end)`` for each segment.
+    """
+
+    controls = [chord_point(line, along, across) for along, across in DEFAULT_CONTROLS]
+    laid = [QPointF(point) for point in points]
+    if not laid:
+        laid = [chord_point(line, along, across) for along, across in DEFAULT_POINTS.get(shape, ())]
+    return route_segments(line, shape, controls, laid)
+
+
+def route_path(line: QLineF, segments) -> QPainterPath:
+    """Give a chord and its segments as one path, which is what is drawn.
+
+    Parameters
+    ----------
+    line : PyQt6.QtCore.QLineF
+        From one end to the other.
+    segments : list of tuple
+        What :func:`route_segments` gave for it.  None at all is a straight
+        line.
+
+    Returns
+    -------
+    PyQt6.QtGui.QPainterPath
+        The path.
+    """
+
+    path = QPainterPath(line.p1())
+    if not segments:
+        path.lineTo(line.p2())
+    for first, second, end in segments:
+        path.cubicTo(first, second, end)
+    return path
+
+
+def reach_back(path: QPainterPath, tip: QPointF, reach: float) -> QPointF | None:
+    """Find the place on a path a given distance from its end, as the crow
+    flies.
+
+    Bisected rather than solved: the distance from the end grows as one goes
+    back along the line, so a dozen halvings of the tail land on it to a
+    thousandth of a millimetre, and a curve is not a thing to solve exactly for
+    a triangle two millimetres long.  Only the **tail** is searched —
+    :data:`SEARCH_TAIL` times the distance wanted — because a long arc can
+    wander back within that distance of its own end somewhere far away, and the
+    one under the arrowhead is the one that is wanted.
+
+    Parameters
+    ----------
+    path : PyQt6.QtGui.QPainterPath
+        The line.
+    tip : PyQt6.QtCore.QPointF
+        Its end.
+    reach : float
+        How far from the end.
+
+    Returns
+    -------
+    PyQt6.QtCore.QPointF, optional
+        The place, or ``None`` when the whole line is shorter than that — a
+        line with no room for a head on it.
+    """
+
+    length = path.length()
+    if not length:
+        return None
+
+    def away(percent: float) -> float:
+        where = path.pointAtPercent(percent)
+        return math.hypot(where.x() - tip.x(), where.y() - tip.y())
+
+    low = max(0.0, (length - reach * SEARCH_TAIL) / length)
+    if away(low) < reach:
+        low = 0.0
+    if away(low) < reach:
+        return None
+
+    high = 1.0
+    for _ in range(SEARCH_STEPS):
+        middle = (low + high) / 2.0
+        if away(middle) < reach:
+            high = middle
+        else:
+            low = middle
+    return path.pointAtPercent(low)
+
+
+def arrival(
+    line: QLineF, path: QPainterPath, bent: bool, reach: float = ARROW_LENGTH
+) -> tuple[QPointF, QPointF]:
+    """Give where the mark at an arc's end is based and which way it points.
+
+    The base is the place on the drawn line **``reach`` away from the end as the
+    crow flies**, and the mark points from there to the tip.  Two things follow,
+    and both are wanted:
+
+    * the mark is the **same size on every arc** — exactly ``reach`` long,
+      whatever the line is doing where it lands.  Measuring that length *along*
+      the line instead makes an arrowhead as short as the chord of the last
+      stretch, so a curve that bends sharply gets a stubby little head and a
+      straight arc a full-sized one, which is what happened first;
+    * the base is a point **of the line**, so the line runs up the middle of the
+      head rather than into a corner of it.
+
+    The tangent where the arc arrives is not used, and that is the point.  A
+    head is a straight triangle two and a half millimetres long: laid along the
+    tangent it is a straight thing across a bend, and on a curve that turns hard
+    just before it lands the line meets the base at its corner — the whole
+    half-width off centre — so the head reads as a flag stuck on the end rather
+    than as the end of the line.  On a straight arc the two rules are the same
+    thing, the line and its chord being one, and on a gentle curve they are
+    within a degree.
+
+    A **straight** line skips the search: its line is its chord, so the base is
+    worked out rather than looked for, and it is exact.
+
+    Parameters
+    ----------
+    line : PyQt6.QtCore.QLineF
+        The chord, whose second end is the tip.
+    path : PyQt6.QtGui.QPainterPath
+        The line as it is drawn.
+    bent : bool
+        Whether the line is anything but its chord, which is when the base has
+        to be looked for.
+    reach : float, optional
+        How far back the base is: the length of an arrowhead by default, the
+        radius of a ring for the centre of one.
+
+    Returns
+    -------
+    tuple
+        The base, and the direction of unit length.
+    """
+
+    tip = line.p2()
+    base = reach_back(path, tip, reach) if bent else None
+    if base is not None:
+        run = QLineF(base, tip)
+        if run.length():
+            return base, QPointF(run.dx() / run.length(), run.dy() / run.length())
+
+    chord = line.length()
+    along = QPointF(line.dx() / chord, line.dy() / chord) if chord else QPointF(1.0, 0.0)
+    return QPointF(tip.x() - along.x() * reach, tip.y() - along.y() * reach), along
+
+
+def arrowhead(
+    line: QLineF,
+    path: QPainterPath,
+    bent: bool,
+    length: float = ARROW_LENGTH,
+    width: float = ARROW_WIDTH,
+) -> QPainterPath:
+    """Build the arrowhead at the end of a line.
+
+    Parameters
+    ----------
+    line : PyQt6.QtCore.QLineF
+        The chord, whose second end is the tip.
+    path : PyQt6.QtGui.QPainterPath
+        The line as it is drawn.
+    bent : bool
+        Whether it is anything but its chord.
+    length : float, optional
+        How long the head is.  :data:`ARROW_LENGTH` by default; an icon, which
+        is measured in pixels rather than millimetres, says its own.
+    width : float, optional
+        How wide it is across its base.
+
+    Returns
+    -------
+    PyQt6.QtGui.QPainterPath
+        A closed triangle whose point is on the tip, laid along the last
+        ``length`` of the line (see :func:`arrival`), or an empty path when the
+        line has no length to point along.
+    """
+
+    head = QPainterPath()
+    if not line.length():
+        return head
+
+    tip = line.p2()
+    back, along = arrival(line, path, bent, length)
+    across = QPointF(-along.y(), along.x())
+
+    head.moveTo(tip)
+    head.lineTo(back.x() + across.x() * width / 2.0, back.y() + across.y() * width / 2.0)
+    head.lineTo(back.x() - across.x() * width / 2.0, back.y() - across.y() * width / 2.0)
+    head.closeSubpath()
+    return head
+
+
+def ring_centre(
+    line: QLineF, path: QPainterPath, bent: bool, radius: float = INHIBITOR_RADIUS
+) -> QPointF:
+    """Give where the ring an inhibitor arc ends in is centred.
+
+    On the line, a radius back from the tip as the crow flies, so the ring
+    touches the connecting point the way an arrowhead's point does and the line
+    runs into the middle of it — the rule :func:`arrival` gives an arrowhead.
+
+    Parameters
+    ----------
+    line : PyQt6.QtCore.QLineF
+        The chord, whose second end is the tip.
+    path : PyQt6.QtGui.QPainterPath
+        The line as it is drawn.
+    bent : bool
+        Whether it is anything but its chord.
+    radius : float, optional
+        How big the ring is.
+
+    Returns
+    -------
+    PyQt6.QtCore.QPointF
+        The centre.
+    """
+
+    return arrival(line, path, bent, radius)[0]
+
+
 class Arc(QGraphicsItem):
     """One arc of a Petri net, from a place to a transition or back.
 
@@ -422,6 +919,15 @@ class Arc(QGraphicsItem):
         not drawn.
     shape_kind : ArcShape, optional
         Whether it is drawn straight or curved.  Straight by default.
+    kind : ArcKind, optional
+        Whether it is a normal arc or an inhibitor one.  Normal by default.  It
+        is not checked here, as the two ends are not: the document asks whether
+        the kind may run that way before it makes the arc.
+    points : list of PyQt6.QtCore.QPointF, optional
+        Points to lead it through, in scene millimetres — the ones laid while it
+        was being drawn.  Kept in the chord's own frame like every point of an
+        arc, and read only while the shape is one that is led through points.
+        Left out, a shape led through points starts from its own defaults.
     snap : collections.abc.Callable, optional
         What to round a handle to as it is dragged.  The canvas passes its own,
         which is the millimetre at every zoom; without one a handle goes where
@@ -437,6 +943,8 @@ class Arc(QGraphicsItem):
     source_port, target_port : int
         Which connecting point of each end it is attached to.  Settled when the
         arc is drawn and never changed by anything moving.
+    kind : ArcKind
+        Whether it is normal or inhibitor.
     """
 
     def __init__(
@@ -447,6 +955,8 @@ class Arc(QGraphicsItem):
         target_port: int | None = None,
         weight: int = DEFAULT_WEIGHT,
         shape_kind: ArcShape = ArcShape.STRAIGHT,
+        kind: ArcKind = ArcKind.NORMAL,
+        points: list[QPointF] | None = None,
         snap: Callable[[float], float] | None = None,
         parent: QGraphicsItem | None = None,
     ) -> None:
@@ -455,6 +965,7 @@ class Arc(QGraphicsItem):
         self.target = target
         self._weight = int(weight)
         self._shape_kind = ArcShape(shape_kind)
+        self._kind = ArcKind(kind)
         self._snap = snap
         self._controls = [list(control) for control in DEFAULT_CONTROLS]
         self._points: list[list[float]] = []
@@ -472,10 +983,11 @@ class Arc(QGraphicsItem):
         self.setZValue(ARC_Z)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
-        self._seed_points()
         self.source.attach(self)
         self.target.attach(self)
         self.route()
+        self._points = [list(self.chord_frame(QPointF(point))) for point in points or ()]
+        self._seed_points()
 
     # ------------------------------------------------------------------
     # What it joins
@@ -526,6 +1038,60 @@ class Arc(QGraphicsItem):
 
         self.source.detach(self)
         self.target.detach(self)
+
+    # ------------------------------------------------------------------
+    # Normal or inhibitor
+    # ------------------------------------------------------------------
+
+    @property
+    def kind(self) -> ArcKind:
+        """ArcKind: Whether the arc is normal or inhibitor."""
+
+        return self._kind
+
+    def can_be(self, kind: ArcKind) -> bool:
+        """Say whether the arc may be of a kind, running the way it runs.
+
+        Parameters
+        ----------
+        kind : ArcKind
+            The kind to ask about.
+
+        Returns
+        -------
+        bool
+            Whether the kind permits an arc from this source to this target —
+            an arc from a transition to a place cannot be an inhibitor.
+        """
+
+        return ArcKind(kind).permits(self.source, self.target)
+
+    def set_kind(self, kind: ArcKind) -> bool:
+        """Make the arc a kind of arc from now on, if it may be one.
+
+        A method rather than a setter, because it can be refused and the caller
+        is owed an answer: the tool bar that makes a whole selection inhibitor
+        leaves alone the arcs that run the wrong way for it.
+
+        Parameters
+        ----------
+        kind : ArcKind
+            The kind.
+
+        Returns
+        -------
+        bool
+            Whether the arc was changed.  It is not when it is that kind already,
+            nor when the kind may not run the way the arc does.
+        """
+
+        kind = ArcKind(kind)
+        if kind is self._kind or not self.can_be(kind):
+            return False
+        self.prepareGeometryChange()
+        self._kind = kind
+        self.update()
+        return True
 
     # ------------------------------------------------------------------
     # Where it runs
@@ -634,17 +1200,7 @@ class Arc(QGraphicsItem):
             The place, in scene millimetres.
         """
 
-        length = self._line.length()
-        origin = self._line.p1()
-        if not length:
-            return QPointF(origin)
-
-        forward = QPointF(self._line.dx() / length, self._line.dy() / length)
-        sideways = QPointF(-forward.y(), forward.x())
-        return QPointF(
-            origin.x() + (forward.x() * along + sideways.x() * across) * length,
-            origin.y() + (forward.y() * along + sideways.y() * across) * length,
-        )
+        return chord_point(self._line, along, across)
 
     def chord_frame(self, point: QPointF) -> tuple[float, float]:
         """Turn a place on the sheet into a place in the chord's own frame.
@@ -663,17 +1219,7 @@ class Arc(QGraphicsItem):
             How far along and how far across, as fractions of the chord.
         """
 
-        length = self._line.length()
-        if not length:
-            return 0.0, 0.0
-
-        forward = QPointF(self._line.dx() / length, self._line.dy() / length)
-        sideways = QPointF(-forward.y(), forward.x())
-        reach = point - self._line.p1()
-        return (
-            (reach.x() * forward.x() + reach.y() * forward.y()) / length,
-            (reach.x() * sideways.x() + reach.y() * sideways.y()) / length,
-        )
+        return chord_frame(self._line, point)
 
     def control_points(self) -> list[QPointF]:
         """Give the two points that bend a curved arc.
@@ -686,6 +1232,21 @@ class Arc(QGraphicsItem):
         """
 
         return [self.chord_point(along, across) for along, across in self._controls]
+
+    @property
+    def control_frames(self) -> tuple:
+        """tuple: The two control points of a single bow in the chord's own
+        frame, which is what is kept of them — so that a line previewed for
+        this arc along another chord bends the way the arc does."""
+
+        return tuple(tuple(control) for control in self._controls)
+
+    @property
+    def point_frames(self) -> tuple:
+        """tuple: The points an S or an L is led through in the chord's own
+        frame, in order from the source."""
+
+        return tuple(tuple(point) for point in self._points)
 
     def curve_middle(self) -> QPointF:
         """Give the half-way point of the arc as it is drawn.
@@ -739,16 +1300,9 @@ class Arc(QGraphicsItem):
             millimetres.
         """
 
-        if self._shape_kind is ArcShape.CURVED:
-            first, second = self.control_points()
-            return [(first, second, self._line.p2())]
-
-        knots = [self._line.p1(), *self.curve_points(), self._line.p2()]
-        if self._shape_kind is ArcShape.S_CURVED:
-            return catmull_rom(knots)
-        if self._shape_kind is ArcShape.L_SHAPED:
-            return straight_legs(knots)
-        return []
+        return route_segments(
+            self._line, self._shape_kind, self.control_points(), self.curve_points()
+        )
 
     def segment_paths(self) -> list[QPainterPath]:
         """Give each segment of the curve as a path of its own.
@@ -1027,7 +1581,8 @@ class Arc(QGraphicsItem):
         bool
             Whether the arc was changed.  It is not when the end would be put
             where it already is, nor when the two ends would become the same
-            item — an arc from a thing to itself is not an arc.
+            item — an arc from a thing to itself is not an arc — nor when the
+            arc's kind may not run the way it would then run.
         """
 
         if end not in END_HANDLES:
@@ -1035,6 +1590,9 @@ class Arc(QGraphicsItem):
 
         other = self.target if end == 'source' else self.source
         if item is other:
+            return False
+        source, target = (item, other) if end == 'source' else (other, item)
+        if not self._kind.permits(source, target):
             return False
 
         was = self.source if end == 'source' else self.target
@@ -1214,109 +1772,14 @@ class Arc(QGraphicsItem):
     def _arrival(self) -> tuple[QPointF, QPointF]:
         """Give where the arrowhead's base sits and which way it points.
 
-        The base is the place on the drawn line **:data:`ARROW_LENGTH` away from
-        the end as the crow flies**, and the head points from there to the tip.
-        Two things follow, and both are wanted:
-
-        * the head is the **same size on every arc** — exactly
-          :data:`ARROW_LENGTH` long, whatever the line is doing where it lands.
-          Measuring that length *along* the line instead makes the head as short
-          as the chord of the last stretch, so a curve that bends sharply gets a
-          stubby little head and a straight arc a full-sized one, which is what
-          happened first;
-        * the base is a point **of the line**, so the line runs up the middle of
-          the head rather than into a corner of it.
-
-        The tangent where the arc arrives is not used, and that is the point.  A
-        head is a straight triangle two and a half millimetres long: laid along
-        the tangent it is a straight thing across a bend, and on a curve that
-        turns hard just before it lands the line meets the base at its corner —
-        the whole half-width off centre — so the head reads as a flag stuck on
-        the end rather than as the end of the line.  On a straight arc the two
-        rules are the same thing, the line and its chord being one, and on a
-        gentle curve they are within a degree.
-
-        A **straight** arc skips the search: its line is its chord, so the base
-        is worked out rather than looked for, and it is exact.
-
         Returns
         -------
         tuple
-            The base, in scene millimetres, and the direction of unit length.
+            The base, in scene millimetres, and the direction of unit length —
+            see :func:`arrival` for why it is measured as the crow flies.
         """
 
-        tip = self._line.p2()
-        if self.segments():
-            base = self._reach_back(self.path(), tip, ARROW_LENGTH)
-        else:
-            base = None
-        if base is not None:
-            reach = QLineF(base, tip)
-            if reach.length():
-                return base, QPointF(reach.dx() / reach.length(), reach.dy() / reach.length())
-
-        chord = self._line.length()
-        along = (
-            QPointF(self._line.dx() / chord, self._line.dy() / chord)
-            if chord
-            else QPointF(1.0, 0.0)
-        )
-        return (
-            QPointF(tip.x() - along.x() * ARROW_LENGTH, tip.y() - along.y() * ARROW_LENGTH),
-            along,
-        )
-
-    @staticmethod
-    def _reach_back(path: QPainterPath, tip: QPointF, reach: float) -> QPointF | None:
-        """Find the place on a path a given distance from its end, as the crow
-        flies.
-
-        Bisected rather than solved: the distance from the end grows as one goes
-        back along the line, so a dozen halvings of the tail land on it to a
-        thousandth of a millimetre, and a curve is not a thing to solve exactly
-        for a triangle two millimetres long.  Only the **tail** is searched —
-        :data:`SEARCH_TAIL` times the distance wanted — because a long arc can
-        wander back within that distance of its own end somewhere far away, and
-        the one under the arrowhead is the one that is wanted.
-
-        Parameters
-        ----------
-        path : PyQt6.QtGui.QPainterPath
-            The line.
-        tip : PyQt6.QtCore.QPointF
-            Its end, in scene millimetres.
-        reach : float
-            How far from the end, in millimetres.
-
-        Returns
-        -------
-        PyQt6.QtCore.QPointF, optional
-            The place, or ``None`` when the whole line is shorter than that —
-            a line with no room for a head on it.
-        """
-
-        length = path.length()
-        if not length:
-            return None
-
-        def away(percent: float) -> float:
-            where = path.pointAtPercent(percent)
-            return math.hypot(where.x() - tip.x(), where.y() - tip.y())
-
-        low = max(0.0, (length - reach * SEARCH_TAIL) / length)
-        if away(low) < reach:
-            low = 0.0
-        if away(low) < reach:
-            return None
-
-        high = 1.0
-        for _ in range(SEARCH_STEPS):
-            middle = (low + high) / 2.0
-            if away(middle) < reach:
-                high = middle
-            else:
-                low = middle
-        return path.pointAtPercent(low)
+        return arrival(self._line, self.path(), bool(self.segments()))
 
     def _perpendicular(self) -> QPointF:
         """Give the unit vector across the line, which is where the weight sits.
@@ -1354,13 +1817,7 @@ class Arc(QGraphicsItem):
             From one end to the other, straight or bowed.
         """
 
-        path = QPainterPath(self._line.p1())
-        segments = self.segments()
-        if not segments:
-            path.lineTo(self._line.p2())
-        for first, second, end in segments:
-            path.cubicTo(first, second, end)
-        return path
+        return route_path(self._line, self.segments())
 
     def arrow(self) -> QPainterPath:
         """Build the arrowhead, at the end the arc enters.
@@ -1376,25 +1833,35 @@ class Arc(QGraphicsItem):
             empty path when the arc has no length to point along.
         """
 
-        head = QPainterPath()
-        if not self._line.length():
-            return head
+        return arrowhead(self._line, self.path(), bool(self.segments()))
 
-        tip = self._line.p2()
-        back, along = self._arrival()
-        across = QPointF(-along.y(), along.x())
+    def ring(self) -> QPainterPath:
+        """Build the ring an inhibitor arc ends in.
 
-        head.moveTo(tip)
-        head.lineTo(
-            back.x() + across.x() * ARROW_WIDTH / 2.0,
-            back.y() + across.y() * ARROW_WIDTH / 2.0,
-        )
-        head.lineTo(
-            back.x() - across.x() * ARROW_WIDTH / 2.0,
-            back.y() - across.y() * ARROW_WIDTH / 2.0,
-        )
-        head.closeSubpath()
-        return head
+        Returns
+        -------
+        PyQt6.QtGui.QPainterPath
+            A circle of :data:`INHIBITOR_RADIUS` touching the target's
+            connecting point, centred on the line (see :func:`ring_centre`), or
+            an empty path when the arc has no length to end in one.
+        """
+
+        drawn = QPainterPath()
+        if self._line.length():
+            centre = ring_centre(self._line, self.path(), bool(self.segments()))
+            drawn.addEllipse(centre, INHIBITOR_RADIUS, INHIBITOR_RADIUS)
+        return drawn
+
+    def head(self) -> QPainterPath:
+        """Give the mark the arc ends in, whichever kind of arc it is.
+
+        Returns
+        -------
+        PyQt6.QtGui.QPainterPath
+            :meth:`ring` for an inhibitor arc and :meth:`arrow` for any other.
+        """
+
+        return self.ring() if self._kind is ArcKind.INHIBITOR else self.arrow()
 
     def boundingRect(self) -> QRectF:  # noqa: N802  (Qt naming)
         """Give what the arc is drawn and clicked inside.
@@ -1432,13 +1899,17 @@ class Arc(QGraphicsItem):
         stroker = QPainterPathStroker()
         stroker.setWidth(ARC_GRAB * 2.0)
         band = stroker.createStroke(self.path())
-        band.addPath(self.arrow())
+        band.addPath(self.head())
         for where in self.handles().values():
             band.addEllipse(where, HANDLE_GRAB, HANDLE_GRAB)
         return band
 
     def paint(self, painter, option, widget=None) -> None:
-        """Draw the arc, its arrowhead and its weight.
+        """Draw the arc, the mark it ends in and its weight.
+
+        A normal arc ends in a filled arrowhead.  An inhibitor arc ends in a
+        **ring**, drawn with the line's own pen around the colour of the paper,
+        so the line is seen to run into it and stop rather than through it.
 
         The join is **mitered**, as an item's outline is: Qt's default bevel
         chamfers every corner by the width of the pen, and an L that turns a
@@ -1466,9 +1937,15 @@ class Arc(QGraphicsItem):
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawPath(self.path())
 
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(colour)
-        painter.drawPath(self.arrow())
+        if self._kind is ArcKind.INHIBITOR:
+            painter.setBrush(paper_colour(option))
+            painter.drawPath(self.ring())
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(colour)
+        else:
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(colour)
+            painter.drawPath(self.arrow())
 
         weight = self.weight_path()
         if weight is not None:

@@ -355,7 +355,8 @@ def build_stylesheet(colors: ThemeColors) -> str:
     }}
 
     QWidget#TopBar QToolButton,
-    QToolBar#SideBar QToolButton {{
+    QToolBar#SideBar QToolButton,
+    QToolBar#ArcToolBar QToolButton {{
         border: none;
         border-radius: 6px;
         padding: 4px;
@@ -364,19 +365,44 @@ def build_stylesheet(colors: ThemeColors) -> str:
     }}
 
     QWidget#TopBar QToolButton:hover,
-    QToolBar#SideBar QToolButton:hover {{
+    QToolBar#SideBar QToolButton:hover,
+    QToolBar#ArcToolBar QToolButton:hover {{
         background: {colors.hover};
     }}
 
     QWidget#TopBar QToolButton:pressed,
     QWidget#TopBar QToolButton:checked,
     QToolBar#SideBar QToolButton:pressed,
-    QToolBar#SideBar QToolButton:checked {{
+    QToolBar#SideBar QToolButton:checked,
+    QToolBar#ArcToolBar QToolButton:pressed,
+    QToolBar#ArcToolBar QToolButton:checked {{
         background: {colors.pressed};
     }}
 
     QWidget#TopBar QToolButton:disabled {{
         color: {colors.disabled_text};
+    }}
+
+    QToolBar#ArcToolBar {{
+        background: transparent;
+        border: none;
+        padding: 2px 6px;
+        spacing: 2px;
+    }}
+
+    QToolBar#ArcToolBar QLabel {{
+        color: {colors.text_muted};
+        padding: 0px 6px 0px 4px;
+    }}
+
+    QToolBar#ArcToolBar QLabel#ArcTargetLabel {{
+        color: {colors.text};
+    }}
+
+    QToolBar#ArcToolBar::separator {{
+        background: {colors.border};
+        width: 1px;
+        margin: 4px 6px;
     }}
 
     QToolButton#ProjectButton {{

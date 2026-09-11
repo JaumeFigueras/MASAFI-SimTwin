@@ -81,6 +81,7 @@ def test_stylesheet_styles_the_chrome(qapp, scheme):
     selectors = (
         'QWidget#TopBar',
         'QToolBar#SideBar',
+        'QToolBar#ArcToolBar',
         'QWidget#ToolPaneHeader',
         'QTabWidget#DocumentTabs',
         'QStatusBar#StatusBar',
