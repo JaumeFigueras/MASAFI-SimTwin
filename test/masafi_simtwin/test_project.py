@@ -56,12 +56,16 @@ def test_the_suffix_is_not_doubled(tmp_path):
 # ----------------------------------------------------------------------
 
 
-def test_a_new_project_is_a_zip_holding_its_manifest_and_its_folders(created):
+def test_a_new_project_is_a_zip_holding_its_manifest_its_folders_and_its_history(created):
     """The container is an ordinary archive, openable with any zip tool."""
 
     assert zipfile.is_zipfile(created)
     with zipfile.ZipFile(created) as archive:
-        assert archive.namelist() == [project.MANIFEST_NAME, *project.FOLDERS]
+        assert archive.namelist() == [
+            project.MANIFEST_NAME,
+            *project.FOLDERS,
+            project.HISTORY_NAME,
+        ]
 
 
 def test_the_folders_are_the_shape_a_project_will_fill(created):
@@ -364,7 +368,7 @@ def history(path):
         Its entries, oldest first.
     """
 
-    return project.read_manifest(path)['history']
+    return project.read_history(path)
 
 
 def test_a_new_project_starts_its_history(created):
@@ -440,13 +444,20 @@ def test_altering_an_entry_invalidates_every_entry_after_it(created):
     assert rebuilt['log_item_id'] != entries[1]['previous']
 
 
-def test_only_the_manifest_is_replaced_when_recording(created):
-    """The folders, and later the models, survive a history entry."""
+def test_recording_writes_the_log_and_leaves_the_manifest_as_it_was(created):
+    """An entry is a line in the log; the folders, the models and the manifest
+    survive it unchanged."""
 
+    before = project.read_manifest(created)
     project.record(created, project.EVENT_OPENED, 'jaume', 'install-1')
 
     with zipfile.ZipFile(created) as archive:
-        assert archive.namelist() == [project.MANIFEST_NAME, *project.FOLDERS]
+        assert archive.namelist() == [
+            project.MANIFEST_NAME,
+            *project.FOLDERS,
+            project.HISTORY_NAME,
+        ]
+    assert project.read_manifest(created) == before
 
 
 def test_recording_leaves_no_working_file_behind(created, tmp_path):
@@ -480,6 +491,299 @@ def test_a_history_cannot_be_recorded_into_something_that_is_not_a_project(tmp_p
 
     with pytest.raises(project.ProjectError):
         project.record(path, project.EVENT_OPENED, 'jaume', 'install-1')
+
+
+# ----------------------------------------------------------------------
+# Where the history is kept
+# ----------------------------------------------------------------------
+
+
+def rewrite_entry(path: Path, name: str, data: bytes) -> None:
+    """Replace one entry of an archive, as a hand or another tool would.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        The archive.
+    name : str
+        The entry to replace, which must be there.
+    data : bytes
+        What to put in it.
+    """
+
+    with zipfile.ZipFile(path) as archive:
+        entries = [(info, archive.read(info.filename)) for info in archive.infolist()]
+    with zipfile.ZipFile(path, 'w') as archive:
+        for info, content in entries:
+            archive.writestr(info, data if info.filename == name else content)
+
+
+@pytest.fixture
+def legacy(tmp_path):
+    """Write a project as version 2 wrote one: the history in its manifest.
+
+    Parameters
+    ----------
+    tmp_path : pathlib.Path
+        The temporary directory pytest made.
+
+    Returns
+    -------
+    tuple
+        The project file and the entries of its history.
+    """
+
+    path = tmp_path / f'Old{project.PROJECT_SUFFIX}'
+    content = project.manifest('Old', author='jaume')
+    content['format_version'] = 2
+    first = project.link(
+        project.history_entry(project.EVENT_CREATED, content['uuid'], 'jaume', 'install-0'),
+        None,
+    )
+    second = project.link(
+        project.history_entry(project.EVENT_OPENED, content['uuid'], 'jaume', 'install-0'),
+        first['log_item_id'],
+    )
+    content['history'] = [first, second]
+    with zipfile.ZipFile(path, 'w') as archive:
+        archive.writestr(project.MANIFEST_NAME, json.dumps(content, indent=2))
+        for folder in project.FOLDERS:
+            archive.writestr(folder, b'')
+    return path, [first, second]
+
+
+def test_the_manifest_holds_no_history(created):
+    """It says what a project is; what has happened to it is a log."""
+
+    project.record(created, project.EVENT_OPENED, 'jaume', 'install-1')
+
+    assert 'history' not in project.read_manifest(created)
+
+
+def test_the_history_is_kept_with_the_logs(created):
+    """In the folder a project's logs go in."""
+
+    assert project.HISTORY_NAME.startswith('logs/')
+    assert 'logs/' in project.FOLDERS
+
+
+def test_the_log_is_one_canonical_line_per_entry(created):
+    """Each line is the JSON its identifier is computed over, with the
+    identifier added, so an entry can be read and checked on its own."""
+
+    project.record(created, project.EVENT_OPENED, 'jaume', 'install-1')
+    with zipfile.ZipFile(created) as archive:
+        lines = archive.read(project.HISTORY_NAME).decode('utf-8').splitlines()
+    entries = project.read_history(created)
+
+    assert len(lines) == len(entries) == 2
+    assert lines == [
+        json.dumps(entry, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
+        for entry in entries
+    ]
+
+
+def test_a_new_entry_is_a_line_added_at_the_end(created):
+    """Nothing before it is touched."""
+
+    with zipfile.ZipFile(created) as archive:
+        before = archive.read(project.HISTORY_NAME)
+    project.record(created, project.EVENT_OPENED, 'jaume', 'install-1')
+    with zipfile.ZipFile(created) as archive:
+        after = archive.read(project.HISTORY_NAME)
+
+    assert after.startswith(before)
+    assert after.count(b'\n') == before.count(b'\n') + 1
+
+
+def test_the_format_version_says_the_history_has_moved():
+    """Version 3 is the one that keeps it in the log."""
+
+    assert project.FORMAT_VERSION == 3
+
+
+def test_an_old_history_is_still_read_from_the_manifest(legacy):
+    """Until the project is next written, that is where it is."""
+
+    path, entries = legacy
+
+    assert project.read_history(path) == entries
+
+
+def test_an_old_history_is_moved_into_the_log_when_the_project_is_written(legacy):
+    """Untouched, and out of the manifest, which is marked with the new version."""
+
+    path, entries = legacy
+    project.record(path, project.EVENT_CLOSED, 'jaume', 'install-0', 30)
+
+    found = project.read_manifest(path)
+    assert 'history' not in found
+    assert found['format_version'] == project.FORMAT_VERSION
+    with zipfile.ZipFile(path) as archive:
+        assert project.HISTORY_NAME in archive.namelist()
+    assert project.read_history(path)[:2] == entries
+
+
+def test_the_chain_holds_across_the_move(legacy):
+    """The first entry written to the log follows the last one of the manifest."""
+
+    path, entries = legacy
+    entry = project.record(path, project.EVENT_CLOSED, 'jaume', 'install-0', 30)
+
+    assert entry['previous'] == entries[-1]['log_item_id']
+
+
+def test_a_model_change_moves_an_old_history_too(legacy):
+    """Every write leaves a project in the current format."""
+
+    path, entries = legacy
+    project.add_model(path, 'Line', project.ModelKind.PETRI_NET, {'time': 's'})
+
+    assert 'history' not in project.read_manifest(path)
+    history = project.read_history(path)
+    assert history[:2] == entries
+    assert history[-1]['event'] == project.EVENT_MODEL_ADDED
+
+
+def test_a_later_format_is_not_marked_as_an_earlier_one(created):
+    """A project from a newer version of the application keeps its number."""
+
+    newer = dict(project.read_manifest(created), format_version=99)
+    rewrite_entry(created, project.MANIFEST_NAME, json.dumps(newer).encode('utf-8'))
+
+    project.record(created, project.EVENT_OPENED, 'jaume', 'install-1')
+
+    assert project.read_manifest(created)['format_version'] == 99
+
+
+def log_of(path: Path) -> bytes:
+    """Read a project's history log as it is stored.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        The project file.
+
+    Returns
+    -------
+    bytes
+        The log.
+    """
+
+    with zipfile.ZipFile(path) as archive:
+        return archive.read(project.HISTORY_NAME)
+
+
+def damage(path: Path, extra: bytes) -> bytes:
+    """Put damage at the end of a project's history log.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        The project file.
+    extra : bytes
+        What to add to the end of the log.
+
+    Returns
+    -------
+    bytes
+        The damaged log, as it is now stored.
+    """
+
+    damaged = log_of(path) + extra
+    rewrite_entry(path, project.HISTORY_NAME, damaged)
+    return damaged
+
+
+def test_reading_a_damaged_log_gives_the_entries_that_can_be_read(created):
+    """What is not an entry is passed over, not reported."""
+
+    damage(created, b'[1, 2]\n{broken\n\xff\xfe\n')
+
+    assert len(project.read_history(created)) == 1
+
+
+def test_a_damaged_log_does_not_stop_a_project_being_written(created):
+    """The history is evidence, and a project is still work to be done."""
+
+    first = project.read_history(created)[0]
+    damage(created, b'{not json\n')
+
+    entry = project.record(created, project.EVENT_OPENED, 'jaume', 'install-1')
+
+    assert project.read_history(created) == [first, entry]
+
+
+def test_a_new_entry_is_chained_to_the_last_entry_that_can_be_read(created):
+    """The break stays where the damage is, for the auditor to find."""
+
+    first = project.read_history(created)[0]
+    damage(created, b'{not json\n')
+
+    entry = project.record(created, project.EVENT_OPENED, 'jaume', 'install-1')
+
+    assert entry['previous'] == first['log_item_id']
+
+
+def test_the_damage_is_kept_in_the_log_as_it_was_found(created):
+    """Byte for byte: the application verifies nothing, so it repairs nothing."""
+
+    damaged = damage(created, b'{not json\n\xff\xfe not text\n')
+
+    project.record(created, project.EVENT_OPENED, 'jaume', 'install-1')
+
+    assert log_of(created).startswith(damaged)
+
+
+def test_a_log_cut_off_mid_line_does_not_swallow_the_next_entry(created):
+    """The new entry is a line of its own, not the tail of a broken one."""
+
+    damaged = damage(created, b'{"event": "open')
+
+    entry = project.record(created, project.EVENT_OPENED, 'jaume', 'install-1')
+
+    assert log_of(created).startswith(damaged + b'\n')
+    assert project.read_history(created)[-1] == entry
+
+
+def test_a_model_can_be_changed_in_a_project_whose_log_is_damaged(created):
+    """Every write goes past the damage, not only a session's."""
+
+    damage(created, b'garbage\n')
+
+    model = project.add_model(created, 'Line', project.ModelKind.PETRI_NET, {'time': 's'})
+
+    assert project.read_history(created)[-1]['model'] == model['uuid']
+    assert b'garbage\n' in log_of(created)
+
+
+def test_a_project_whose_log_has_gone_starts_a_new_one(created):
+    """Nothing to chain to is not a reason to refuse to write."""
+
+    with zipfile.ZipFile(created) as archive:
+        kept = [
+            (info, archive.read(info.filename))
+            for info in archive.infolist()
+            if info.filename != project.HISTORY_NAME
+        ]
+    with zipfile.ZipFile(created, 'w') as archive:
+        for info, data in kept:
+            archive.writestr(info, data)
+
+    entry = project.record(created, project.EVENT_OPENED, 'jaume', 'install-1')
+
+    assert entry['previous'] is None
+    assert project.read_history(created) == [entry]
+
+
+def test_blank_lines_in_the_log_are_passed_over(created):
+    """A trailing newline, or one a text editor added, is not an entry."""
+
+    with zipfile.ZipFile(created) as archive:
+        log = archive.read(project.HISTORY_NAME)
+    rewrite_entry(created, project.HISTORY_NAME, log + b'\n\n')
+
+    assert len(project.read_history(created)) == 1
 
 
 # ----------------------------------------------------------------------
@@ -612,7 +916,7 @@ def test_every_change_to_a_model_is_logged(created, action, event):
     elif action == 'remove':
         project.remove_model(created, model['uuid'])
 
-    entry = project.read_manifest(created)['history'][-1]
+    entry = project.read_history(created)[-1]
 
     assert entry['event'] == event
     assert entry['model'] == model['uuid']
@@ -626,7 +930,7 @@ def test_the_history_stays_chained_across_model_changes(created):
     project.update_model(created, model['uuid'], name='Filling')
     project.remove_model(created, model['uuid'])
 
-    entries = project.read_manifest(created)['history']
+    entries = project.read_history(created)
 
     assert [entry['previous'] for entry in entries[1:]] == [
         entry['log_item_id'] for entry in entries[:-1]

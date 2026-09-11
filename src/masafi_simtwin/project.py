@@ -15,6 +15,25 @@ from the rest of the archive.  Everything else about the contents is still to be
 designed, which is exactly why :data:`FORMAT_VERSION` is written from the first
 file onwards.
 
+**The history is not in the manifest.**  The manifest says what a project *is*;
+what has *happened* to it is a log, and it is kept with the logs, in
+:data:`HISTORY_NAME`: append-only, one chained entry per line.  Each line is the
+canonical JSON an entry's identifier is computed over, with the identifier
+added, so an entry can be read — and checked, by the tool outside this
+repository that checks them — on its own.  :func:`read_history` reads it.
+
+**A damaged log never stops a project being written.**  A line that is not an
+entry — not JSON, not an object, not even text — is passed over when the log is
+read, the next entry is chained to the last entry that could be read, and the log
+is written back **byte for byte as it was found**, with the new line at the end.
+The application never verifies a history, so it has no business repairing one
+either: what it cannot read is kept, and left for the auditor to see.
+
+A project written before the history moved — format version 2 — still carries
+its history in the manifest.  It is read from there, and **moved into the log the
+first time the project is written**, entries untouched, so the chain goes on
+holding across the move and nothing of what it records is lost.
+
 This module has no Qt in it, on purpose.  It is stdlib only — ``zipfile`` and
 ``json`` — so that it can move to :mod:`simtwin_core` unchanged once that
 package exists, which is where a document format belongs.
@@ -48,12 +67,19 @@ FORMAT_NAME = 'masafi-simtwin-project'
 
 #: The version of the layout inside the archive.  It is written from the first
 #: project onwards so that a reader can always tell what it is looking at.
-FORMAT_VERSION = 2
+#: Version 3 moved the history out of the manifest into :data:`HISTORY_NAME`.
+FORMAT_VERSION = 3
 
 #: The directories every project carries, whether or not anything is in them
 #: yet.  A zip has no directories of its own; these are the empty entries that
 #: make one show a project's shape when it is opened with any archive tool.
 FOLDERS: tuple[str, ...] = ('models/', 'simulations/', 'statistics/', 'logs/')
+
+#: The log a project's history is kept in.  JSON Lines — one entry to a line —
+#: because a history is appended to and read from the top, and a log that is a
+#: single JSON array has to be taken apart and put back together to add a line
+#: to it.
+HISTORY_NAME = 'logs/history.jsonl'
 
 #: The events a project's history records.  A session is a pair: one entry when
 #: the project is opened, one when it is closed, so that a run that ends in a
@@ -397,8 +423,9 @@ def model_document(name: str, kind: ModelKind, units: dict, identifier: str) -> 
 def _canonical(entry: dict) -> str:
     """Render a history entry so that hashing it is reproducible.
 
-    Sorted keys and fixed separators, so that a manifest reformatted by any
-    tool still hashes to what it hashed to when it was written.
+    Sorted keys and fixed separators, so that an entry reformatted by any tool
+    still hashes to what it hashed to when it was written.  It is also exactly
+    how an entry is written into the history log, one to a line.
 
     Parameters
     ----------
@@ -491,6 +518,165 @@ def history_entry(
     return entry
 
 
+def history_text(entries: list[dict]) -> str:
+    """Write a history out as the log it is kept in.
+
+    Parameters
+    ----------
+    entries : list of dict
+        The chained entries, oldest first.
+
+    Returns
+    -------
+    str
+        One canonical line per entry, each ended by a newline — so that the
+        next entry is a line added at the end and nothing before it is touched.
+    """
+
+    return ''.join(f'{_canonical(entry)}\n' for entry in entries)
+
+
+def _parse_history(data: bytes) -> list[dict]:
+    """Read the entries out of a history log, passing over what is not one.
+
+    A line that is not text, not JSON or not a JSON object is not an entry, and
+    it is **passed over rather than refused**: a damaged log must not stop a
+    project being worked on.  Nor is the line lost — the log is written back as
+    it was found, with the new entries after it (see :func:`_appended`).
+
+    Parameters
+    ----------
+    data : bytes
+        What the log holds.
+
+    Returns
+    -------
+    list of dict
+        The entries that could be read, oldest first.  Blank lines are passed
+        over too.
+    """
+
+    entries = []
+    for line in data.splitlines():
+        if not line.strip():
+            continue
+        try:
+            entry = json.loads(line.decode('utf-8'))
+        except (UnicodeDecodeError, ValueError):
+            continue
+        if isinstance(entry, dict):
+            entries.append(entry)
+    return entries
+
+
+def _read_log(path: str | Path, content: dict) -> tuple[bytes, list[dict]]:
+    """Read a project's history log as it is stored, and the entries in it.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        The project file.
+    content : dict
+        Its manifest, already read.
+
+    Returns
+    -------
+    tuple
+        The log's bytes, exactly as they are stored, and the entries that
+        could be read out of them.  A project with no log gives the history its
+        manifest still holds, written out as the log it will become — which is a
+        project written before the history moved — or nothing at all, from which
+        a new log starts.
+
+    Raises
+    ------
+    ProjectError
+        When the archive itself cannot be read.  A damaged *log* is not an
+        error; see :func:`_parse_history`.
+    """
+
+    target = Path(path)
+    try:
+        with zipfile.ZipFile(target) as archive:
+            if HISTORY_NAME in archive.namelist():
+                data = archive.read(HISTORY_NAME)
+                return data, _parse_history(data)
+    except (OSError, KeyError, zipfile.BadZipFile) as error:
+        raise ProjectError(f'{target} could not be read: {error}') from error
+
+    kept = content.get('history')
+    entries = [entry for entry in kept if isinstance(entry, dict)] if isinstance(kept, list) else []
+    return history_text(entries).encode('utf-8'), entries
+
+
+def _appended(log: bytes, entry: dict) -> bytes:
+    """Put one entry at the end of a history log.
+
+    Everything already there is kept as it is, damage and all.  A log that does
+    not end in a newline — one cut off in the middle of a line — is given one
+    first, so that the new entry is a line of its own rather than the tail of a
+    broken one.
+
+    Parameters
+    ----------
+    log : bytes
+        The log as it is stored.
+    entry : dict
+        The chained entry to add.
+
+    Returns
+    -------
+    bytes
+        The log with the entry at the end.
+    """
+
+    if log and not log.endswith(b'\n'):
+        log += b'\n'
+    return log + history_text([entry]).encode('utf-8')
+
+
+def _last_link(entries: list[dict]) -> str | None:
+    """Give what the next entry of a history is chained to.
+
+    Parameters
+    ----------
+    entries : list of dict
+        The entries that could be read, oldest first.
+
+    Returns
+    -------
+    str, optional
+        The ``log_item_id`` of the last of them, or ``None`` when there are none
+        and the next entry begins the chain.
+    """
+
+    return entries[-1].get('log_item_id') if entries else None
+
+
+def read_history(path: str | Path) -> list[dict]:
+    """Read a project's history.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        The project file.
+
+    Returns
+    -------
+    list of dict
+        The entries that can be read, oldest first — out of the history log, or
+        out of the manifest of a project written before the log existed.  A
+        damaged line is passed over here and kept in the log as it is.
+
+    Raises
+    ------
+    ProjectError
+        When the file is not a project.
+    """
+
+    return _read_log(path, read_manifest(path))[1]
+
+
 def _directory_entry(name: str) -> zipfile.ZipInfo:
     """Build the archive entry that stands for an empty directory.
 
@@ -524,9 +710,9 @@ def create(
 ) -> Path:
     """Write a new, empty project.
 
-    The archive holds its manifest and the directories of :data:`FOLDERS`, empty
-    for now: a project opened in any archive tool shows the shape it will fill
-    rather than a single file.
+    The archive holds its manifest, the directories of :data:`FOLDERS` — empty
+    for now, so a project opened in any archive tool shows the shape it will
+    fill — and the history log, begun with the entry that says who made it.
 
     Parameters
     ----------
@@ -558,7 +744,7 @@ def create(
         raise ProjectError(f'{target} is already there')
 
     content = manifest(name, author, company)
-    content['history'] = [
+    history = [
         link(
             history_entry(
                 EVENT_CREATED, content['uuid'], content['author'], install
@@ -572,6 +758,7 @@ def create(
             archive.writestr(MANIFEST_NAME, json.dumps(content, indent=2))
             for folder in FOLDERS:
                 archive.writestr(_directory_entry(folder), b'')
+            archive.writestr(HISTORY_NAME, history_text(history))
     except OSError as error:
         raise ProjectError(str(error)) from error
     return target
@@ -585,6 +772,10 @@ def record(
     duration: int | None = None,
 ) -> dict:
     """Append one entry to a project's history.
+
+    The entry goes into the history log.  The manifest is written back as it
+    was — unless it still holds a history of its own, which is then moved into
+    the log with this entry at the end of it.
 
     Parameters
     ----------
@@ -612,14 +803,12 @@ def record(
     """
 
     content = read_manifest(path)
-    history = content.get('history') or []
-    previous = history[-1].get('log_item_id') if history else None
+    log, entries = _read_log(path, content)
     entry = link(
         history_entry(event, content.get('uuid', ''), author, install, duration),
-        previous,
+        _last_link(entries),
     )
-    content['history'] = [*history, entry]
-    _rewrite_manifest(path, content)
+    _rewrite_manifest(path, content, log=_appended(log, entry))
     return entry
 
 
@@ -705,6 +894,7 @@ def add_model(
     """
 
     content = read_manifest(path)
+    log, entries = _read_log(path, content)
     models = content.get('models') or []
     model = {
         'uuid': str(uuid.uuid4()),
@@ -715,10 +905,11 @@ def add_model(
         'created': datetime.now(timezone.utc).isoformat(timespec='seconds'),
     }
     content['models'] = [*models, model]
-    _record_into(content, EVENT_MODEL_ADDED, author, install, model)
+    entry = _record_into(entries, content, EVENT_MODEL_ADDED, author, install, model)
     _rewrite_manifest(
         path,
         content,
+        log=_appended(log, entry),
         added={model['file']: json.dumps(
             model_document(name, kind, units, model['uuid']), indent=2
         )},
@@ -767,6 +958,7 @@ def update_model(
     """
 
     content = read_manifest(path)
+    log, entries = _read_log(path, content)
     models = content.get('models') or []
     model = next((m for m in models if m.get('uuid') == identifier), None)
     if model is None:
@@ -781,8 +973,13 @@ def update_model(
     document['name'] = model['name']
     document['units'] = dict(model['units'])
 
-    _record_into(content, EVENT_MODEL_UPDATED, author, install, model)
-    _rewrite_manifest(path, content, added={model['file']: json.dumps(document, indent=2)})
+    entry = _record_into(entries, content, EVENT_MODEL_UPDATED, author, install, model)
+    _rewrite_manifest(
+        path,
+        content,
+        log=_appended(log, entry),
+        added={model['file']: json.dumps(document, indent=2)},
+    )
     return model
 
 
@@ -814,27 +1011,33 @@ def remove_model(
     """
 
     content = read_manifest(path)
+    log, entries = _read_log(path, content)
     models = content.get('models') or []
     model = next((m for m in models if m.get('uuid') == identifier), None)
     if model is None:
         raise ProjectError(f'{Path(path)} holds no model {identifier}')
 
     content['models'] = [m for m in models if m.get('uuid') != identifier]
-    _record_into(content, EVENT_MODEL_REMOVED, author, install, model)
-    _rewrite_manifest(path, content, dropped={model['file']})
+    entry = _record_into(entries, content, EVENT_MODEL_REMOVED, author, install, model)
+    _rewrite_manifest(path, content, log=_appended(log, entry), dropped={model['file']})
     return model
 
 
-def _record_into(content: dict, event: str, author: str, install: str, model: dict) -> None:
-    """Append a chained history entry to a manifest already in hand.
+def _record_into(
+    entries: list[dict], content: dict, event: str, author: str, install: str, model: dict
+) -> dict:
+    """Make the chained entry about a model, for a history already in hand.
 
-    Adding a model is one write of the archive, not two, so the entry is put
-    into the manifest here rather than through :func:`record`.
+    Adding a model is one write of the archive, not two, so the entry is made
+    here and written with the model rather than through :func:`record`.
 
     Parameters
     ----------
+    entries : list of dict
+        The entries of the history that could be read, which the new one is
+        chained after.
     content : dict
-        The manifest, changed in place.
+        The manifest, for the project's UUID.
     event : str
         What happened.
     author : str
@@ -843,11 +1046,14 @@ def _record_into(content: dict, event: str, author: str, install: str, model: di
         Which installation they were using.
     model : dict
         The model the event is about.
+
+    Returns
+    -------
+    dict
+        The entry, chained, to be put at the end of the log.
     """
 
-    history = content.get('history') or []
-    previous = history[-1].get('log_item_id') if history else None
-    entry = link(
+    return link(
         history_entry(
             event,
             content.get('uuid', ''),
@@ -855,9 +1061,8 @@ def _record_into(content: dict, event: str, author: str, install: str, model: di
             install,
             details={'model': model['uuid'], 'model_name': model['name']},
         ),
-        previous,
+        _last_link(entries),
     )
-    content['history'] = [*history, entry]
 
 
 def _read_entry(path: str | Path, name: str) -> bytes:
@@ -891,10 +1096,12 @@ def _read_entry(path: str | Path, name: str) -> bytes:
 def _rewrite_manifest(
     path: str | Path,
     content: dict,
-    added: dict[str, str] | None = None,
+    added: dict[str, str | bytes] | None = None,
     dropped: set[str] | None = None,
+    log: bytes | None = None,
 ) -> None:
-    """Write a project back with a new manifest, and files added or removed.
+    """Write a project back with a new manifest, its history, and files added or
+    removed.
 
     A zip entry cannot be replaced where it lies, so the archive is written
     afresh beside the original and moved over it.  The move is what makes this
@@ -902,16 +1109,26 @@ def _rewrite_manifest(
     than half of a new one.  Everything not named in ``added`` or ``dropped``
     is carried across as it was.
 
+    **Every write leaves the project in the current format.**  A manifest still
+    holding a history of its own — a project written before the history moved —
+    loses it here, and the history goes into the log instead: the one given, or
+    the manifest's own when none is.  The version is raised to
+    :data:`FORMAT_VERSION` at the same time, and never lowered, so a project
+    from a later version of the application is not marked as an older one.
+
     Parameters
     ----------
     path : str or pathlib.Path
         The project file.
     content : dict
-        The manifest to write in place of the one that is there.
+        The manifest to write in place of the one that is there.  It is not
+        changed; what is written is a copy.
     added : dict, optional
         Entries to write, by name; an entry already there is replaced.
     dropped : set of str, optional
         Entries to leave out.
+    log : bytes, optional
+        The history log to write, exactly as it is to be stored.
 
     Raises
     ------
@@ -921,6 +1138,15 @@ def _rewrite_manifest(
 
     added = dict(added or {})
     dropped = set(dropped or ())
+    content = dict(content)
+    kept = content.pop('history', None)
+    if log is None and isinstance(kept, list):
+        log = history_text([entry for entry in kept if isinstance(entry, dict)]).encode('utf-8')
+    if log is not None:
+        added[HISTORY_NAME] = log
+    version = content.get('format_version')
+    if not isinstance(version, int) or version < FORMAT_VERSION:
+        content['format_version'] = FORMAT_VERSION
     target = Path(path)
     beside = target.with_name(f'{target.name}.writing')
     try:

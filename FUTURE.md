@@ -135,7 +135,8 @@ is a decision rather than an oversight.
 ## Copies are detected by identity, not yet by content
 
 **Now.** A project carries a `uuid` generated once and never regenerated, and an append-only
-`history` in its manifest whose entries are chained: each `log_item_id` is a truncated SHA-256 of the
+history — kept in `logs/history.jsonl`, one entry to a line, and not in the manifest — whose entries are
+chained: each `log_item_id` is a truncated SHA-256 of the
 entry together with the identifier of the entry before it, so altering or removing any entry
 invalidates every entry after it. Each entry names the author, the installation, the application
 version and the project's own UUID. Verification is deliberately **not** in this repository.
@@ -167,7 +168,7 @@ of forty over two weeks. And no measure here should rely on secrecy of the *algo
 fingerprint works even when fully understood, because evading it means genuinely building a different
 model.
 
-**Where.** `masafi_simtwin/project.py` — `link()`, `history_entry()`, `record()`. The auditor is `src/bonus/mfstz-audit/`, which `.gitignore` excludes.
+**Where.** `masafi_simtwin/project.py` — `link()`, `history_entry()`, `record()`, `read_history()`. The auditor is `src/bonus/mfstz-audit/`, which `.gitignore` excludes.
 
 ---
 
@@ -202,8 +203,8 @@ building the journal first means writing the operation representation twice.
 **Two things that must not be buffered.** The **authorship history** is tiny and rare — session
 open/close, model added/updated/removed — so it was never the cost, but buffering it puts gaps in the
 chain, which is exactly the evidence that matters. It goes in the journal instead, folded into the
-manifest at the next full write, ordered because the journal is append-only. **Simulation output**
-streams straight into `logs/` as it is produced; it is large, write-once, and a crashed run is re-run
+history log at the next full write, ordered because the journal is append-only. **Simulation output**
+streams straight into `logs/`, beside the history log, as it is produced; it is large, write-once, and a crashed run is re-run
 rather than recovered.
 
 ---

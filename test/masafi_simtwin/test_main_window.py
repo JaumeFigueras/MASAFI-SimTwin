@@ -1149,7 +1149,7 @@ def events(path):
         The event names, oldest first.
     """
 
-    return [entry['event'] for entry in project.read_manifest(path)['history']]
+    return [entry['event'] for entry in project.read_history(path)]
 
 
 def test_opening_a_project_records_a_session(window, make_project):
@@ -1173,7 +1173,7 @@ def test_closing_a_project_closes_its_session(window, make_project):
         project.EVENT_OPENED,
         project.EVENT_CLOSED,
     ]
-    assert 'duration' in project.read_manifest(path)['history'][-1]
+    assert 'duration' in project.read_history(path)[-1]
 
 
 def test_opening_another_project_closes_the_first_session(window, make_project):
@@ -1203,7 +1203,7 @@ def test_the_history_is_chained_across_sessions(window, make_project):
     window.open_project_path(path)
     window.close_project()
 
-    entries = project.read_manifest(path)['history']
+    entries = project.read_history(path)
     assert [entry['previous'] for entry in entries[1:]] == [
         entry['log_item_id'] for entry in entries[:-1]
     ]
@@ -1215,7 +1215,7 @@ def test_the_installation_is_recorded_with_every_session(window, make_project):
     path = make_project('Bottling Line')
     window.open_project_path(path)
 
-    assert project.read_manifest(path)['history'][-1]['install'] == install_id()
+    assert project.read_history(path)[-1]['install'] == install_id()
 
 
 def test_a_history_that_cannot_be_written_does_not_stop_the_project_opening(
@@ -1489,12 +1489,12 @@ def test_opening_the_project_already_open_does_nothing(window, make_project):
 
     path = make_project('Shared')
     window.open_project_path(path)
-    before = len(project.read_manifest(path)['history'])
+    before = len(project.read_history(path))
 
     window.open_project_path(path)
 
     assert window._project_name == 'Shared'
-    assert len(project.read_manifest(path)['history']) == before
+    assert len(project.read_history(path)) == before
 
 
 def test_the_lock_is_freed_when_the_window_closes(window, make_project):
