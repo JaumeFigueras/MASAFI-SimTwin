@@ -477,7 +477,7 @@
         <translation>Propietats</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1868" />
+        <location filename="../main_window.py" line="1870" />
         <location filename="../main_window.py" line="489" />
         <source>No document</source>
         <translation>Cap document</translation>
@@ -655,12 +655,12 @@
         <translation>Versions anteriors suprimides: {0}</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1605" />
+        <location filename="../main_window.py" line="1607" />
         <source>{0} could not be saved: {1}</source>
         <translation>No s'ha pogut desar {0}: {1}</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1633" />
+        <location filename="../main_window.py" line="1635" />
         <source>Close without saving?</source>
         <translation>Voleu tancar sense desar?</translation>
     </message>
@@ -985,72 +985,87 @@
 </context><context>
     <name>PropertiesPane</name>
     <message>
-        <location filename="../panes/properties.py" line="181" />
+        <location filename="../panes/properties.py" line="193" />
         <source>Place</source>
         <translation>Lloc</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="187" />
+        <location filename="../panes/properties.py" line="193" />
+        <source>Transition</source>
+        <translation>Transició</translation>
+    </message>
+    <message>
+        <location filename="../panes/properties.py" line="201" />
         <source>Places: {0}</source>
         <translation>Llocs: {0}</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="190" />
+        <location filename="../panes/properties.py" line="203" />
+        <source>Transitions: {0}</source>
+        <translation>Transicions: {0}</translation>
+    </message>
+    <message>
+        <location filename="../panes/properties.py" line="208" />
         <source>Several places</source>
         <translation>Diversos llocs</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="209" />
+        <location filename="../panes/properties.py" line="208" />
+        <source>Several transitions</source>
+        <translation>Diverses transicions</translation>
+    </message>
+    <message>
+        <location filename="../panes/properties.py" line="229" />
         <source>Several descriptions</source>
         <translation>Diverses descripcions</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="231" />
+        <location filename="../panes/properties.py" line="251" />
         <source>Petri Net</source>
         <translation>Xarxa de Petri</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="232" />
+        <location filename="../panes/properties.py" line="252" />
         <source>Process Flow</source>
         <translation>Flux de procés</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="233" />
+        <location filename="../panes/properties.py" line="253" />
         <source>2D Process</source>
         <translation>Procés 2D</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="234" />
+        <location filename="../panes/properties.py" line="254" />
         <source>3D Process</source>
         <translation>Procés 3D</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="253" />
+        <location filename="../panes/properties.py" line="273" />
         <source>A name cannot be empty.</source>
         <translation>Un nom no pot ser buit.</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="254" />
+        <location filename="../panes/properties.py" line="274" />
         <source>A name can only use letters without accents, digits and underscores.</source>
         <translation>Un nom només pot fer servir lletres sense accents, xifres i guions baixos.</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="257" />
+        <location filename="../panes/properties.py" line="277" />
         <source>A name cannot start with a digit.</source>
         <translation>Un nom no pot començar amb una xifra.</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="258" />
+        <location filename="../panes/properties.py" line="278" />
         <source>A name can only use letters, digits and underscores, with no spaces.</source>
         <translation>Un nom només pot fer servir lletres, xifres i guions baixos, sense espais.</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="261" />
+        <location filename="../panes/properties.py" line="281" />
         <source>A Python keyword cannot be a name.</source>
         <translation>Una paraula clau de Python no pot ser un nom.</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="262" />
+        <location filename="../panes/properties.py" line="282" />
         <source>Another place or transition already has this name, ignoring case.</source>
         <translation>Un altre lloc o transició ja té aquest nom, sense distingir majúscules i minúscules.</translation>
     </message>

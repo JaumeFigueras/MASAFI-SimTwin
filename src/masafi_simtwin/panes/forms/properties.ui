@@ -252,13 +252,13 @@
        </item>
       </layout>
      </widget>
-     <widget class="QWidget" name="place_page">
-      <layout class="QVBoxLayout" name="place_layout">
+     <widget class="QWidget" name="node_page">
+      <layout class="QVBoxLayout" name="node_layout">
        <property name="spacing">
         <number>8</number>
        </property>
        <item>
-        <widget class="QLabel" name="place_heading">
+        <widget class="QLabel" name="node_heading">
          <property name="font">
           <font>
            <bold>true</bold>
@@ -270,7 +270,7 @@
         </widget>
        </item>
        <item>
-        <layout class="QFormLayout" name="place_form">
+        <layout class="QFormLayout" name="node_form">
          <property name="horizontalSpacing">
           <number>8</number>
          </property>
@@ -278,17 +278,17 @@
           <number>6</number>
          </property>
          <item row="0" column="0">
-          <widget class="QLabel" name="place_name_label">
+          <widget class="QLabel" name="node_name_label">
            <property name="text">
             <string>Name:</string>
            </property>
           </widget>
          </item>
          <item row="0" column="1">
-          <widget class="QLineEdit" name="place_name_edit"/>
+          <widget class="QLineEdit" name="node_name_edit"/>
          </item>
          <item row="1" column="1">
-          <widget class="QLabel" name="place_name_problem">
+          <widget class="QLabel" name="node_name_problem">
            <property name="error" stdset="0">
             <bool>true</bool>
            </property>
@@ -301,33 +301,33 @@
           </widget>
          </item>
          <item row="2" column="0">
-          <widget class="QLabel" name="place_tokens_label">
+          <widget class="QLabel" name="node_tokens_label">
            <property name="text">
             <string extracomment="how many tokens a place holds before the net is run">Initial tokens:</string>
            </property>
           </widget>
          </item>
          <item row="2" column="1">
-          <widget class="QSpinBox" name="place_tokens_spin">
+          <widget class="QSpinBox" name="node_tokens_spin">
            <property name="maximum">
             <number>2147483647</number>
            </property>
           </widget>
          </item>
          <item row="3" column="0">
-          <widget class="QLabel" name="place_description_label">
+          <widget class="QLabel" name="node_description_label">
            <property name="text">
             <string>Description:</string>
            </property>
           </widget>
          </item>
          <item row="3" column="1">
-          <widget class="QLineEdit" name="place_description_edit"/>
+          <widget class="QLineEdit" name="node_description_edit"/>
          </item>
         </layout>
        </item>
        <item>
-        <spacer name="place_spacer">
+        <spacer name="node_spacer">
          <property name="orientation">
           <enum>Qt::Orientation::Vertical</enum>
          </property>

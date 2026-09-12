@@ -3223,7 +3223,7 @@ def test_the_properties_pane_follows_the_tab_being_looked_at(window, opened, mon
     assert pane.model_name_value.text() == 'Capping'
 
     window.document_area.show_document(first['uuid'])
-    assert pane.page is pane.place_page
+    assert pane.page is pane.node_page
 
 
 def test_a_selection_in_a_tab_not_looked_at_changes_nothing(window, opened, monkeypatch):
@@ -3349,7 +3349,7 @@ def test_a_window_holding_a_selection_is_torn_down_without_a_crash(tmp_path):
 # ----------------------------------------------------------------------
 
 
-def test_places_alone_selected_are_shown_on_the_place_page(window, opened, monkeypatch):
+def test_places_alone_selected_are_shown_on_the_node_page(window, opened, monkeypatch):
     """And a place with an arc beside it is a selection of mixed kinds."""
 
     model = add_model(window, monkeypatch)
@@ -3358,8 +3358,8 @@ def test_places_alone_selected_are_shown_on_the_place_page(window, opened, monke
     pane = window.properties_pane
 
     editor.places[0].setSelected(True)
-    assert pane.page is pane.place_page
-    assert pane.place_name_edit.text() == 'P1'
+    assert pane.page is pane.node_page
+    assert pane.node_name_edit.text() == 'P1'
 
     editor.arcs[0].setSelected(True)
     assert pane.page is pane.selection_page
@@ -3375,8 +3375,8 @@ def test_a_place_renamed_in_the_pane_is_renamed_journaled_and_undone(window, ope
     place.setSelected(True)
     pane = window.properties_pane
 
-    pane.place_name_edit.setText('Buffer')
-    pane.place_name_edit.editingFinished.emit()
+    pane.node_name_edit.setText('Buffer')
+    pane.node_name_edit.editingFinished.emit()
 
     assert place.name == 'Buffer'
     assert 'Rename' in window.undo_action.text()
@@ -3385,7 +3385,7 @@ def test_a_place_renamed_in_the_pane_is_renamed_journaled_and_undone(window, ope
     window.undo_action.trigger()
 
     assert place.name == 'P1'
-    assert pane.place_name_edit.text() == 'P1'
+    assert pane.node_name_edit.text() == 'P1'
 
 
 def test_tokens_set_in_the_pane_reach_every_selected_place_and_the_file(
@@ -3401,12 +3401,12 @@ def test_tokens_set_in_the_pane_reach_every_selected_place_and_the_file(
         place.setSelected(True)
     pane = window.properties_pane
 
-    pane.place_tokens_spin.setValue(3)
+    pane.node_tokens_spin.setValue(3)
     window.save_action.trigger()
 
     assert [place.tokens for place in editor.places] == [3, 3]
     assert [place.tokens for place in saved(opened, model).places] == [3, 3]
-    assert pane.place_tokens_spin.value() == 3
+    assert pane.node_tokens_spin.value() == 3
 
 
 def test_a_description_typed_in_the_pane_is_kept(window, opened, monkeypatch):
@@ -3419,13 +3419,13 @@ def test_a_description_typed_in_the_pane_is_kept(window, opened, monkeypatch):
     place.setSelected(True)
     pane = window.properties_pane
 
-    pane.place_description_edit.setText('Bottles waiting')
-    pane.place_description_edit.editingFinished.emit()
+    pane.node_description_edit.setText('Bottles waiting')
+    pane.node_description_edit.editingFinished.emit()
     editor.scene().clearSelection()
     place.setSelected(True)
 
     assert place.description == 'Bottles waiting'
-    assert pane.place_description_edit.text() == 'Bottles waiting'
+    assert pane.node_description_edit.text() == 'Bottles waiting'
 
 
 def test_a_refused_rename_shows_what_the_sheet_holds(window, opened, monkeypatch):
@@ -3437,9 +3437,61 @@ def test_a_refused_rename_shows_what_the_sheet_holds(window, opened, monkeypatch
     place = editor.places[0]
     place.setSelected(True)
     pane = window.properties_pane
-    pane.place_name_edit.setText('T1')
+    pane.node_name_edit.setText('T1')
 
     window._on_name_asked(place.uuid, 'T1')
 
     assert place.name == 'P1'
-    assert pane.place_name_edit.text() == 'P1'
+    assert pane.node_name_edit.text() == 'P1'
+
+
+# ----------------------------------------------------------------------
+# Editing a transition in the Properties pane
+# ----------------------------------------------------------------------
+
+
+def test_transitions_alone_selected_are_shown_on_the_node_page(window, opened, monkeypatch):
+    """Without tokens; a place and a transition together are only counted."""
+
+    model = add_model(window, monkeypatch)
+    editor = editor_of(window, model)
+    draw(editor)
+    pane = window.properties_pane
+
+    editor.transitions[0].setSelected(True)
+    assert pane.page is pane.node_page
+    assert pane.node_heading.text() == 'Transition'
+    assert not pane.node_form.isRowVisible(pane.node_tokens_label)
+
+    editor.places[0].setSelected(True)
+    assert pane.page is pane.selection_page
+
+
+def test_a_transition_renamed_and_described_in_the_pane_is_kept_and_undone(
+    window, opened, monkeypatch
+):
+    """Two recorded changes, each undone on its own."""
+
+    model = add_model(window, monkeypatch)
+    editor = editor_of(window, model)
+    draw(editor)
+    transition = editor.transitions[0]
+    transition.setSelected(True)
+    pane = window.properties_pane
+
+    pane.node_name_edit.setText('Fill')
+    pane.node_name_edit.editingFinished.emit()
+    pane.node_description_edit.setText('Fill a bottle')
+    pane.node_description_edit.editingFinished.emit()
+    window.save_action.trigger()
+
+    assert (transition.name, transition.description) == ('Fill', 'Fill a bottle')
+    written = saved(opened, model).transitions[0]
+    assert (written.name, written.description) == ('Fill', 'Fill a bottle')
+
+    window.undo_action.trigger()
+    assert transition.description == ''
+    assert pane.node_description_edit.text() == ''
+    window.undo_action.trigger()
+    assert transition.name == 'T1'
+    assert pane.node_name_edit.text() == 'T1'

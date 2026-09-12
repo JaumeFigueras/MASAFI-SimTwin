@@ -477,7 +477,7 @@
         <translation>Properties</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1868" />
+        <location filename="../main_window.py" line="1870" />
         <location filename="../main_window.py" line="489" />
         <source>No document</source>
         <translation>No document</translation>
@@ -655,12 +655,12 @@
         <translation>Earlier versions deleted: {0}</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1605" />
+        <location filename="../main_window.py" line="1607" />
         <source>{0} could not be saved: {1}</source>
         <translation>{0} could not be saved: {1}</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1633" />
+        <location filename="../main_window.py" line="1635" />
         <source>Close without saving?</source>
         <translation>Close without saving?</translation>
     </message>
@@ -985,72 +985,87 @@
 </context><context>
     <name>PropertiesPane</name>
     <message>
-        <location filename="../panes/properties.py" line="181" />
+        <location filename="../panes/properties.py" line="193" />
         <source>Place</source>
         <translation>Place</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="187" />
+        <location filename="../panes/properties.py" line="193" />
+        <source>Transition</source>
+        <translation>Transition</translation>
+    </message>
+    <message>
+        <location filename="../panes/properties.py" line="201" />
         <source>Places: {0}</source>
         <translation>Places: {0}</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="190" />
+        <location filename="../panes/properties.py" line="203" />
+        <source>Transitions: {0}</source>
+        <translation>Transitions: {0}</translation>
+    </message>
+    <message>
+        <location filename="../panes/properties.py" line="208" />
         <source>Several places</source>
         <translation>Several places</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="209" />
+        <location filename="../panes/properties.py" line="208" />
+        <source>Several transitions</source>
+        <translation>Several transitions</translation>
+    </message>
+    <message>
+        <location filename="../panes/properties.py" line="229" />
         <source>Several descriptions</source>
         <translation>Several descriptions</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="231" />
+        <location filename="../panes/properties.py" line="251" />
         <source>Petri Net</source>
         <translation>Petri Net</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="232" />
+        <location filename="../panes/properties.py" line="252" />
         <source>Process Flow</source>
         <translation>Process Flow</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="233" />
+        <location filename="../panes/properties.py" line="253" />
         <source>2D Process</source>
         <translation>2D Process</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="234" />
+        <location filename="../panes/properties.py" line="254" />
         <source>3D Process</source>
         <translation>3D Process</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="253" />
+        <location filename="../panes/properties.py" line="273" />
         <source>A name cannot be empty.</source>
         <translation>A name cannot be empty.</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="254" />
+        <location filename="../panes/properties.py" line="274" />
         <source>A name can only use letters without accents, digits and underscores.</source>
         <translation>A name can only use letters without accents, digits and underscores.</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="257" />
+        <location filename="../panes/properties.py" line="277" />
         <source>A name cannot start with a digit.</source>
         <translation>A name cannot start with a digit.</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="258" />
+        <location filename="../panes/properties.py" line="278" />
         <source>A name can only use letters, digits and underscores, with no spaces.</source>
         <translation>A name can only use letters, digits and underscores, with no spaces.</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="261" />
+        <location filename="../panes/properties.py" line="281" />
         <source>A Python keyword cannot be a name.</source>
         <translation>A Python keyword cannot be a name.</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="262" />
+        <location filename="../panes/properties.py" line="282" />
         <source>Another place or transition already has this name, ignoring case.</source>
         <translation>Another place or transition already has this name, ignoring case.</translation>
     </message>

@@ -6,10 +6,13 @@ The layout is :mod:`~masafi_simtwin.panes.forms.ui_properties`, compiled from
 * **Nothing** — no model is open, or the tab being looked at is not a model.
 * **Model** — a model is open and nothing on its sheet is selected: its name, its
   kind and its units, read-only, as decided with Jaume.
-* **Place** — one place or several, and nothing else, selected: its name, its
-  initial tokens and its description, to be edited.  With several places the
-  name cannot be edited, and a field they do not agree on is left blank.
-* **Selection** — anything else: how many places, transitions and arcs.
+* **Node** — places alone, or transitions alone, selected: the name and the
+  description, and a place's initial tokens, to be edited.  One page for both
+  kinds, a transition being a place without tokens: the tokens row is shown only
+  when every node shown is a place.  With several nodes the name cannot be
+  edited, and a field they do not agree on is left blank.
+* **Selection** — anything else, a mix of kinds among it: how many places,
+  transitions and arcs.
 
 **The pane is told what to show and never looks for it.**  The window asks the
 document what is selected, :func:`~masafi_simtwin.documents.selection_of`, and
@@ -36,7 +39,7 @@ from PyQt6.QtWidgets import QWidget
 
 from masafi_simtwin.panes.forms.ui_properties import Ui_PropertiesPane
 from masafi_simtwin.project import ModelKind
-from simtwin_core.petri_net import NameProblem, name_problem
+from simtwin_core.petri_net import NameProblem, PlaceData, name_problem
 
 #: How a unit whose stored value is not its symbol is written.  The values are
 #: kept to ASCII so the settings file needs no encoding; the microsecond's symbol
@@ -76,13 +79,13 @@ class PropertiesPane(QWidget, Ui_PropertiesPane):
     Attributes
     ----------
     name_asked : PyQt6.QtCore.pyqtSignal
-        Emitted with a place's UUID and the name it is to be given, once editing
+        Emitted with a node's UUID and the name it is to be given, once editing
         of a name the rule allows has ended.
     tokens_asked : PyQt6.QtCore.pyqtSignal
         Emitted with the UUIDs of the places shown and the tokens they are all
         to hold.
     description_asked : PyQt6.QtCore.pyqtSignal
-        Emitted with the UUIDs of the places shown and the description they are
+        Emitted with the UUIDs of the nodes shown and the description they are
         all to have.
     """
 
@@ -94,17 +97,17 @@ class PropertiesPane(QWidget, Ui_PropertiesPane):
         super().__init__(parent)
         self.setupUi(self)
 
-        #: The places on the place page, and the names the one shown may not take.
-        self._places: tuple = ()
+        #: The nodes on the node page, and the names the one shown may not take.
+        self._nodes: tuple = ()
         self._taken: tuple[str, ...] = ()
         #: Set while fields are filled in, so that filling one is not an edit.
         self._showing = False
 
-        self.place_name_edit.textEdited.connect(self._on_name_edited)
-        self.place_name_edit.editingFinished.connect(self._on_name_finished)
-        self.place_tokens_spin.setKeyboardTracking(False)
-        self.place_tokens_spin.valueChanged.connect(self._on_tokens_changed)
-        self.place_description_edit.editingFinished.connect(self._on_description_finished)
+        self.node_name_edit.textEdited.connect(self._on_name_edited)
+        self.node_name_edit.editingFinished.connect(self._on_name_finished)
+        self.node_tokens_spin.setKeyboardTracking(False)
+        self.node_tokens_spin.valueChanged.connect(self._on_tokens_changed)
+        self.node_description_edit.editingFinished.connect(self._on_description_finished)
 
         self.show_nothing()
 
@@ -114,6 +117,12 @@ class PropertiesPane(QWidget, Ui_PropertiesPane):
 
         return self.page_stack.currentWidget()
 
+    @property
+    def _places_shown(self) -> bool:
+        """bool: Whether every node on the node page is a place, which holds tokens."""
+
+        return bool(self._nodes) and all(isinstance(node, PlaceData) for node in self._nodes)
+
     # ------------------------------------------------------------------
     # What is shown
     # ------------------------------------------------------------------
@@ -121,7 +130,7 @@ class PropertiesPane(QWidget, Ui_PropertiesPane):
     def show_nothing(self) -> None:
         """Show that there is no model to say anything about."""
 
-        self._places = ()
+        self._nodes = ()
         self.page_stack.setCurrentWidget(self.nothing_page)
 
     def show_model(self, model: dict) -> None:
@@ -137,7 +146,7 @@ class PropertiesPane(QWidget, Ui_PropertiesPane):
 
         units = model.get('units') or {}
         distance = units.get('distance')
-        self._places = ()
+        self._nodes = ()
         self.model_name_value.setText(model.get('name', ''))
         self.model_kind_value.setText(self.kind_name(model.get('kind', '')))
         self.model_time_value.setText(unit_symbol(units.get('time', '')))
@@ -154,61 +163,72 @@ class PropertiesPane(QWidget, Ui_PropertiesPane):
             The places, transitions and arcs selected, as descriptions.
         """
 
-        self._places = ()
+        self._nodes = ()
         self.places_value.setText(str(len(selection.places)))
         self.transitions_value.setText(str(len(selection.transitions)))
         self.arcs_value.setText(str(len(selection.arcs)))
         self.page_stack.setCurrentWidget(self.selection_page)
 
-    def show_places(self, places, names=()) -> None:
-        """Show one place or several, to be edited.
+    def show_nodes(self, nodes, names=()) -> None:
+        """Show one place or transition, or several of one kind, to be edited.
 
         Parameters
         ----------
-        places : collections.abc.Iterable of simtwin_core.petri_net.PlaceData
-            The places, one at least.
+        nodes : collections.abc.Iterable
+            The nodes, one at least, all places or all transitions —
+            :class:`~simtwin_core.petri_net.PlaceData` or
+            :class:`~simtwin_core.petri_net.TransitionData`.
         names : collections.abc.Iterable of str, optional
             The names of every place and transition of the net, which is what a
-            place's new name is checked against — its own left out.
+            node's new name is checked against — its own left out.
         """
 
         self._showing = True
         try:
-            self._places = tuple(places)
-            if len(self._places) == 1:
-                place = self._places[0]
-                self._taken = tuple(name for name in names if name != place.name)
-                self.place_heading.setText(self.tr('Place'))
-                self.place_name_edit.setEnabled(True)
-                self.place_name_edit.setPlaceholderText('')
-                self.place_name_edit.setText(place.name)
+            self._nodes = tuple(nodes)
+            places = self._places_shown
+            if len(self._nodes) == 1:
+                node = self._nodes[0]
+                self._taken = tuple(name for name in names if name != node.name)
+                self.node_heading.setText(self.tr('Place') if places else self.tr('Transition'))
+                self.node_name_edit.setEnabled(True)
+                self.node_name_edit.setPlaceholderText('')
+                self.node_name_edit.setText(node.name)
             else:
                 self._taken = ()
-                self.place_heading.setText(self.tr('Places: {0}').format(len(self._places)))
-                self.place_name_edit.setEnabled(False)
-                self.place_name_edit.clear()
-                self.place_name_edit.setPlaceholderText(self.tr('Several places'))
+                count = len(self._nodes)
+                self.node_heading.setText(
+                    self.tr('Places: {0}').format(count)
+                    if places
+                    else self.tr('Transitions: {0}').format(count)
+                )
+                self.node_name_edit.setEnabled(False)
+                self.node_name_edit.clear()
+                self.node_name_edit.setPlaceholderText(
+                    self.tr('Several places') if places else self.tr('Several transitions')
+                )
             self._show_name_problem(None)
 
-            tokens = {place.tokens for place in self._places}
+            self.node_form.setRowVisible(self.node_tokens_label, places)
+            tokens = {node.tokens for node in self._nodes} if places else {0}
             if len(tokens) == 1:
-                self.place_tokens_spin.setSpecialValueText('')
-                self.place_tokens_spin.setMinimum(0)
-                self.place_tokens_spin.setValue(tokens.pop())
+                self.node_tokens_spin.setSpecialValueText('')
+                self.node_tokens_spin.setMinimum(0)
+                self.node_tokens_spin.setValue(tokens.pop())
             else:
-                self.place_tokens_spin.setMinimum(MIXED)
-                self.place_tokens_spin.setSpecialValueText(' ')
-                self.place_tokens_spin.setValue(MIXED)
+                self.node_tokens_spin.setMinimum(MIXED)
+                self.node_tokens_spin.setSpecialValueText(' ')
+                self.node_tokens_spin.setValue(MIXED)
 
-            descriptions = {place.description for place in self._places}
+            descriptions = {node.description for node in self._nodes}
             if len(descriptions) == 1:
-                self.place_description_edit.setPlaceholderText('')
-                self.place_description_edit.setText(descriptions.pop())
+                self.node_description_edit.setPlaceholderText('')
+                self.node_description_edit.setText(descriptions.pop())
             else:
-                self.place_description_edit.clear()
-                self.place_description_edit.setPlaceholderText(self.tr('Several descriptions'))
+                self.node_description_edit.clear()
+                self.node_description_edit.setPlaceholderText(self.tr('Several descriptions'))
 
-            self.page_stack.setCurrentWidget(self.place_page)
+            self.page_stack.setCurrentWidget(self.node_page)
         finally:
             self._showing = False
 
@@ -278,8 +298,8 @@ class PropertiesPane(QWidget, Ui_PropertiesPane):
             The rule it breaks, or ``None`` when it breaks none.
         """
 
-        self.place_name_problem.setText('' if problem is None else self.name_problem_text(problem))
-        self.place_name_problem.setHidden(problem is None)
+        self.node_name_problem.setText('' if problem is None else self.name_problem_text(problem))
+        self.node_name_problem.setHidden(problem is None)
 
     def _on_name_edited(self, text: str) -> None:
         """Check a name as it is typed.
@@ -293,16 +313,16 @@ class PropertiesPane(QWidget, Ui_PropertiesPane):
         self._show_name_problem(name_problem(text, self._taken))
 
     def _on_name_finished(self) -> None:
-        """Ask for the name typed, or put back the one the place has."""
+        """Ask for the name typed, or put back the one the node has."""
 
-        if self._showing or len(self._places) != 1:
+        if self._showing or len(self._nodes) != 1:
             return
-        place = self._places[0]
-        text = self.place_name_edit.text()
-        if text != place.name and name_problem(text, self._taken) is None:
-            self.name_asked.emit(place.uuid, text)
+        node = self._nodes[0]
+        text = self.node_name_edit.text()
+        if text != node.name and name_problem(text, self._taken) is None:
+            self.name_asked.emit(node.uuid, text)
             return
-        self.place_name_edit.setText(place.name)
+        self.node_name_edit.setText(node.name)
         self._show_name_problem(None)
 
     def _on_tokens_changed(self, value: int) -> None:
@@ -314,21 +334,21 @@ class PropertiesPane(QWidget, Ui_PropertiesPane):
             The tokens, or :data:`MIXED` while nothing has been chosen.
         """
 
-        if self._showing or not self._places or value < 0:
+        if self._showing or not self._places_shown or value < 0:
             return
-        if all(place.tokens == value for place in self._places):
+        if all(node.tokens == value for node in self._nodes):
             return
-        self.tokens_asked.emit(tuple(place.uuid for place in self._places), value)
+        self.tokens_asked.emit(tuple(node.uuid for node in self._nodes), value)
 
     def _on_description_finished(self) -> None:
-        """Ask for the description typed, for every place shown."""
+        """Ask for the description typed, for every node shown."""
 
-        if self._showing or not self._places:
+        if self._showing or not self._nodes:
             return
-        text = self.place_description_edit.text()
-        several = len({place.description for place in self._places}) > 1
+        text = self.node_description_edit.text()
+        several = len({node.description for node in self._nodes}) > 1
         if several and not text:
             return
-        if all(place.description == text for place in self._places):
+        if all(node.description == text for node in self._nodes):
             return
-        self.description_asked.emit(tuple(place.uuid for place in self._places), text)
+        self.description_asked.emit(tuple(node.uuid for node in self._nodes), text)

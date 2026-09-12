@@ -1484,8 +1484,10 @@ class MainWindow(QMainWindow):
         document = self._document_area.current_document
         key = self._document_area.key_of(document) if document is not None else None
         selection = documents.selection_of(document) if key else None
-        if selection and not (selection.transitions or selection.arcs):
-            self._properties_pane.show_places(selection.places, selection.names)
+        if selection and not selection.arcs and not (selection.places and selection.transitions):
+            self._properties_pane.show_nodes(
+                selection.places or selection.transitions, selection.names
+            )
             return
         if selection:
             self._properties_pane.show_selection(selection)
