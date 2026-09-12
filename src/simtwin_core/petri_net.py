@@ -49,7 +49,7 @@ nothing of the chord frame, which is every other PNML tool.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 #: A position on the sheet, or a place in an arc's chord frame.
 Point = tuple[float, float]
@@ -202,6 +202,13 @@ class ArcData:
         draws from ``points``.  Empty for a straight arc and a single bow, which
         are led through nothing.
 
+        It is **worked out rather than kept**: it says again, in another frame,
+        what ``points`` already says, and only something that knows where the
+        connecting points are — the editor — can work it out.  So it takes no
+        part in comparing two arcs, and no operation and no journal line carries
+        it: two descriptions of one drawing are equal whether or not the route
+        has been filled in.
+
     Raises
     ------
     InvalidNet
@@ -220,7 +227,7 @@ class ArcData:
     shape: str = 'straight'
     controls: tuple[Point, Point] | None = None
     points: tuple[Point, ...] | None = None
-    route: tuple[Point, ...] = ()
+    route: tuple[Point, ...] = field(default=(), compare=False)
 
     def __post_init__(self) -> None:
         if self.kind not in KINDS:

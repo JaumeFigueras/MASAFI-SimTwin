@@ -3163,3 +3163,20 @@ def test_the_editor_names_shapes_and_kinds_as_the_core_does():
     assert tuple(shape.value for shape in ArcShape) == core.SHAPES
     assert tuple(kind.value for kind in ArcKind) == core.KINDS
     assert {kind.value: groups for kind, groups in KIND_DIRECTIONS.items()} == core.DIRECTIONS
+
+
+def test_choosing_a_shape_seeds_its_points_but_setting_one_does_not(editor, net):
+    """Choosing a shape is a gesture and gives the shape its own default points;
+    applying a recorded operation is not, and invents nothing — the change that
+    seeded them carries them as an operation of its own."""
+
+    place, transition = net
+    chosen = editor.add_arc(place, transition)
+    applied = editor.add_arc(transition, place)
+
+    chosen.shape_kind = ArcShape.L_SHAPED
+    applied.set_shape(ArcShape.L_SHAPED)
+
+    assert len(chosen.point_frames) == 1
+    assert applied.shape_kind is ArcShape.L_SHAPED
+    assert applied.point_frames == ()

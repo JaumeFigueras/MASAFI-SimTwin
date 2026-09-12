@@ -174,14 +174,15 @@ model.
 
 ---
 
-## Saving happens at boundaries, and the journal is the next step
+## Saving happens at boundaries; the timer and the versions are what is left
 
 **Now.** What a project *holds* — a model added, renamed, removed — is written as it is made. What a
 model *is* — the net drawn on its sheet — is written at **boundaries**: *File → Save* (`Ctrl+S`),
 closing a tab, closing the project, opening another, and quitting. Every open model goes into **one**
-rewrite of the archive, and a model whose bytes have not changed is not written at all. There is no
-timer, no journal and no numbered backups, so **a crash loses everything drawn since the last
-boundary**. That was accepted rather than overlooked: the journal is the next piece of work.
+rewrite of the archive, and a model whose bytes have not changed is not written at all. A **journal** beside the archive holds every change since the last save, so a session that ends badly
+loses nothing: the next opening puts the work back. What is left is the **timer** and the **numbered
+backups**; until the timer exists, work reaches the archive only at a boundary, and until the backups
+exist a saved mistake is saved.
 
 **Why not simply write more often.** The cost is not that saving is slow — it is that **a zip must be
 rewritten whole**. A single entry cannot be updated in place. Adding a model is a rare, deliberate
@@ -192,17 +193,18 @@ canvas produces hundreds of small changes a minute against an archive that may b
 
 1. **The document lives in memory**, written in full at the boundaries above — *done*. What is left is
    the **timer**: a full write every so often, its interval a preference.
-2. **Journal every mutation.** An append-only side record, one small entry per edit — O(1) rather
-   than O(project). Replayed on open if it is there, and deleted after a successful full write. This
-   is what makes a crash lose nothing while keeping writes proportionate; simply lengthening the
-   autosave interval widens the loss window without fixing the granularity.
-3. **The undo stack stays in memory only.** Recovering *to* the crash point is enough — nobody needs
-   to undo past it, and persisting undo is a great deal of machinery for almost none.
+2. **Journal every mutation** — *done*. `Bottling Line.mfstz.journal`, beside the archive as the lock
+   is, one line of JSON per change: O(1) rather than O(project). Replayed when the project is opened,
+   and deleted after a successful save. A change undone is written as its **inverse**, so replaying is
+   a straight line from the last save to what the sheet showed.
+3. **The undo stack stays in memory only** — *done*, and see *Undo dies with the session*. Recovering
+   *to* the crash point is enough: nobody needs to undo past it, and persisting undo is a great deal of
+   machinery for almost none.
 
-**Undo comes before the journal.** The journal records *operations* and undo inverts them. The editor
-exists now and undo does not, so undo is what comes next: it needs `(operation, inverse)` records and
-the journal needs `(operation)`, so building undo properly makes journalling one line per push, while
-building the journal first means writing the operation representation twice.
+**Undo came first, and that is what made the journal cheap.** The journal records *operations* and undo
+inverts them; because the operations were built first — `simtwin_core/operations.py`, every gesture a
+`Change` on a document's undo stack — writing them to a journal was one line at each push, exactly as
+was predicted here.
 
 **Two things that must not be buffered.** The **authorship history** is tiny and rare — session
 open/close, model added/updated/removed — so it was never the cost, but buffering it puts gaps in the
@@ -365,31 +367,34 @@ answer for every model.
 
 ---
 
-## Deleting is *Delete*, and there is no undo
+## Undo dies with the session, and there is no Cut, Copy or Paste
 
-**Now.** `CanvasView.delete_selection()` removes whatever is selected — guides, places, transitions
-and arcs alike — on *Delete* or *Backspace*, and `remove()` takes an item's arcs off with it. There
-is no *Edit* menu, no context menu over an item, no *Cut*, *Copy* or *Paste*, and **nothing can be
-undone**: a place deleted by accident is a place drawn again by hand, with the arcs that hung off it.
+**Now.** Every change to a net can be undone and done again — one history per open document, *Undo*
+and *Redo* in the *Edit* menu on `Ctrl+Z` and `Ctrl+Shift+Z`, acting on the tab being looked at. The
+history lives **in memory only**: closing a tab, closing the project or quitting throws it away, so a
+mistake made before the last save cannot be reached the next morning. *Edit* still holds nothing else:
+no *Cut*, no *Copy*, no *Paste*, and no *Delete* entry — deleting is the key and the context menus.
 
-**Why it was done this way.** Arcs made deleting necessary — an arc drawn by mistake has to be
-removable — but they did not make undo necessary, and undo is not a key handler. It is a command
-stack that every change to the sheet has to go through, and writing one before there is a document
-for it to restore *into* would be designing the model layer from the wrong end.
+**Why it was done this way.** Persisting undo is a great deal of machinery for almost none: what a
+person needs after a crash is their work back, not the ability to undo past it, and that is the
+journal's job (see *Saving happens at boundaries*). Cut, Copy and Paste were left until there is
+somewhere to put what is copied — a net's items carry identities, and pasting one has to decide
+whether it is the same place or a new one, which is a decision nobody has needed yet.
 
-**When it will not be enough.** As soon as a net is big enough that redrawing part of it is real
-work. Saving has arrived and undo has not, so that moment is now: a mistaken *Delete* followed by
-`Ctrl+S` is a loss that nothing can put back.
+**When it will not be enough.** Copying a subnet between two models, which is the first thing anybody
+does with a library of nets; and the day somebody wants yesterday's state back rather than the last
+saved one.
 
 **Options.**
 
-- A `QUndoStack` on the document, with every change to the net expressed as a `QUndoCommand`: add,
-  remove, move, reweight. That is the whole answer and it is the one Qt already provides; the cost is
-  that nothing may change the scene directly any more, which is a rule the code does not keep yet.
-- *Delete* only, plus a confirmation for anything that removes an item with arcs on it. Cheap, and it
-  turns a mistake into a question rather than into a loss.
-- Wait for the model document and build the two together, so that an undo restores a thing with an
-  identity rather than a new thing that looks the same.
+- *Cut*, *Copy* and *Paste* over the same operations undo is built on: a copy is a `Change` of
+  `AddNode` and `AddArc` operations with new UUIDs, which is a small thing now that operations exist.
+  Pasting into another model is then the same change applied to another document.
+- Keep the undo stack across a session of the project rather than of a tab, so that closing a tab and
+  opening it again does not forget. Cheap, and it makes *Undo* reach into a document nobody is
+  looking at, which is why it was not done.
+- Write the undo history into the journal and read it back on open. Rejected above, and recorded so
+  that it is a decision rather than an oversight.
 
 ---
 

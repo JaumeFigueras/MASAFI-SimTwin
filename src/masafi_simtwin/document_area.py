@@ -222,6 +222,13 @@ class DocumentArea(QWidget):
 
         return dict(self._documents)
 
+    @property
+    def current_document(self) -> QWidget | None:
+        """PyQt6.QtWidgets.QWidget, optional: The document being looked at, or
+        ``None`` when none is open."""
+
+        return self._tabs.currentWidget()
+
     def key_of(self, widget: QWidget) -> str | None:
         """Give the key a document was opened under.
 

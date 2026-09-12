@@ -27,6 +27,7 @@ from masafi_simtwin.documents.place import Place
 from masafi_simtwin.documents.transition import Transition
 from masafi_simtwin.project import ModelKind
 from simtwin_adapters.sim_petri import pnml
+from simtwin_core import operations
 from simtwin_core.petri_net import NetDocument
 
 #: The editor each kind of model opens as.  A kind that is absent cannot be
@@ -74,9 +75,104 @@ __all__ = [
     'Transition',
     'editor_for',
     'file_of',
+    'mark_saved',
     'load_file',
     'new_model_file',
+    'recorded_change',
+    'replay',
+    'undo_stack_of',
 ]
+
+
+def recorded_change(change) -> dict:
+    """Write a change as the plain data a journal line holds.
+
+    Parameters
+    ----------
+    change : simtwin_core.operations.Change
+        The change.
+
+    Returns
+    -------
+    dict
+        What it is, in JSON's own types.
+    """
+
+    return operations.encode(change)
+
+
+def replay(data: bytes, changes: list[dict]) -> bytes:
+    """Put back what a journal says was done to a saved model.
+
+    The model's file is read, every change of the journal is applied to what it
+    describes, and the result is written back as a file of the same kind.  No
+    editor is needed for any of it: a document is a value, and an operation
+    knows how to change one.
+
+    Parameters
+    ----------
+    data : bytes
+        The model's file, as it was last saved.
+    changes : list of dict
+        The changes, oldest first, as :func:`recorded_change` wrote them.
+
+    Returns
+    -------
+    bytes
+        The model's file as it would have been saved.
+
+    Raises
+    ------
+    ValueError
+        When the file cannot be read, a change cannot be read, or a change
+        cannot be made to the net — a journal that has been damaged is refused
+        rather than half replayed.
+    """
+
+    document = pnml.from_pnml(data)
+    for change in changes:
+        document = operations.decode(change).apply(document)
+    return pnml.to_pnml(document)
+
+
+def undo_stack_of(document: QWidget):
+    """Give the undo stack of an open document.
+
+    Every document has a history of its own — one tab, one stack — and the
+    window puts them in a group so that *Undo* acts on the one being looked at.
+
+    Parameters
+    ----------
+    document : PyQt6.QtWidgets.QWidget
+        The document.
+
+    Returns
+    -------
+    PyQt6.QtGui.QUndoStack, optional
+        Its stack, or ``None`` for a document that nothing can be undone in.
+    """
+
+    if isinstance(document, PetriNetEditor):
+        return document.undo_stack
+    return None
+
+
+def mark_saved(document: QWidget) -> None:
+    """Say that a document is as it was last written.
+
+    Its undo stack is *clean* from here until the next change, which is what a
+    tab will show a mark for, and what says a document need not be written
+    again.
+
+    Parameters
+    ----------
+    document : PyQt6.QtWidgets.QWidget
+        The document.
+    """
+
+    stack = undo_stack_of(document)
+    if stack is not None:
+        stack.setClean()
 
 
 def file_of(document: QWidget) -> bytes | None:

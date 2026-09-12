@@ -312,6 +312,16 @@ def test_a_route_is_where_the_points_are_on_the_sheet():
     assert arc(route=[[30, 25], [45.5, 18]]).route == ((30.0, 25.0), (45.5, 18.0))
 
 
+def test_the_route_is_not_part_of_what_an_arc_is():
+    """It says again, in another frame, what the points already say, and only
+    the editor can work it out — so two drawings are equal without it."""
+
+    assert arc(points=((0.5, 0.5),)) == arc(points=((0.5, 0.5),), route=((30.0, 25.0),))
+    assert arc(points=((0.5, 0.5),), route=((1.0, 2.0),)) == arc(
+        points=((0.5, 0.5),), route=((9.0, 9.0),)
+    )
+
+
 def test_a_route_that_is_not_points_is_refused():
     """A route runs through places."""
 

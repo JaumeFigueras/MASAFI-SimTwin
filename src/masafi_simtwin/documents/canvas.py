@@ -215,10 +215,33 @@ class CanvasView(QGraphicsView):
         often an empty one.  The view runs the gesture and checks that the two
         may be joined at all, and by an arc of :attr:`new_arc_kind`; making the
         arc is the document's, for the same reason a drop is.
-    arc_reshaped : PyQt6.QtCore.pyqtSignal
-        Emitted with an arc whose shape has just been changed through
-        :meth:`set_arc_shape`, which is what its context menu does, so that
-        whatever shows the shape of the selection can show it again.
+    arc_end_asked : PyQt6.QtCore.pyqtSignal
+        Emitted with an arc, which end of it was dragged, and the item and
+        connecting point it was let go on.  The sheet does not move it: that is
+        a change to the net, and a change belongs to the document.
+    deletion_asked : PyQt6.QtCore.pyqtSignal
+        Emitted with the things a person asked to have deleted — items, arcs and
+        guides together, whatever was selected or aimed at.
+    items_moved : PyQt6.QtCore.pyqtSignal
+        Emitted after a drag with every item that ended up somewhere else, as
+        ``(item, before, after)`` in scene millimetres.  Qt moves an item as it
+        is dragged, so this says what happened rather than asking.
+    guides_moved : PyQt6.QtCore.pyqtSignal
+        The same for the guides, as ``(guide, before, after)``.
+    arcs_shaped : PyQt6.QtCore.pyqtSignal
+        The same for the arcs a shaping handle was dragged on, as ``(arc,
+        before controls, before points, after controls, after points)`` in each
+        arc's own chord frame.
+    arc_shape_asked : PyQt6.QtCore.pyqtSignal
+        Emitted with an arc and the shape its context menu was used to choose.
+        The sheet does not reshape it: **what a change to a net is belongs to
+        the document**, which is what can record it so that it can be undone.
+    arc_point_asked : PyQt6.QtCore.pyqtSignal
+        Emitted with an arc and where, in scene millimetres, its context menu
+        asked for a point to be put into it.
+    arc_point_removal_asked : PyQt6.QtCore.pyqtSignal
+        Emitted with an arc and which of its points its context menu asked to
+        have taken out.
     """
 
     view_changed = pyqtSignal()
@@ -227,7 +250,14 @@ class CanvasView(QGraphicsView):
     element_dropped = pyqtSignal(str, str, QPointF)
     connection_drawn = pyqtSignal(object, object, int, int, object)
     item_activated = pyqtSignal(object)
-    arc_reshaped = pyqtSignal(object)
+    arc_shape_asked = pyqtSignal(object, object)
+    arc_end_asked = pyqtSignal(object, str, object, int)
+    deletion_asked = pyqtSignal(object)
+    items_moved = pyqtSignal(object)
+    guides_moved = pyqtSignal(object)
+    arcs_shaped = pyqtSignal(object)
+    arc_point_asked = pyqtSignal(object, QPointF)
+    arc_point_removal_asked = pyqtSignal(object, int)
 
     def __init__(self, page: QSizeF | None = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -260,6 +290,7 @@ class CanvasView(QGraphicsView):
         self._connecting_at = QPointF()
         self._connecting_pressed_at: QPointF | None = None
         self._connecting_points: list[QPointF] = []
+        self._before_drag: dict | None = None
         self._new_arc_shape = ArcShape.STRAIGHT
         self._new_arc_kind = ArcKind.NORMAL
         self.scale(PIXELS_PER_MM, PIXELS_PER_MM)
@@ -462,23 +493,24 @@ class CanvasView(QGraphicsView):
             scene.removeItem(item)
 
     def delete_selection(self) -> int:
-        """Remove everything that is selected, whatever it is.
+        """Ask for everything that is selected to be deleted, whatever it is.
 
         Guides, items and arcs alike: *Delete* acts on the selection, which is
-        the only rule that can be explained in one sentence.  An arc drawn by
-        mistake has to be removable, and that is what made this a question worth
-        answering now rather than when the *Edit* menu is built.
+        the only rule that can be explained in one sentence.  The sheet does not
+        delete any of it — deleting is a change to the net, and a change belongs
+        to the document, which is what can put it back — so this says what was
+        asked for and the document does it.
 
         Returns
         -------
         int
-            How many things there were, so that a caller can say whether
-            anything happened.
+            How many things were asked about, so that a caller can say whether
+            anything was.
         """
 
         selected = self.scene().selectedItems()
-        for item in selected:
-            self.remove(item)
+        if selected:
+            self.deletion_asked.emit(selected)
         return len(selected)
 
     def delete_selected_guides(self) -> int:
@@ -675,11 +707,15 @@ class CanvasView(QGraphicsView):
 
         menu.addSeparator()
         delete = menu.addAction(self.tr('Delete Arc'))
-        delete.triggered.connect(lambda: self.remove(arc))
+        delete.triggered.connect(lambda: self.deletion_asked.emit([arc]))
         return menu
 
     def set_arc_shape(self, arc: Arc, shape: ArcShape) -> None:
-        """Draw one arc straight or curved from now on.
+        """Ask for one arc to be drawn straight or curved from now on.
+
+        The sheet does not reshape it.  A change to a net is the document's —
+        it is the document that knows how to record one so that it can be
+        undone — so this says what was asked for and nothing more.
 
         Kept as a method rather than written into the menu so that the menu is
         the only thing a test of the menu has to drive.
@@ -692,16 +728,14 @@ class CanvasView(QGraphicsView):
             Which shape.
         """
 
-        arc.shape_kind = shape
-        self.arc_reshaped.emit(arc)
+        self.arc_shape_asked.emit(arc, shape)
 
     def add_arc_point(self, arc: Arc, at: QPointF) -> None:
-        """Put another point into an arc, where the menu was opened, and leave
-        the arc in hand.
+        """Ask for another point to be put into an arc, where the menu was
+        opened.
 
-        Kept as a method rather than written into the menu, the way
-        :meth:`set_arc_shape` is, so that the menu is the only thing a test of
-        the menu has to drive.
+        The document puts it in — see :meth:`set_arc_shape` — and leaves the arc
+        in hand afterwards.
 
         Parameters
         ----------
@@ -711,11 +745,13 @@ class CanvasView(QGraphicsView):
             Where it was aimed at, in scene millimetres.
         """
 
-        arc.insert_point(at)
-        self.work_on(arc)
+        self.arc_point_asked.emit(arc, at)
 
     def remove_arc_point(self, arc: Arc, index: int) -> None:
-        """Take one point out of an arc again, and leave the arc in hand.
+        """Ask for one point of an arc to be taken out again.
+
+        The document takes it out — see :meth:`set_arc_shape` — and leaves the
+        arc in hand afterwards.
 
         Parameters
         ----------
@@ -725,8 +761,7 @@ class CanvasView(QGraphicsView):
             Which of its points, counting from the source.
         """
 
-        arc.remove_point(index)
-        self.work_on(arc)
+        self.arc_point_removal_asked.emit(arc, index)
 
     def work_on(self, arc: Arc) -> None:
         """Leave one arc selected, and nothing else.
@@ -773,9 +808,9 @@ class CanvasView(QGraphicsView):
         menu = QMenu(self)
         if guide is not None:
             delete = menu.addAction(self.tr('Delete Guide'))
-            delete.triggered.connect(lambda: self.remove_guide(guide))
+            delete.triggered.connect(lambda: self.deletion_asked.emit([guide]))
         clear = menu.addAction(self.tr('Delete All Guides'))
-        clear.triggered.connect(self.clear_guides)
+        clear.triggered.connect(lambda: self.deletion_asked.emit(list(self.guides)))
         return menu
 
     # ------------------------------------------------------------------
@@ -1336,7 +1371,7 @@ class CanvasView(QGraphicsView):
 
         if moving is not None:
             arc, end = moving
-            arc.reattach(end, target, arriving)
+            self.arc_end_asked.emit(arc, end, target, arriving)
             return True
 
         self.connection_drawn.emit(source, target, leaving, arriving, points)
@@ -1485,6 +1520,7 @@ class CanvasView(QGraphicsView):
             return
 
         if event.button() == Qt.MouseButton.LeftButton:
+            self._remember_before_a_drag()
             spot = event.position().toPoint()
             if self._connecting_from is not None:
                 self._press_while_connecting(spot, event.position())
@@ -1610,6 +1646,8 @@ class CanvasView(QGraphicsView):
             return
 
         super().mouseReleaseEvent(event)
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._report_a_drag()
 
     def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802  (Qt naming)
         """Say what was double-clicked, so that the document can open it.
@@ -1626,6 +1664,66 @@ class CanvasView(QGraphicsView):
             event.accept()
             return
         super().mouseDoubleClickEvent(event)
+
+    def _remember_before_a_drag(self) -> None:
+        """Note where everything is, before a press that may drag something.
+
+        Qt moves an item, a guide or a shaping handle as the pointer moves, so
+        what a drag *did* can only be told by having looked before it.  The
+        whole sheet is noted rather than only what is selected: a press selects
+        what it lands on, so what is about to move is not yet known.
+        """
+
+        self._before_drag = {
+            'items': {
+                item: (item.pos().x(), item.pos().y())
+                for item in self.scene().items()
+                if isinstance(item, NetItem)
+            },
+            'guides': {guide: guide.position for guide in self.guides},
+            'arcs': {
+                arc: (arc.control_frames, arc.point_frames)
+                for arc in self.scene().items()
+                if isinstance(arc, Arc)
+            },
+        }
+
+    def _report_a_drag(self) -> None:
+        """Say what a drag moved or shaped, once the button is up.
+
+        Nothing is said when nothing moved, so a plain click on an item — which
+        selects it and moves it nowhere — is not a change to be undone.
+        """
+
+        before = self._before_drag
+        self._before_drag = None
+        if before is None:
+            return
+
+        moved = [
+            (item, was, (item.pos().x(), item.pos().y()))
+            for item, was in before['items'].items()
+            if item.scene() is self.scene() and was != (item.pos().x(), item.pos().y())
+        ]
+        if moved:
+            self.items_moved.emit(moved)
+
+        guides = [
+            (guide, was, guide.position)
+            for guide, was in before['guides'].items()
+            if guide.scene() is self.scene() and was != guide.position
+        ]
+        if guides:
+            self.guides_moved.emit(guides)
+
+        shaped = [
+            (arc, was[0], was[1], arc.control_frames, arc.point_frames)
+            for arc, was in before['arcs'].items()
+            if arc.scene() is self.scene()
+            and was != (arc.control_frames, arc.point_frames)
+        ]
+        if shaped:
+            self.arcs_shaped.emit(shaped)
 
     def _dragged_since_press(self, position) -> bool:
         """Say whether the pointer has moved far enough to count as a drag.
@@ -1867,6 +1965,11 @@ class Canvas(QWidget):
 
     Notes
     -----
+    A guide dragged off a ruler and kept is reported to
+    :meth:`Canvas.guide_drawn`, which a document overrides to record it — the
+    sheet makes the guide, and what a change to the drawing *is* belongs to the
+    document.
+
     A guide is made by pressing on a ruler and dragging onto the sheet.  The
     canvas makes it on the press and moves it with the pointer, so that what is
     being dragged is the guide itself rather than a preview of one; letting go
@@ -2059,7 +2162,21 @@ class Canvas(QWidget):
 
         if self._new_guide is not None and not over_sheet:
             self.view.remove_guide(self._new_guide)
+        elif self._new_guide is not None:
+            self.guide_drawn(self._new_guide)
         self._new_guide = None
+
+    def guide_drawn(self, guide: Guide) -> None:
+        """Say that a guide has just been pulled off a ruler and kept.
+
+        Nothing here: a bare sheet has nowhere to record it.  A document
+        overrides this to put the guide on its undo stack.
+
+        Parameters
+        ----------
+        guide : masafi_simtwin.documents.guide.Guide
+            The guide, already on the sheet.
+        """
 
     # ------------------------------------------------------------------
     # Keeping the rulers on the sheet

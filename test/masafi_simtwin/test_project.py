@@ -1135,6 +1135,94 @@ def test_only_the_petri_net_can_be_built_yet():
 
 
 # ----------------------------------------------------------------------
+# The journal
+# ----------------------------------------------------------------------
+
+
+def test_the_journal_lies_beside_the_project(created):
+    """Where the lock is, and for the same reason: a zip cannot be appended to."""
+
+    assert project.journal_path(created).name == 'Bottling Line.mfstz.journal'
+    assert project.journal_path(created).parent == created.parent
+
+
+def test_a_project_that_was_saved_and_closed_has_no_journal(created):
+    """Nothing to replay is the ordinary case, not an error."""
+
+    assert not project.journal_path(created).exists()
+    assert project.read_journal(created) == []
+
+
+def test_entries_are_written_and_read_back_in_order(created):
+    """One line each, oldest first."""
+
+    project.append_to_journal(created, {'model': 'm', 'change': {'op': 'one'}})
+    project.append_to_journal(created, {'model': 'm', 'change': {'op': 'two'}})
+
+    assert project.read_journal(created) == [
+        {'model': 'm', 'change': {'op': 'one'}},
+        {'model': 'm', 'change': {'op': 'two'}},
+    ]
+
+
+def test_the_project_does_not_read_what_an_entry_means(created):
+    """As it does not read what a model's file holds."""
+
+    project.append_to_journal(created, {'anything': [1, 2, {'at': 'all'}]})
+
+    assert project.read_journal(created) == [{'anything': [1, 2, {'at': 'all'}]}]
+
+
+def test_an_entry_is_a_line_added_at_the_end(created):
+    """Which is the whole point: what came before is not rewritten."""
+
+    project.append_to_journal(created, {'first': True})
+    before = project.journal_path(created).read_bytes()
+    project.append_to_journal(created, {'second': True})
+
+    assert project.journal_path(created).read_bytes().startswith(before)
+
+
+def test_a_half_written_last_line_ends_the_reading(created):
+    """What a crash leaves behind: replaying a change that was never finished
+    would be worse than stopping where the record stops."""
+
+    project.append_to_journal(created, {'model': 'm', 'change': {'op': 'one'}})
+    with project.journal_path(created).open('a', encoding='utf-8') as journal:
+        journal.write('{"model": "m", "chan')
+
+    assert project.read_journal(created) == [{'model': 'm', 'change': {'op': 'one'}}]
+
+
+def test_a_journal_that_cannot_be_read_at_all_is_reported(created):
+    """A broken journal is worth saying, unlike a missing one."""
+
+    project.journal_path(created).write_bytes(b'\xff\xfe not text\n')
+
+    with pytest.raises(project.ProjectError, match='could not be read'):
+        project.read_journal(created)
+
+
+def test_clearing_the_journal_leaves_nothing_behind(created):
+    """Which is what a save does: the project now holds what it said."""
+
+    project.append_to_journal(created, {'model': 'm'})
+
+    project.clear_journal(created)
+
+    assert not project.journal_path(created).exists()
+    assert project.read_journal(created) == []
+
+
+def test_clearing_a_journal_that_is_not_there_is_harmless(created):
+    """Saving a project nobody has changed."""
+
+    project.clear_journal(created)
+
+    assert project.read_journal(created) == []
+
+
+# ----------------------------------------------------------------------
 # One holder at a time
 # ----------------------------------------------------------------------
 

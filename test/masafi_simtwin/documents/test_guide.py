@@ -219,18 +219,36 @@ def test_a_guide_can_be_selected(canvas):
     assert guide.flags() & Guide.GraphicsItemFlag.ItemIsSelectable
 
 
-def test_delete_removes_the_selected_guides(canvas):
-    """And leaves the ones that were not selected where they are."""
+def test_delete_asks_for_the_selected_guides_to_go(canvas):
+    """The sheet does not delete: deleting is a change to the drawing, and a
+    change belongs to the document, which is what can put it back."""
 
     first = canvas.add_guide(Qt.Orientation.Horizontal, 10.0)
     canvas.add_guide(Qt.Orientation.Vertical, 20.0)
     first.setSelected(True)
+    asked = []
+    canvas.view.deletion_asked.connect(asked.append)
 
     canvas.view.keyPressEvent(
         QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Delete, Qt.KeyboardModifier.NoModifier)
     )
 
-    assert [guide.orientation for guide in canvas.guides] == [Qt.Orientation.Vertical]
+    assert asked == [[first]]
+    assert len(canvas.guides) == 2
+
+
+def test_delete_removes_the_selected_guides(editor):
+    """And leaves the ones that were not selected where they are."""
+
+    first = editor.add_guide(Qt.Orientation.Horizontal, 10.0)
+    editor.add_guide(Qt.Orientation.Vertical, 20.0)
+    first.setSelected(True)
+
+    editor.view.keyPressEvent(
+        QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Delete, Qt.KeyboardModifier.NoModifier)
+    )
+
+    assert [guide.orientation for guide in editor.guides] == [Qt.Orientation.Vertical]
 
 
 def test_delete_with_nothing_selected_removes_nothing(canvas):

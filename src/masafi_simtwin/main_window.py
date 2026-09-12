@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 
 from PyQt6.QtCore import QSettings, QSize, Qt
-from PyQt6.QtGui import QAction, QKeySequence
+from PyQt6.QtGui import QAction, QKeySequence, QUndoGroup
 from PyQt6.QtWidgets import (
     QApplication,
     QDialog,
@@ -75,7 +75,15 @@ class MainWindow(QMainWindow):
         self._project_name: str = ''
         self._project_path: str | None = None
         self._session_started: float = 0.0
+        #: Said once per project rather than at every stroke: a journal that
+        #: cannot be written fails on every change, and a status bar repeating
+        #: itself is a status bar nobody reads.
+        self._journal_failed: bool = False
         self._recent_projects: list[str] = self._load_recent_projects()
+
+        #: One history per open document, and the group that says which of them
+        #: *Undo* acts on: the one being looked at.
+        self._undo_group = QUndoGroup(self)
 
         self._create_actions()
         self._create_top_bar()
@@ -108,6 +116,14 @@ class MainWindow(QMainWindow):
 
         self.clear_recent_projects_action = QAction(self.tr('Clear Recent Projects'), self)
         self.clear_recent_projects_action.triggered.connect(self.clear_recent_projects)
+
+        self.undo_action = self._undo_group.createUndoAction(self, self.tr('Undo'))
+        self.undo_action.setShortcut(QKeySequence.StandardKey.Undo)
+        self.addAction(self.undo_action)
+
+        self.redo_action = self._undo_group.createRedoAction(self, self.tr('Redo'))
+        self.redo_action.setShortcut(QKeySequence('Ctrl+Shift+Z'))
+        self.addAction(self.redo_action)
 
         self.save_action = QAction(self.tr('Save'), self)
         self.save_action.setShortcut(QKeySequence.StandardKey.Save)
@@ -219,12 +235,12 @@ class MainWindow(QMainWindow):
         file_menu.addAction(self.quit_action)
 
         edit_menu = menu_bar.addMenu(self.tr('&Edit'))
+        edit_menu.addAction(self.undo_action)
+        edit_menu.addAction(self.redo_action)
+        edit_menu.addSeparator()
         self._add_placeholder_actions(
             edit_menu,
             [
-                self.tr('Undo'),
-                self.tr('Redo'),
-                None,
                 self.tr('Cut'),
                 self.tr('Copy'),
                 self.tr('Paste'),
@@ -562,6 +578,7 @@ class MainWindow(QMainWindow):
         self._end_session()
         self._document_area.close_all_documents()
         self._project_path = path
+        self._journal_failed = False
         self._session_started = time.monotonic()
         self._record(path, project.EVENT_OPENED)
 
@@ -575,6 +592,7 @@ class MainWindow(QMainWindow):
         self.show_pane('project')
         self._remember_project(path)
         self.statusBar().showMessage(self.tr('Opened {0}').format(path), 4000)
+        self._recover(path)
 
     def _last_location(self) -> str:
         """Give the directory to offer first in a project dialog.
@@ -1017,6 +1035,10 @@ class MainWindow(QMainWindow):
             key=identifier,
             tool_tip=model.get('file', ''),
         )
+        stack = documents.undo_stack_of(editor)
+        if stack is not None:
+            self._undo_group.addStack(stack)
+        editor.change_recorded.connect(self._on_change_recorded)
 
     # ------------------------------------------------------------------
     # Saving
@@ -1085,7 +1107,106 @@ class MainWindow(QMainWindow):
                 project.write_models(self._project_path, contents)
             except project.ProjectError as error:
                 problems.extend(self._not_saved(key, error) for key in contents)
+            else:
+                for key in contents:
+                    documents.mark_saved(self._document_area.document(key))
+                project.clear_journal(self._project_path)
         return problems
+
+    def _on_change_recorded(self, model: str, change) -> None:
+        """Write to the journal every change that reaches a sheet.
+
+        As it is made, not at the next save: that is the whole of what a journal
+        is for.  A change undone arrives here as its inverse, so the journal is
+        a straight line from the last save to what the sheet shows now.
+
+        Connected as a bound method rather than as a lambda, the signal
+        belonging to a document this window outlives.
+
+        Parameters
+        ----------
+        model : str
+            The UUID of the model the change was made to.
+        change : simtwin_core.operations.Change
+            What the net has become.
+        """
+
+        if self._project_path is None:
+            return
+        try:
+            project.append_to_journal(
+                self._project_path,
+                {'model': model, 'change': documents.recorded_change(change)},
+            )
+        except project.ProjectError:
+            if not self._journal_failed:
+                self._journal_failed = True
+                self._report(
+                    self.tr(
+                        'The journal could not be written, so work will not be '
+                        'recovered if the application stops'
+                    )
+                )
+
+    def _recover(self, path: str) -> None:
+        """Put back the work a journal says was never saved.
+
+        A journal beside a project is what a session that ended badly leaves
+        behind.  Every model it names is read from the project, the changes are
+        applied to it, and the model is opened showing the work that was done —
+        **and not saved**: what is put back is shown first, and written at the
+        next save like anything else, so that a person sees it before it is
+        kept.  The journal stays until then.
+
+        Parameters
+        ----------
+        path : str
+            The project file.
+        """
+
+        try:
+            entries = project.read_journal(path)
+        except project.ProjectError as error:
+            QMessageBox.warning(self, self.tr('Some work could not be put back'), str(error))
+            return
+        if not entries:
+            return
+
+        changes: dict[str, list] = {}
+        for entry in entries:
+            changes.setdefault(str(entry.get('model', '')), []).append(entry.get('change'))
+
+        recovered, problems = [], []
+        for identifier, made in changes.items():
+            model = self._model(identifier)
+            if model is None:
+                continue
+            try:
+                data = documents.replay(project.read_model(path, identifier), made)
+            except (project.ProjectError, ValueError) as error:
+                problems.append(
+                    self.tr('{0} could not be put back: {1}').format(
+                        model.get('name', identifier), error
+                    )
+                )
+                continue
+            self.open_model(identifier)
+            document = self._document_area.document(identifier)
+            if document is None:
+                continue
+            documents.load_file(document, data)
+            recovered.append(model.get('name', identifier))
+
+        if recovered:
+            self._report(
+                self.tr('Work that was not saved has been put back: {0}').format(
+                    ', '.join(recovered)
+                )
+            )
+        if problems:
+            QMessageBox.warning(
+                self, self.tr('Some work could not be put back'), '\n'.join(problems)
+            )
 
     def _not_saved(self, key: str, error: Exception) -> str:
         """Say that one model was not saved, and why.
@@ -1336,7 +1457,11 @@ class MainWindow(QMainWindow):
             action.setChecked(visible)
 
     def _on_document_changed(self, title: str) -> None:
-        """Show the current document in the status bar.
+        """Show the current document in the status bar, and undo in it.
+
+        Every document has a history of its own, so *Undo* and *Redo* follow the
+        tab being looked at: the group's active stack is the current document's,
+        and none at all when the last tab closes.
 
         Parameters
         ----------
@@ -1345,3 +1470,6 @@ class MainWindow(QMainWindow):
         """
 
         self._document_label.setText(title or self.tr('No document'))
+        self._undo_group.setActiveStack(
+            documents.undo_stack_of(self._document_area.current_document)
+        )

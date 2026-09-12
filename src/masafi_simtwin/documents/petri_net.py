@@ -45,8 +45,10 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
+from uuid import uuid4
 
-from PyQt6.QtCore import QPointF, Qt
+from PyQt6.QtCore import QPointF, Qt, pyqtSignal
+from PyQt6.QtGui import QUndoCommand, QUndoStack
 from PyQt6.QtWidgets import QDialog, QGraphicsItem, QWidget
 
 from masafi_simtwin.dialogs.arc import ArcDialog
@@ -59,10 +61,28 @@ from masafi_simtwin.documents.arc import (
 )
 from masafi_simtwin.documents.arc_toolbar import ArcToolBar
 from masafi_simtwin.documents.canvas import Canvas
+from masafi_simtwin.documents.guide import Guide
 from masafi_simtwin.documents.net_item import NetItem
 from masafi_simtwin.documents.place import Place
 from masafi_simtwin.documents.ruler import MILLIMETRES, RulerUnit
 from masafi_simtwin.documents.transition import Transition
+from simtwin_core.operations import (
+    AddArc,
+    AddGuide,
+    AddNode,
+    Change,
+    MoveArcEnd,
+    MoveGuide,
+    MoveNode,
+    Operation,
+    RemoveArc,
+    RemoveGuide,
+    RemoveNode,
+    SetArcBends,
+    SetArcKind,
+    SetArcShape,
+    SetArcWeight,
+)
 from simtwin_core.petri_net import (
     ArcData,
     GuideData,
@@ -93,6 +113,11 @@ GUIDE_ORIENTATIONS: dict[Qt.Orientation, str] = {
     Qt.Orientation.Vertical: 'vertical',
 }
 
+#: The same the other way round, for a guide read out of one.
+GUIDE_WAYS: dict[str, Qt.Orientation] = {
+    text: orientation for orientation, text in GUIDE_ORIENTATIONS.items()
+}
+
 
 def drawn_route(arc: Arc) -> tuple:
     """Give where the points an arc is led through are on the sheet.
@@ -118,6 +143,29 @@ def drawn_route(arc: Arc) -> tuple:
     return tuple((point.x(), point.y()) for point in arc.curve_points())
 
 
+def _bends(arc: Arc, before) -> list:
+    """Give the operation that says how an arc bends now, when it has changed.
+
+    Parameters
+    ----------
+    arc : masafi_simtwin.documents.arc.Arc
+        The arc.
+    before : tuple
+        Its control points and its points before, in the chord's frame.
+
+    Returns
+    -------
+    list
+        One :class:`~simtwin_core.operations.SetArcBends`, or nothing when the
+        arc bends as it did.
+    """
+
+    after = (arc.control_frames, arc.point_frames)
+    if after == before:
+        return []
+    return [SetArcBends(arc.uuid, before[0], before[1], after[0], after[1])]
+
+
 def held_port(index: int | None, item: NetItem) -> int | None:
     """Hold a connecting point read from a document to the ones a node has.
 
@@ -136,6 +184,128 @@ def held_port(index: int | None, item: NetItem) -> int | None:
     """
 
     return None if index is None else min(index, len(item.ports()) - 1)
+
+
+def node_data(item: NetItem):
+    """Describe a place or a transition as it stands on the sheet.
+
+    Parameters
+    ----------
+    item : masafi_simtwin.documents.net_item.NetItem
+        The item.
+
+    Returns
+    -------
+    simtwin_core.petri_net.PlaceData or simtwin_core.petri_net.TransitionData
+        What it is: its identity, its name and where its centre is.
+    """
+
+    described = PlaceData if isinstance(item, Place) else TransitionData
+    return described(item.uuid, item.name, (item.pos().x(), item.pos().y()))
+
+
+def guide_data(guide: Guide) -> GuideData:
+    """Describe a guide as it lies on the sheet.
+
+    Parameters
+    ----------
+    guide : masafi_simtwin.documents.guide.Guide
+        The guide.
+
+    Returns
+    -------
+    simtwin_core.petri_net.GuideData
+        Which way it lies and where it is.
+    """
+
+    return GuideData(GUIDE_ORIENTATIONS[guide.orientation], guide.position)
+
+
+def arc_data(arc: Arc) -> ArcData:
+    """Describe an arc as it is drawn.
+
+    Parameters
+    ----------
+    arc : masafi_simtwin.documents.arc.Arc
+        The arc.
+
+    Returns
+    -------
+    simtwin_core.petri_net.ArcData
+        What it is, bends and all — never *untouched*, because an arc on a
+        sheet is always drawn some way, and an operation must say which.
+    """
+
+    return ArcData(
+        arc.uuid,
+        arc.source.uuid,
+        arc.target.uuid,
+        arc.source_port,
+        arc.target_port,
+        arc.weight,
+        arc.kind.value,
+        arc.shape_kind.value,
+        arc.control_frames,
+        arc.point_frames,
+        drawn_route(arc),
+    )
+
+
+class EditCommand(QUndoCommand):
+    """One change of a net, on a sheet's undo stack.
+
+    Parameters
+    ----------
+    editor : PetriNetEditor
+        The document whose sheet the change is made on.
+    change : simtwin_core.operations.Change
+        What the change is.
+    text : str
+        What it is called where a person reads it: *Undo Draw Arc*.
+    applied : bool, optional
+        Whether the sheet already shows the change.  It does whenever a person
+        made it by hand — the item is already where it was dragged to, the arc
+        already drawn — and a stack pushes a command by **doing** it, so the
+        first doing is passed over rather than made twice.
+    parent : PyQt6.QtGui.QUndoCommand, optional
+        Parent command.
+    """
+
+    def __init__(self, editor, change: Change, text: str, applied: bool = False, parent=None):
+        super().__init__(text, parent)
+        self._editor = editor
+        self._change = change
+        self._done = applied
+
+    @property
+    def change(self) -> Change:
+        """simtwin_core.operations.Change: What the command does."""
+
+        return self._change
+
+    def redo(self) -> None:
+        """Make the change, or pass over the first time when it is already made.
+
+        Either way it is **reported**: the sheet now shows it, whether this
+        command put it there or the gesture did.
+        """
+
+        if self._done:
+            self._done = False
+        else:
+            self._editor.apply(self._change)
+        self._editor.report_change(self._change)
+
+    def undo(self) -> None:
+        """Put the change back, and report the inverse.
+
+        An undo is not a special kind of entry in a journal: it is the change
+        that undoes it, so that replaying is a straight line from the last save
+        to what the sheet shows now.
+        """
+
+        self._editor.apply(self._change.inverse())
+        self._editor.report_change(self._change.inverse())
 
 
 def reading_order(name: str) -> list:
@@ -182,7 +352,14 @@ class PetriNetEditor(Canvas):
         The manifest entry the editor was opened for.
     arc_tool_bar : masafi_simtwin.documents.arc_toolbar.ArcToolBar
         The bar the shape and the kind of an arc are chosen on.
+    change_recorded : PyQt6.QtCore.pyqtSignal
+        Emitted with this model's UUID and every change that reaches the sheet:
+        a gesture, a change done again, and — as its **inverse** — a change
+        undone.  So what it says is the stream of what the net has actually
+        become, which is what a journal writes and replays.
     """
+
+    change_recorded = pyqtSignal(str, object)
 
     def __init__(
         self,
@@ -195,13 +372,21 @@ class PetriNetEditor(Canvas):
         self.model = dict(model or {})
         self.view.empty_note = self.tr('Drag an element out of the Libraries pane')
 
+        self.undo_stack = QUndoStack(self)
         self.arc_tool_bar = ArcToolBar(self)
         self.add_tool_bar(self.arc_tool_bar)
 
         self.view.element_dropped.connect(self._on_element_dropped)
         self.view.connection_drawn.connect(self._on_connection_drawn)
         self.view.item_activated.connect(self._on_item_activated)
-        self.view.arc_reshaped.connect(self._on_arc_reshaped)
+        self.view.arc_shape_asked.connect(self._on_arc_shape_asked)
+        self.view.arc_end_asked.connect(self._on_arc_end_asked)
+        self.view.deletion_asked.connect(self._on_deletion_asked)
+        self.view.items_moved.connect(self._on_items_moved)
+        self.view.guides_moved.connect(self._on_guides_moved)
+        self.view.arcs_shaped.connect(self._on_arcs_shaped)
+        self.view.arc_point_asked.connect(self._on_arc_point_asked)
+        self.view.arc_point_removal_asked.connect(self._on_arc_point_removal_asked)
         self.arc_tool_bar.shape_chosen.connect(self._on_shape_chosen)
         self.arc_tool_bar.kind_chosen.connect(self._on_kind_chosen)
         self.scene().selectionChanged.connect(self._on_selection_changed)
@@ -238,8 +423,10 @@ class PetriNetEditor(Canvas):
 
         item = factory(self.view.snap, self.view.sceneRect)
         item.name = self.next_name(item.NAME_PREFIX)
+        item.uuid = str(uuid4())
         self.scene().addItem(item)
         item.setPos(position)
+        self.record(Change('add-element', (AddNode(node_data(item)),)))
         return item
 
     @property
@@ -361,6 +548,7 @@ class PetriNetEditor(Canvas):
             snap=self.view.snap,
         )
         self.scene().addItem(arc)
+        self.record(Change('draw-arc', (AddArc(arc_data(arc)),)))
         return arc
 
     def items_of(self, kind: type) -> list:
@@ -457,8 +645,7 @@ class PetriNetEditor(Canvas):
         """
 
         self.view.new_arc_shape = shape
-        for arc in self.selected_arcs:
-            self.view.set_arc_shape(arc, shape)
+        self.reshape_arcs(self.selected_arcs, shape)
         self.show_arc_choice()
 
     def choose_arc_kind(self, kind: ArcKind) -> None:
@@ -475,8 +662,12 @@ class PetriNetEditor(Canvas):
         """
 
         self.view.new_arc_kind = kind
+        operations = []
         for arc in self.selected_arcs:
-            arc.set_kind(kind)
+            was = arc.kind.value
+            if arc.set_kind(kind):
+                operations.append(SetArcKind(arc.uuid, was, kind.value))
+        self.record(Change('set-arc-kind', tuple(operations)))
         self.show_arc_choice()
 
     def show_arc_choice(self) -> None:
@@ -545,16 +736,329 @@ class PetriNetEditor(Canvas):
 
         self.show_arc_choice()
 
-    def _on_arc_reshaped(self, arc: Arc) -> None:
-        """Show an arc reshaped from its context menu, if it is selected.
+    def reshape_arcs(self, arcs, shape: ArcShape) -> None:
+        """Draw some arcs in a shape, and record it as one change.
+
+        Choosing a shape is a **gesture**: an arc that is led through points and
+        has none is given that shape's own, so a shape named after its look
+        looks like it at once.  What the change records is what the arc then
+        *is* — the shape, and the points if they were seeded — so undoing gives
+        back what was there rather than what a default happens to be later.
+
+        Parameters
+        ----------
+        arcs : collections.abc.Iterable of masafi_simtwin.documents.arc.Arc
+            The arcs.
+        shape : masafi_simtwin.documents.arc.ArcShape
+            The shape.
+        """
+
+        operations = []
+        for arc in arcs:
+            was_shape = arc.shape_kind.value
+            bends = (arc.control_frames, arc.point_frames)
+            arc.shape_kind = shape
+            if arc.shape_kind.value != was_shape:
+                operations.append(SetArcShape(arc.uuid, was_shape, arc.shape_kind.value))
+            operations.extend(_bends(arc, bends))
+        self.record(Change('set-arc-shape', tuple(operations)))
+
+    def insert_arc_point(self, arc: Arc, at: QPointF) -> None:
+        """Put another point into an arc, and record it.
 
         Parameters
         ----------
         arc : masafi_simtwin.documents.arc.Arc
             The arc.
+        at : PyQt6.QtCore.QPointF
+            Where it was aimed at, in scene millimetres.
         """
 
+        bends = (arc.control_frames, arc.point_frames)
+        arc.insert_point(at)
+        self.record(Change('add-arc-point', tuple(_bends(arc, bends))))
+
+    def take_arc_point_out(self, arc: Arc, index: int) -> None:
+        """Take one point out of an arc, and record it.
+
+        Parameters
+        ----------
+        arc : masafi_simtwin.documents.arc.Arc
+            The arc.
+        index : int
+            Which of its points, counting from the source.
+        """
+
+        bends = (arc.control_frames, arc.point_frames)
+        arc.remove_point(index)
+        self.record(Change('remove-arc-point', tuple(_bends(arc, bends))))
+
+    def guide_drawn(self, guide) -> None:
+        """Record a guide pulled off a ruler, once it has been kept.
+
+        Parameters
+        ----------
+        guide : masafi_simtwin.documents.guide.Guide
+            The guide, already on the sheet.
+        """
+
+        self.record(Change('add-guide', (AddGuide(guide_data(guide)),)))
+
+    def _on_items_moved(self, moves) -> None:
+        """Record a drag of one or more items as one change.
+
+        Parameters
+        ----------
+        moves : list
+            ``(item, before, after)`` for each item that ended up somewhere
+            else, in scene millimetres.
+        """
+
+        self.record(
+            Change(
+                'move-items',
+                tuple(MoveNode(item.uuid, was, now) for item, was, now in moves),
+            )
+        )
+
+    def _on_guides_moved(self, moves) -> None:
+        """Record a drag of one or more guides as one change.
+
+        Parameters
+        ----------
+        moves : list
+            ``(guide, before, after)`` for each guide that moved.
+        """
+
+        self.record(
+            Change(
+                'move-guide',
+                tuple(
+                    MoveGuide(
+                        GuideData(GUIDE_ORIENTATIONS[guide.orientation], was),
+                        GuideData(GUIDE_ORIENTATIONS[guide.orientation], now),
+                    )
+                    for guide, was, now in moves
+                ),
+            )
+        )
+
+    def _on_arcs_shaped(self, shaped) -> None:
+        """Record a drag of a shaping handle.
+
+        Parameters
+        ----------
+        shaped : list
+            ``(arc, before controls, before points, after controls, after
+            points)`` for each arc that was shaped.
+        """
+
+        self.record(
+            Change(
+                'shape-arc',
+                tuple(
+                    SetArcBends(arc.uuid, was_controls, was_points, controls, points)
+                    for arc, was_controls, was_points, controls, points in shaped
+                ),
+            )
+        )
+
+    def _on_arc_end_asked(self, arc: Arc, end: str, item, port: int) -> None:
+        """Put one end of an arc on another connecting point, and record it.
+
+        The change is **not** made yet — the sheet only asked — so it is pushed
+        to be done, which is what does it.
+
+        Parameters
+        ----------
+        arc : masafi_simtwin.documents.arc.Arc
+            The arc.
+        end : str
+            ``source`` or ``target``.
+        item : masafi_simtwin.documents.net_item.NetItem
+            What that end is to be put on.
+        port : int
+            Which of its connecting points.
+        """
+
+        was_item = arc.source if end == 'source' else arc.target
+        was_port = arc.source_port if end == 'source' else arc.target_port
+        if was_item is item and was_port == port:
+            return
+        self.push(
+            Change(
+                'move-arc-end',
+                (MoveArcEnd(arc.uuid, end, was_item.uuid, was_port, item.uuid, port),),
+            )
+        )
+
+    def _on_deletion_asked(self, items) -> None:
+        """Delete what a person asked to be rid of, and record it as one change.
+
+        An item takes its arcs with it, and they are taken out **before** it, so
+        that undoing puts the item back before the arcs that hang on it.  The
+        change is not made yet, so it is pushed to be done.
+
+        Parameters
+        ----------
+        items : list
+            The items, arcs and guides asked about, in no particular order.
+        """
+
+        arcs: list[Arc] = []
+        nodes: list[NetItem] = []
+        guides: list = []
+        for item in items:
+            if isinstance(item, Arc):
+                arcs.append(item)
+            elif isinstance(item, NetItem):
+                nodes.append(item)
+                arcs.extend(item.arcs)
+            elif isinstance(item, Guide):
+                guides.append(item)
+
+        taken: list[Arc] = []
+        for arc in arcs:
+            if arc not in taken:
+                taken.append(arc)
+
+        operations = [RemoveArc(arc_data(arc)) for arc in taken]
+        operations += [RemoveNode(node_data(item)) for item in nodes]
+        operations += [RemoveGuide(guide_data(guide)) for guide in guides]
+        self.push(Change('delete', tuple(operations)))
+
+    def _on_arc_shape_asked(self, arc: Arc, shape: ArcShape) -> None:
+        """Draw an arc in the shape its context menu chose.
+
+        Connected as a bound method rather than as a lambda, for the reason
+        :meth:`_on_element_dropped` is.
+
+        Parameters
+        ----------
+        arc : masafi_simtwin.documents.arc.Arc
+            The arc.
+        shape : masafi_simtwin.documents.arc.ArcShape
+            The shape.
+        """
+
+        self.reshape_arcs([arc], shape)
         self.show_arc_choice()
+
+    def _on_arc_point_asked(self, arc: Arc, at: QPointF) -> None:
+        """Put a point into an arc, and leave the arc in hand.
+
+        Parameters
+        ----------
+        arc : masafi_simtwin.documents.arc.Arc
+            The arc.
+        at : PyQt6.QtCore.QPointF
+            Where the menu was opened, in scene millimetres.
+        """
+
+        self.insert_arc_point(arc, at)
+        self.view.work_on(arc)
+
+    def _on_arc_point_removal_asked(self, arc: Arc, index: int) -> None:
+        """Take a point out of an arc, and leave the arc in hand.
+
+        Parameters
+        ----------
+        arc : masafi_simtwin.documents.arc.Arc
+            The arc.
+        index : int
+            Which point.
+        """
+
+        self.take_arc_point_out(arc, index)
+        self.view.work_on(arc)
+
+    # ------------------------------------------------------------------
+    # What can be undone
+    # ------------------------------------------------------------------
+
+    def record(self, change: Change) -> None:
+        """Put a change a gesture has **already made** on the undo stack.
+
+        Every gesture does the thing and then says what it did, rather than
+        saying what it is about to do: the sheet has the last word on where an
+        item lands — it is snapped, and held inside the paper — so recording
+        afterwards is the only way the stack cannot disagree with the drawing.
+
+        A change of no operations is not recorded: a gesture that turned out to
+        change nothing is not an entry to undo.
+
+        Parameters
+        ----------
+        change : simtwin_core.operations.Change
+            What was done.
+        """
+
+        self.push(change, applied=True)
+
+    def push(self, change: Change, applied: bool = False) -> None:
+        """Put a change on the undo stack, and make it unless it is already made.
+
+        Parameters
+        ----------
+        change : simtwin_core.operations.Change
+            The change.
+        applied : bool, optional
+            Whether the sheet already shows it, which is what
+            :meth:`record` says of a gesture a person has just made by hand.
+        """
+
+        if not change.operations:
+            return
+        self.undo_stack.push(
+            EditCommand(self, change, self.change_label(change.name), applied)
+        )
+
+    def report_change(self, change: Change) -> None:
+        """Say that a change has reached the sheet.
+
+        Parameters
+        ----------
+        change : simtwin_core.operations.Change
+            What the net has become — the change itself when it was made or
+            made again, its inverse when it was undone.
+        """
+
+        self.change_recorded.emit(self.model_id, change)
+
+    def change_label(self, name: str) -> str:
+        """Give what a change is called where a person reads it.
+
+        Qt puts it after *Undo* and *Redo*, so it is the name of the gesture
+        rather than a sentence.
+
+        Parameters
+        ----------
+        name : str
+            What the change calls itself.
+
+        Returns
+        -------
+        str
+            Its translated name, and the bare name for a change nobody has
+            named yet.
+        """
+
+        labels = {
+            'add-element': self.tr('Add Element'),
+            'draw-arc': self.tr('Draw Arc'),
+            'set-arc-weight': self.tr('Change Weight'),
+            'set-arc-shape': self.tr('Change Arc Shape'),
+            'set-arc-kind': self.tr('Change Arc Type'),
+            'add-arc-point': self.tr('Add Point'),
+            'remove-arc-point': self.tr('Delete Point'),
+            'move-items': self.tr('Move'),
+            'move-guide': self.tr('Move Guide'),
+            'add-guide': self.tr('Add Guide'),
+            'shape-arc': self.tr('Shape Arc'),
+            'move-arc-end': self.tr('Move Arc End'),
+            'delete': self.tr('Delete'),
+        }
+        return labels.get(name, name)
 
     # ------------------------------------------------------------------
     # The net as a document
@@ -595,30 +1099,11 @@ class PetriNetEditor(Canvas):
         )
         return NetDocument(
             model_uuid=self.model_id,
-            places=tuple(
-                PlaceData(item.uuid, item.name, (item.pos().x(), item.pos().y()))
-                for item in sorted(self.places, key=node_order)
-            ),
+            places=tuple(node_data(item) for item in sorted(self.places, key=node_order)),
             transitions=tuple(
-                TransitionData(item.uuid, item.name, (item.pos().x(), item.pos().y()))
-                for item in sorted(self.transitions, key=node_order)
+                node_data(item) for item in sorted(self.transitions, key=node_order)
             ),
-            arcs=tuple(
-                ArcData(
-                    arc.uuid,
-                    arc.source.uuid,
-                    arc.target.uuid,
-                    arc.source_port,
-                    arc.target_port,
-                    arc.weight,
-                    arc.kind.value,
-                    arc.shape_kind.value,
-                    arc.control_frames,
-                    arc.point_frames,
-                    drawn_route(arc),
-                )
-                for arc in arcs
-            ),
+            arcs=tuple(arc_data(arc) for arc in arcs),
             guides=tuple(
                 GuideData(GUIDE_ORIENTATIONS[guide.orientation], guide.position)
                 for guide in self.guides
@@ -654,37 +1139,225 @@ class PetriNetEditor(Canvas):
         """
 
         self.clear_sheet()
+        self.undo_stack.clear()
 
-        nodes: dict[str, NetItem] = {}
         for data in (*document.places, *document.transitions):
-            item = NODE_ITEMS[type(data)](self.view.snap, self.view.sceneRect)
-            item.uuid = data.uuid
-            item.name = data.name
-            self.scene().addItem(item)
-            item.setPos(QPointF(*data.position))
-            nodes[data.uuid] = item
-
+            self.draw_node(data)
         for data in document.arcs:
-            source, target = nodes[data.source], nodes[data.target]
-            arc = Arc(
-                source,
-                target,
-                held_port(data.source_port, source),
-                held_port(data.target_port, target),
-                weight=data.weight,
-                shape_kind=ArcShape(data.shape),
-                kind=ArcKind(data.kind),
-                snap=self.view.snap,
-                uuid=data.uuid,
-            )
-            arc.restore_bends(data.controls, data.points)
-            self.scene().addItem(arc)
-
-        orientations = {text: orientation for orientation, text in GUIDE_ORIENTATIONS.items()}
+            self.draw_arc(data)
         for data in document.guides:
-            self.add_guide(orientations[data.orientation], data.position)
+            self.add_guide(GUIDE_WAYS[data.orientation], data.position)
 
         self.show_arc_choice()
+
+    def draw_node(self, data) -> NetItem:
+        """Put a place or a transition on the sheet, as a document describes it.
+
+        Parameters
+        ----------
+        data : simtwin_core.petri_net.PlaceData or simtwin_core.petri_net.TransitionData
+            The node, with the UUID and the name it is to keep.
+
+        Returns
+        -------
+        masafi_simtwin.documents.net_item.NetItem
+            The item, already on the scene.
+        """
+
+        item = NODE_ITEMS[type(data)](self.view.snap, self.view.sceneRect)
+        item.uuid = data.uuid
+        item.name = data.name
+        self.scene().addItem(item)
+        item.setPos(QPointF(*data.position))
+        return item
+
+    def draw_arc(self, data: ArcData) -> Arc:
+        """Draw an arc on the sheet, as a document describes it.
+
+        Parameters
+        ----------
+        data : simtwin_core.petri_net.ArcData
+            The arc, with the UUID, the connecting points and the bends it is to
+            keep.
+
+        Returns
+        -------
+        masafi_simtwin.documents.arc.Arc
+            The arc, already on the scene.
+        """
+
+        source, target = self.node(data.source), self.node(data.target)
+        arc = Arc(
+            source,
+            target,
+            held_port(data.source_port, source),
+            held_port(data.target_port, target),
+            weight=data.weight,
+            shape_kind=ArcShape(data.shape),
+            kind=ArcKind(data.kind),
+            snap=self.view.snap,
+            uuid=data.uuid,
+        )
+        arc.restore_bends(data.controls, data.points)
+        self.scene().addItem(arc)
+        return arc
+
+    def node(self, uuid: str) -> NetItem:
+        """Find a place or a transition by its UUID.
+
+        Parameters
+        ----------
+        uuid : str
+            Its UUID.
+
+        Returns
+        -------
+        masafi_simtwin.documents.net_item.NetItem
+            The item.
+
+        Raises
+        ------
+        ValueError
+            When the sheet holds no such node — which a change made against
+            another net, or a journal that has been damaged, would ask for.
+        """
+
+        for item in self.items_of(NetItem):
+            if item.uuid == uuid:
+                return item
+        raise ValueError(f'the sheet holds no node {uuid!r}')
+
+    def arc(self, uuid: str) -> Arc:
+        """Find an arc by its UUID.
+
+        Parameters
+        ----------
+        uuid : str
+            Its UUID.
+
+        Returns
+        -------
+        masafi_simtwin.documents.arc.Arc
+            The arc.
+
+        Raises
+        ------
+        ValueError
+            When the sheet holds no such arc.
+        """
+
+        for item in self.arcs:
+            if item.uuid == uuid:
+                return item
+        raise ValueError(f'the sheet holds no arc {uuid!r}')
+
+    def guide(self, data: GuideData):
+        """Find a guide by which way it lies and where it is.
+
+        A guide has no identity of its own, so the first one equal to this is
+        the one meant — which is what the operations say too.
+
+        Parameters
+        ----------
+        data : simtwin_core.petri_net.GuideData
+            The guide.
+
+        Returns
+        -------
+        masafi_simtwin.documents.guide.Guide
+            The guide on the sheet.
+
+        Raises
+        ------
+        ValueError
+            When no guide of the sheet is that one.
+        """
+
+        for guide in self.guides:
+            if (
+                GUIDE_ORIENTATIONS[guide.orientation] == data.orientation
+                and guide.position == data.position
+            ):
+                return guide
+        raise ValueError(f'the sheet has no {data.orientation} guide at {data.position}')
+
+    # ------------------------------------------------------------------
+    # Changing the net
+    # ------------------------------------------------------------------
+
+    def apply(self, change: Change) -> None:
+        """Make one change to the net on the sheet.
+
+        The other half of :func:`simtwin_core.operations.Change.apply`, which
+        makes the same change to a description.  Everything a person does to a
+        net goes through here — so that it can be undone, and written to the
+        journal — and a test holds that the two agree: the description of a
+        sheet a change has been applied to is the description that change makes
+        of the description it had.
+
+        Nothing here is a gesture: an operation says what a thing **is**, and
+        nothing is invented from a default.  Applying a change made against
+        another net raises :class:`ValueError` rather than drawing something
+        nobody asked for.
+
+        Parameters
+        ----------
+        change : simtwin_core.operations.Change
+            What one gesture did, or — inverted — what undoing it does.
+        """
+
+        for operation in change.operations:
+            self.apply_operation(operation)
+
+    def apply_operation(self, operation: Operation) -> None:
+        """Make one operation of a change.
+
+        Parameters
+        ----------
+        operation : simtwin_core.operations.Operation
+            The operation.
+
+        Raises
+        ------
+        TypeError
+            When it is an operation this editor does not know how to make,
+            which is one added to the core and forgotten here.
+        ValueError
+            When what it is about is not on the sheet.
+        """
+
+        if isinstance(operation, AddNode):
+            self.draw_node(operation.node)
+        elif isinstance(operation, RemoveNode):
+            self.view.remove(self.node(operation.node.uuid))
+        elif isinstance(operation, MoveNode):
+            self.node(operation.node).setPos(QPointF(*operation.after))
+        elif isinstance(operation, AddArc):
+            self.draw_arc(operation.arc)
+        elif isinstance(operation, RemoveArc):
+            self.view.remove(self.arc(operation.arc.uuid))
+        elif isinstance(operation, MoveArcEnd):
+            self.arc(operation.arc).reattach(
+                operation.end, self.node(operation.after_node), operation.after_port
+            )
+        elif isinstance(operation, SetArcShape):
+            self.arc(operation.arc).set_shape(ArcShape(operation.after))
+        elif isinstance(operation, SetArcKind):
+            self.arc(operation.arc).set_kind(ArcKind(operation.after))
+        elif isinstance(operation, SetArcWeight):
+            self.arc(operation.arc).weight = operation.after
+        elif isinstance(operation, SetArcBends):
+            self.arc(operation.arc).restore_bends(
+                operation.after_controls, operation.after_points
+            )
+        elif isinstance(operation, AddGuide):
+            self.add_guide(GUIDE_WAYS[operation.guide.orientation], operation.guide.position)
+        elif isinstance(operation, RemoveGuide):
+            self.view.remove_guide(self.guide(operation.guide))
+        elif isinstance(operation, MoveGuide):
+            self.guide(operation.before).position = operation.after.position
+        else:
+            raise TypeError(f'{operation!r} is an operation this editor cannot make')
 
     def clear_sheet(self) -> None:
         """Take the whole net off the sheet, and its guides."""
@@ -715,9 +1388,12 @@ class PetriNetEditor(Canvas):
         dialog = ArcDialog(arc.weight, self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return False
-        changed = dialog.weight != arc.weight
+        was = arc.weight
         arc.weight = dialog.weight
-        return changed
+        if arc.weight == was:
+            return False
+        self.record(Change('set-arc-weight', (SetArcWeight(arc.uuid, was, arc.weight),)))
+        return True
 
     def _on_item_activated(self, item) -> None:
         """Open what was double-clicked, when it is something that opens.

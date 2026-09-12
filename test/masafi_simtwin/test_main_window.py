@@ -14,6 +14,7 @@ from PyQt6.QtGui import QKeySequence
 from PyQt6.QtWidgets import QDialog, QDockWidget, QMessageBox, QTabBar
 
 from masafi_simtwin import APPLICATION_NAME, paper, project
+from masafi_simtwin import documents
 from masafi_simtwin.documents import PetriNetEditor
 from masafi_simtwin.documents.arc import ArcKind
 from masafi_simtwin.library_tree import LibraryTree
@@ -1863,7 +1864,7 @@ def draw(editor):
 
     place = editor.add_element('pt-petri-net', 'place', QPointF(20.0, 20.0))
     transition = editor.add_element('pt-petri-net', 'transition', QPointF(60.0, 20.0))
-    editor.add_arc(place, transition).weight = 2
+    editor.add_arc(place, transition)
     return editor.to_document()
 
 
@@ -2153,3 +2154,302 @@ def test_closing_a_tab_that_cannot_be_saved_asks_first(window, opened, monkeypat
 
     assert window.document_area.document_count == 0
     assert saved(opened, model) == NetDocument(model_uuid=model['uuid'])
+
+
+# ----------------------------------------------------------------------
+# Undo and redo
+# ----------------------------------------------------------------------
+
+
+def test_the_edit_menu_leads_with_undo_and_redo(window):
+    """Real entries now, before the three that are still to come."""
+
+    edit_menu = window.top_bar._menu_bar.actions()[1].menu()
+    entries = [action for action in edit_menu.actions() if not action.isSeparator()]
+
+    assert entries[0] is window.undo_action
+    assert entries[1] is window.redo_action
+    assert window.undo_action.shortcut() == QKeySequence(QKeySequence.StandardKey.Undo)
+    assert window.redo_action.shortcut() == QKeySequence('Ctrl+Shift+Z')
+    assert window.undo_action in window.actions()
+    assert window.redo_action in window.actions()
+
+
+def test_there_is_nothing_to_undo_until_something_is_drawn(window, opened, monkeypatch):
+    """And the entry says what it would put back."""
+
+    model = add_model(window, monkeypatch)
+    assert not window.undo_action.isEnabled()
+
+    draw(editor_of(window, model))
+
+    assert window.undo_action.isEnabled()
+    assert 'Draw Arc' in window.undo_action.text()
+    assert not window.redo_action.isEnabled()
+
+
+def test_undo_acts_on_the_tab_being_looked_at(window, opened, monkeypatch):
+    """One history per document: undoing in one leaves the other alone."""
+
+    first = add_model(window, monkeypatch, 'Filling Station')
+    second = add_model(window, monkeypatch, 'Capping')
+    draw(editor_of(window, first))
+    drawn = draw(editor_of(window, second))
+    window.document_area.show_document(first['uuid'])
+
+    window.undo_action.trigger()
+
+    assert editor_of(window, first).arcs == []
+    assert editor_of(window, second).to_document() == drawn
+
+
+def test_undoing_and_doing_again_leave_the_net_as_it_was(window, opened, monkeypatch):
+    """Redo is undo of the undo."""
+
+    model = add_model(window, monkeypatch)
+    drawn = draw(editor_of(window, model))
+
+    window.undo_action.trigger()
+    window.redo_action.trigger()
+
+    assert editor_of(window, model).to_document() == drawn
+
+
+def test_saving_says_the_document_is_as_it_was_written(window, opened, monkeypatch):
+    """Which is what a tab will show a mark for."""
+
+    model = add_model(window, monkeypatch)
+    editor = editor_of(window, model)
+    draw(editor)
+    assert not documents.undo_stack_of(editor).isClean()
+
+    window.save_action.trigger()
+    assert documents.undo_stack_of(editor).isClean()
+
+    draw(editor)
+    assert not documents.undo_stack_of(editor).isClean()
+
+
+def test_closing_the_last_tab_leaves_nothing_to_undo(window, opened, monkeypatch):
+    """The history goes with the document it belongs to."""
+
+    model = add_model(window, monkeypatch)
+    draw(editor_of(window, model))
+
+    window.document_area.close_document_for(model['uuid'])
+
+    assert not window.undo_action.isEnabled()
+
+
+# ----------------------------------------------------------------------
+# The journal
+# ----------------------------------------------------------------------
+
+
+def journal_of(path: str) -> list:
+    """Read what a project's journal says was done to it.
+
+    Parameters
+    ----------
+    path : str
+        The project file.
+
+    Returns
+    -------
+    list of dict
+        Its entries, oldest first.
+    """
+
+    return project.read_journal(path)
+
+
+def reopen(window, path: str) -> None:
+    """Open a project again as a new session would, without closing it first.
+
+    Closing it would **save** it, which is what these tests are about not
+    happening: what a journal holds is the work a session never got to write.
+    Ending the session is what a crash leaves undone in every other way — the
+    project's lock is given up, so that opening it again is opening it and not
+    finding it held by this very window.
+
+    Parameters
+    ----------
+    window : masafi_simtwin.main_window.MainWindow
+        The window.
+    path : str
+        The project file.
+    """
+
+    window._end_session()
+    window.document_area.close_all_documents()
+    window.open_project_path(path)
+
+
+def test_every_change_is_written_to_the_journal_as_it_is_made(window, opened, monkeypatch):
+    """Not at the next save: that is what a journal is for."""
+
+    model = add_model(window, monkeypatch)
+    draw(editor_of(window, model))
+
+    entries = journal_of(opened)
+
+    assert [entry['model'] for entry in entries] == [model['uuid']] * 3
+    assert [entry['change']['change'] for entry in entries] == [
+        'add-element',
+        'add-element',
+        'draw-arc',
+    ]
+
+
+def test_an_undone_change_is_written_as_its_inverse(window, opened, monkeypatch):
+    """So replaying is a straight line from the last save to what is drawn."""
+
+    model = add_model(window, monkeypatch)
+    draw(editor_of(window, model))
+
+    window.undo_action.trigger()
+
+    last = journal_of(opened)[-1]
+    assert last['change']['change'] == 'draw-arc'
+    assert [operation['op'] for operation in last['change']['operations']] == ['remove-arc']
+
+
+def test_saving_clears_the_journal(window, opened, monkeypatch):
+    """The project holds it now, so the journal has nothing left to say."""
+
+    model = add_model(window, monkeypatch)
+    draw(editor_of(window, model))
+    assert journal_of(opened)
+
+    window.save_action.trigger()
+
+    assert journal_of(opened) == []
+    assert not project.journal_path(opened).exists()
+
+
+def test_work_in_a_journal_is_put_back_when_the_project_opens(window, opened, monkeypatch):
+    """Which is what a session that ended badly left behind."""
+
+    model = add_model(window, monkeypatch)
+    drawn = draw(editor_of(window, model))
+
+    reopen(window, opened)
+
+    assert window.document_area.document_count == 1
+    assert editor_of(window, model).to_document() == drawn
+    assert 'put back' in window.statusBar().currentMessage()
+
+
+def test_what_is_put_back_is_not_saved_until_it_is_saved(window, opened, monkeypatch):
+    """It is shown first: a person sees the work before it is kept."""
+
+    model = add_model(window, monkeypatch)
+    drawn = draw(editor_of(window, model))
+    reopen(window, opened)
+
+    assert saved(opened, model) != drawn
+    assert journal_of(opened)
+
+    window.save_action.trigger()
+
+    assert saved(opened, model) == drawn
+    assert journal_of(opened) == []
+
+
+def test_a_journal_that_cannot_be_replayed_is_reported(window, opened, monkeypatch):
+    """And the project still opens: the rest of it is not held hostage."""
+
+    model = add_model(window, monkeypatch)
+    project.append_to_journal(
+        opened,
+        {'model': model['uuid'], 'change': {'change': 'gesture', 'operations': [{'op': 'fly'}]}},
+    )
+    warned = []
+    monkeypatch.setattr(
+        'masafi_simtwin.main_window.QMessageBox.warning',
+        lambda *arguments, **keywords: warned.append(arguments[1]),
+    )
+
+    reopen(window, opened)
+
+    assert warned == ['Some work could not be put back']
+    assert window.windowTitle().startswith('Bottling Line')
+
+
+def test_a_journal_of_a_model_that_is_gone_is_passed_over(window, opened, monkeypatch):
+    """A model deleted since is not work to put back."""
+
+    project.append_to_journal(
+        opened, {'model': 'no-such-model', 'change': {'change': 'x', 'operations': []}}
+    )
+
+    reopen(window, opened)
+
+    assert window.document_area.document_count == 0
+
+
+CRASHED_SESSION = """
+import os, sys
+from PyQt6.QtCore import QPointF, QSettings
+from PyQt6.QtWidgets import QApplication
+
+QSettings.setDefaultFormat(QSettings.Format.IniFormat)
+
+from masafi_simtwin import documents, project
+from masafi_simtwin.main_window import MainWindow
+
+application = QApplication(sys.argv[:1])
+window = MainWindow()
+path = sys.argv[1]
+model = project.add_model(
+    path,
+    'Filling Station',
+    project.ModelKind.PETRI_NET,
+    {'time': 's'},
+    document=lambda identifier: documents.new_model_file(
+        project.ModelKind.PETRI_NET, identifier
+    ),
+)
+window.open_project_path(path)
+window.open_model(model['uuid'])
+editor = window.document_area.document(model['uuid'])
+place = editor.add_element('pt-petri-net', 'place', QPointF(20.0, 20.0))
+transition = editor.add_element('pt-petri-net', 'transition', QPointF(60.0, 20.0))
+editor.add_arc(place, transition)
+print(model['uuid'])
+sys.stdout.flush()
+os._exit(0)
+"""
+
+
+def test_work_survives_an_application_that_is_killed(window, make_project, tmp_path):
+    """The honest test of a journal: a session that never got to save, killed
+    outright, and a window that opens the project afterwards and finds the work
+    where the person left it."""
+
+    path = make_project('Bottling Line')
+    environment = dict(os.environ)
+    environment['QT_QPA_PLATFORM'] = 'offscreen'
+    environment['XDG_CONFIG_HOME'] = str(tmp_path / 'config')
+
+    finished = subprocess.run(
+        [sys.executable, '-c', CRASHED_SESSION, path],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env=environment,
+    )
+    assert finished.returncode == 0, finished.stderr
+    identifier = finished.stdout.strip().splitlines()[-1]
+
+    assert project.journal_path(path).exists()
+    assert pnml.from_pnml(project.read_model(path, identifier)) == NetDocument(
+        model_uuid=identifier
+    )
+
+    window.open_project_path(path)
+
+    editor = window.document_area.document(identifier)
+    assert editor is not None
+    assert len(editor.places) == 1
+    assert len(editor.arcs) == 1

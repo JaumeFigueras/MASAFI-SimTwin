@@ -109,6 +109,10 @@ MODELS_FOLDER = 'models/'
 #: What is appended to a project's name to make the file that holds its lock.
 LOCK_SUFFIX = '.lock'
 
+#: What is appended to make the file that holds its journal: what has been done
+#: to the project since it was last saved.
+JOURNAL_SUFFIX = '.journal'
+
 
 #: What is put in place of anything that has no business in a file name.
 _UNSAFE = re.compile(r'[^\w.-]+', re.UNICODE)
@@ -356,6 +360,127 @@ def release(path: str | Path) -> None:
     held = holder_of(path)
     if held is not None and held.get('pid') == os.getpid():
         lock_path(path).unlink(missing_ok=True)
+
+
+def journal_path(path: str | Path) -> Path:
+    """Give the file that holds a project's journal.
+
+    Beside the project rather than inside it, for the reason the lock is: a
+    journal is **appended to** as fast as a person draws, and a zip cannot be
+    appended to — every entry would mean rewriting the whole archive, which is
+    the cost the journal exists to avoid.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        The project file.
+
+    Returns
+    -------
+    pathlib.Path
+        The journal, which need not exist.
+    """
+
+    target = Path(path)
+    return target.with_name(f'{target.name}{JOURNAL_SUFFIX}')
+
+
+def append_to_journal(path: str | Path, entry: dict) -> None:
+    """Add one entry to the end of a project's journal.
+
+    What an entry **means** is not this module's business, exactly as what a
+    model's file holds is not: it is written as one line of JSON and read back
+    as one, and whoever wrote it knows what it says.
+
+    The line is flushed as it is written but the disk is not waited for.  What
+    a journal is for is an application that dies — a crash, a kill — and what is
+    written has left the process by then.  Waiting for the platter on every
+    dragged place would make drawing slow to protect against the power going,
+    which is not what was asked for.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        The project file.
+    entry : dict
+        What to write, in JSON's own types.
+
+    Raises
+    ------
+    ProjectError
+        When the journal cannot be written.
+    """
+
+    target = journal_path(path)
+    try:
+        with target.open('a', encoding='utf-8') as journal:
+            journal.write(json.dumps(entry, separators=(',', ':'), ensure_ascii=False))
+            journal.write('\n')
+    except OSError as error:
+        raise ProjectError(f'{target} could not be written: {error}') from error
+
+
+def read_journal(path: str | Path) -> list[dict]:
+    """Read what has been done to a project since it was last saved.
+
+    **A line that cannot be read ends the reading**, and what came before it is
+    given back.  A journal is only ever appended to, so the damage a crash
+    leaves is a half-written last line; passing over it and reading on would
+    replay a change that was never finished, and that is worse than stopping
+    where the record stops.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        The project file.
+
+    Returns
+    -------
+    list of dict
+        The entries, oldest first, and nothing at all when there is no journal
+        — which is what a project saved and closed properly leaves.
+
+    Raises
+    ------
+    ProjectError
+        When there is a journal and it cannot be read at all.
+    """
+
+    target = journal_path(path)
+    try:
+        text = target.read_text(encoding='utf-8')
+    except FileNotFoundError:
+        return []
+    except (OSError, UnicodeDecodeError) as error:
+        raise ProjectError(f'{target} could not be read: {error}') from error
+
+    entries = []
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            break
+        if not isinstance(entry, dict):
+            break
+        entries.append(entry)
+    return entries
+
+
+def clear_journal(path: str | Path) -> None:
+    """Forget what has been done: the project now holds it.
+
+    Called after a save has been written, which is the moment the journal has
+    nothing left to say.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        The project file.
+    """
+
+    journal_path(path).unlink(missing_ok=True)
 
 
 def file_name_for(name: str) -> str:

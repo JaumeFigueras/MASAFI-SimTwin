@@ -1202,7 +1202,14 @@ class Arc(QGraphicsItem):
 
     @shape_kind.setter
     def shape_kind(self, value: ArcShape) -> None:
-        """Draw the arc straight or curved from now on.
+        """Draw the arc straight or curved from now on, seeding the shape's own
+        default points when it has none.
+
+        This is the **gesture**: choosing a shape on an arc that has never been
+        led through anything gives it that shape's default, so that a shape
+        named after what it looks like looks like it at once.  Applying a
+        recorded operation is not a gesture and must not invent anything, which
+        is :meth:`set_shape`.
 
         Parameters
         ----------
@@ -1210,11 +1217,28 @@ class Arc(QGraphicsItem):
             Which of them.
         """
 
-        value = ArcShape(value)
-        if value != self._shape_kind:
+        self.set_shape(value)
+        self._seed_points()
+
+    def set_shape(self, shape: ArcShape) -> None:
+        """Draw the arc in a shape, and change nothing else.
+
+        The points it is led through are left exactly as they are, even when
+        there are none.  That is what an operation applied to the arc has to do:
+        the change that gave a shape its default points carries those points as
+        an operation of its own, so that undoing gives back what was there
+        rather than what a default happens to be today.
+
+        Parameters
+        ----------
+        shape : ArcShape
+            The shape.
+        """
+
+        shape = ArcShape(shape)
+        if shape is not self._shape_kind:
             self.prepareGeometryChange()
-            self._shape_kind = value
-            self._seed_points()
+            self._shape_kind = shape
             self.update()
 
     def _seed_points(self) -> None:
