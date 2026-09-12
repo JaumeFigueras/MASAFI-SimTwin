@@ -88,6 +88,7 @@ __all__ = [
     'replay',
     'selection_of',
     'set_tokens',
+    'set_weight',
     'undo_stack_of',
 ]
 
@@ -284,6 +285,27 @@ def describe(document: QWidget, uuids, description: str) -> bool:
     """
 
     return isinstance(document, PetriNetEditor) and document.describe(uuids, description)
+
+
+def set_weight(document: QWidget, uuids, weight: int) -> bool:
+    """Give some arcs of a document the same weight, as one recorded change.
+
+    Parameters
+    ----------
+    document : PyQt6.QtWidgets.QWidget
+        The document.
+    uuids : collections.abc.Iterable of str
+        The arcs.
+    weight : int
+        How many tokens each is to carry.
+
+    Returns
+    -------
+    bool
+        Whether any arc changed.
+    """
+
+    return isinstance(document, PetriNetEditor) and document.set_weight(uuids, weight)
 
 
 def busy(document: QWidget) -> bool:

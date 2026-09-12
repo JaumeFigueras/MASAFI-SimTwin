@@ -441,6 +441,7 @@ class MainWindow(QMainWindow):
         self._properties_pane.name_asked.connect(self._on_name_asked)
         self._properties_pane.tokens_asked.connect(self._on_tokens_asked)
         self._properties_pane.description_asked.connect(self._on_description_asked)
+        self._properties_pane.weight_asked.connect(self._on_weight_asked)
         contents: dict[str, QWidget] = {
             'project': self._project_tree,
             'libraries': self._library_tree,
@@ -1115,6 +1116,7 @@ class MainWindow(QMainWindow):
         editor.change_recorded.connect(self._on_change_recorded)
         editor.modified_changed.connect(self._on_modified_changed)
         editor.selection_changed.connect(self._on_selection_changed)
+        editor.arc_activated.connect(self._on_arc_activated)
 
     # ------------------------------------------------------------------
     # Saving
@@ -1484,6 +1486,9 @@ class MainWindow(QMainWindow):
         document = self._document_area.current_document
         key = self._document_area.key_of(document) if document is not None else None
         selection = documents.selection_of(document) if key else None
+        if selection and selection.arcs and not (selection.places or selection.transitions):
+            self._properties_pane.show_arcs(selection.arcs, selection.node_names)
+            return
         if selection and not selection.arcs and not (selection.places and selection.transitions):
             self._properties_pane.show_nodes(
                 selection.places or selection.transitions, selection.names
@@ -1542,6 +1547,42 @@ class MainWindow(QMainWindow):
 
         if not documents.describe(self._document_area.current_document, uuids, description):
             self._refresh_properties()
+
+    def _on_weight_asked(self, uuids, weight: int) -> None:
+        """Set the weight of arcs of the current document, as the pane asks.
+
+        Parameters
+        ----------
+        uuids : tuple of str
+            The arcs.
+        weight : int
+            How many tokens each is to carry.
+        """
+
+        if not documents.set_weight(self._document_area.current_document, uuids, weight):
+            self._refresh_properties()
+
+    def _on_arc_activated(self, key: str, _arc: str) -> None:
+        """Open the Properties pane on an arc that was double-clicked, weight first.
+
+        A double click is a gesture that asks for the arc's properties, unlike a
+        selection, which never opens the pane by itself.
+
+        Parameters
+        ----------
+        key : str
+            The UUID of the model whose arc it was.
+        _arc : str
+            The arc's UUID; the pane is showing it already, the press that began
+            the double click having selected it.
+        """
+
+        current = self._document_area.current_document
+        if current is None or self._document_area.key_of(current) != key:
+            return
+        self.show_pane('properties')
+        self._refresh_properties()
+        self._properties_pane.focus_weight()
 
     def _on_modified_changed(self, key: str, modified: bool) -> None:
         """Show on its tab, and on the window, that a model has unsaved changes.

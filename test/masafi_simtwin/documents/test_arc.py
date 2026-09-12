@@ -743,109 +743,27 @@ def test_delete_acts_on_the_whole_selection(editor, net):
     assert editor.places == [place]
 
 
-class StubDialog:
-    """Stands in for the Arc dialog, which would otherwise block on ``exec()``.
+def test_a_double_click_on_an_arc_says_which_arc(editor, net, qtbot):
+    """So that the window can open the Properties pane on its weight."""
 
-    A modal dialog runs an event loop of its own, so a test that opened the real
-    one would sit there waiting for a person.  This answers the two questions
-    the editor asks of a dialog and nothing else; the real one is tested where
-    it lives, in ``test/masafi_simtwin/dialogs``.
+    place, transition = net
+    arc = editor.add_arc(place, transition)
 
-    Parameters
-    ----------
-    weight : int
-        The weight the editor opened it on.
-    parent : PyQt6.QtWidgets.QWidget, optional
-        Parent widget, ignored.
-    """
-
-    #: What the next one built will answer, and whether it will be accepted.
-    answer = 1
-    accepted = True
-
-    #: The weights the editor opened dialogs on, in order, so that a test can
-    #: say the dialog was shown what the arc actually carries.
-    opened: list[int] = []
-
-    def __init__(self, weight: int = 1, parent=None) -> None:
-        self.weight = StubDialog.answer
-        StubDialog.opened.append(weight)
-
-    def exec(self):
-        """Answer as a dialog that has been accepted or cancelled.
-
-        Returns
-        -------
-        PyQt6.QtWidgets.QDialog.DialogCode
-            What the class attribute says.
-        """
-
-        return (
-            QDialog.DialogCode.Accepted
-            if StubDialog.accepted
-            else QDialog.DialogCode.Rejected
+    with qtbot.waitSignal(editor.arc_activated, timeout=1000) as blocker:
+        editor.view.mouseDoubleClickEvent(
+            mouse(QEvent.Type.MouseButtonDblClick, viewport_point(editor.view, arc.line.center()))
         )
 
-
-@pytest.fixture
-def stub_dialog(monkeypatch):
-    """Put the stub in front of the real Arc dialog.
-
-    Parameters
-    ----------
-    monkeypatch : pytest.MonkeyPatch
-        The patcher.
-
-    Returns
-    -------
-    type
-        The stub, reset, so that a test can say what it will answer.
-    """
-
-    StubDialog.answer = 1
-    StubDialog.accepted = True
-    StubDialog.opened = []
-    monkeypatch.setattr(petri_net, 'ArcDialog', StubDialog)
-    return StubDialog
+    assert blocker.args == [editor.model_id, arc.uuid]
 
 
-def test_a_double_click_on_an_arc_asks_what_it_carries(editor, net, stub_dialog):
-    """Until the right-hand properties pane exists, a double click is where the
-    weight is set."""
-
-    place, transition = net
-    arc = editor.add_arc(place, transition)
-    stub_dialog.answer = 5
-
-    editor.view.mouseDoubleClickEvent(
-        mouse(QEvent.Type.MouseButtonDblClick, viewport_point(editor.view, arc.line.center()))
-    )
-
-    assert stub_dialog.opened == [1]
-    assert arc.weight == 5
-
-
-def test_cancelling_the_dialog_leaves_the_arc_as_it_was(editor, net, stub_dialog):
-    """Cancel means cancel."""
-
-    place, transition = net
-    arc = editor.add_arc(place, transition)
-    arc.weight = 2
-    stub_dialog.answer = 9
-    stub_dialog.accepted = False
-
-    assert not editor.edit_arc(arc)
-    assert arc.weight == 2
-
-
-def test_a_double_click_on_the_bare_sheet_opens_nothing(editor, net, stub_dialog):
+def test_a_double_click_on_the_bare_sheet_says_nothing(editor, net, qtbot):
     """There is nothing there to be asked about."""
 
-    editor.view.mouseDoubleClickEvent(
-        mouse(QEvent.Type.MouseButtonDblClick, QPointF(4.0, 4.0))
-    )
-
-    assert stub_dialog.opened == []
+    with qtbot.assertNotEmitted(editor.arc_activated):
+        editor.view.mouseDoubleClickEvent(
+            mouse(QEvent.Type.MouseButtonDblClick, QPointF(4.0, 4.0))
+        )
 
 
 # ----------------------------------------------------------------------

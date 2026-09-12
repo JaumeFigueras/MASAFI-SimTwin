@@ -346,3 +346,79 @@ def test_a_transition_name_is_checked_against_the_places_too(pane, qtbot):
     qtbot.keyClicks(pane.node_name_edit, 'p1')
 
     assert pane.node_name_problem.text() == pane.name_problem_text(NameProblem.TAKEN)
+
+
+# ----------------------------------------------------------------------
+# The arc page
+# ----------------------------------------------------------------------
+
+#: An arc of weight three from P1 to T1, and one of weight five back.
+ARC = ArcData('a', 'p', 't', 0, 10, 3)
+BACK = ArcData('b', 't', 'p', 1, 2, 5)
+
+#: The nodes they run between, as the selection names them.
+NODE_NAMES = (('p', 'P1'), ('t', 'T1'))
+
+
+def test_one_arc_is_shown_with_its_ends_and_its_weight(pane):
+    """Named by the nodes it runs between; shape and kind stay on the tool bar."""
+
+    pane.show_arcs((ARC,), NODE_NAMES)
+
+    assert pane.page is pane.arc_page
+    assert pane.arc_heading.text() == 'Arc'
+    assert (pane.arc_source_value.text(), pane.arc_target_value.text()) == ('P1', 'T1')
+    assert pane.arc_form.isRowVisible(pane.arc_source_label)
+    assert pane.arc_weight_spin.value() == 3
+    assert 'tool bar' in pane.arc_note.text()
+
+
+def test_several_arcs_show_no_ends_and_a_blank_weight_where_they_differ(pane):
+    """Rather than the ends of one of them."""
+
+    pane.show_arcs((ARC, BACK), NODE_NAMES)
+
+    assert pane.arc_heading.text() == 'Arcs: 2'
+    assert not pane.arc_form.isRowVisible(pane.arc_source_label)
+    assert not pane.arc_form.isRowVisible(pane.arc_target_label)
+    assert pane.arc_weight_spin.value() == pane.arc_weight_spin.minimum()
+    assert pane.arc_weight_spin.text().strip() == ''
+
+
+def test_several_arcs_of_one_weight_show_it(pane):
+    """What they agree on is shown."""
+
+    pane.show_arcs((ARC, ArcData('b', 't', 'p', 1, 2, 3)), NODE_NAMES)
+
+    assert pane.arc_weight_spin.value() == 3
+    assert pane.arc_weight_spin.minimum() == 1
+
+
+def test_showing_arcs_asks_for_nothing(pane, qtbot):
+    """Filling the weight in is not an edit of it."""
+
+    with qtbot.assertNotEmitted(pane.weight_asked):
+        pane.show_arcs((ARC,), NODE_NAMES)
+        pane.show_arcs((ARC, BACK), NODE_NAMES)
+        pane.show_arcs((BACK,), NODE_NAMES)
+
+
+def test_a_weight_is_asked_for_every_arc_shown(pane, qtbot):
+    """One number for all of them."""
+
+    pane.show_arcs((ARC, BACK), NODE_NAMES)
+
+    with qtbot.waitSignal(pane.weight_asked, timeout=1000) as blocker:
+        pane.arc_weight_spin.setValue(4)
+
+    assert blocker.args == [('a', 'b'), 4]
+
+
+def test_a_page_of_another_kind_forgets_the_arcs(pane, qtbot):
+    """So a weight chosen afterwards is not asked of arcs no longer shown."""
+
+    pane.show_arcs((ARC,), NODE_NAMES)
+    pane.show_nodes((PLACE,), NAMES)
+
+    with qtbot.assertNotEmitted(pane.weight_asked):
+        pane.arc_weight_spin.setValue(9)

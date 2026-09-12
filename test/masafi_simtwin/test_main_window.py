@@ -3495,3 +3495,82 @@ def test_a_transition_renamed_and_described_in_the_pane_is_kept_and_undone(
     window.undo_action.trigger()
     assert transition.name == 'T1'
     assert pane.node_name_edit.text() == 'T1'
+
+
+# ----------------------------------------------------------------------
+# Editing an arc in the Properties pane
+# ----------------------------------------------------------------------
+
+
+def test_arcs_alone_selected_are_shown_on_the_arc_page(window, opened, monkeypatch):
+    """With the names of the nodes the arc runs between."""
+
+    model = add_model(window, monkeypatch)
+    editor = editor_of(window, model)
+    draw(editor)
+    pane = window.properties_pane
+
+    editor.arcs[0].setSelected(True)
+    assert pane.page is pane.arc_page
+    assert (pane.arc_source_value.text(), pane.arc_target_value.text()) == ('P1', 'T1')
+    assert pane.arc_weight_spin.value() == 1
+
+    editor.places[0].setSelected(True)
+    assert pane.page is pane.selection_page
+
+
+def test_a_weight_set_in_the_pane_is_kept_saved_and_undone(window, opened, monkeypatch):
+    """One recorded change, named for *Undo*."""
+
+    model = add_model(window, monkeypatch)
+    editor = editor_of(window, model)
+    draw(editor)
+    arc = editor.arcs[0]
+    arc.setSelected(True)
+    pane = window.properties_pane
+
+    pane.arc_weight_spin.setValue(4)
+    window.save_action.trigger()
+
+    assert arc.weight == 4
+    assert saved(opened, model).arcs[0].weight == 4
+    assert 'Change Weight' in window.undo_action.text()
+
+    window.undo_action.trigger()
+
+    assert arc.weight == 1
+    assert pane.arc_weight_spin.value() == 1
+
+
+def test_a_double_click_on_an_arc_opens_the_pane_on_its_weight(
+    shown_window, make_project, monkeypatch
+):
+    """A gesture that asks for the arc's properties, unlike a selection."""
+
+    shown_window.open_project_path(make_project('Bottling Line'))
+    model = add_model(shown_window, monkeypatch)
+    editor = editor_of(shown_window, model)
+    draw(editor)
+    arc = editor.arcs[0]
+    arc.setSelected(True)
+    focused = []
+    monkeypatch.setattr(shown_window.properties_pane, 'focus_weight', lambda: focused.append(True))
+
+    editor.arc_activated.emit(editor.model_id, arc.uuid)
+
+    assert shown_window.tool_pane('properties').isVisible()
+    assert shown_window.properties_pane.page is shown_window.properties_pane.arc_page
+    assert focused == [True]
+
+
+def test_a_double_click_in_a_tab_not_looked_at_opens_nothing(window, opened, monkeypatch):
+    """Only the current sheet speaks to the pane."""
+
+    first = add_model(window, monkeypatch, 'Filling Station')
+    add_model(window, monkeypatch, 'Capping')
+    editor = editor_of(window, first)
+    draw(editor)
+
+    editor.arc_activated.emit(editor.model_id, editor.arcs[0].uuid)
+
+    assert not window.pane_action('properties').isChecked()

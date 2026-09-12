@@ -802,27 +802,30 @@ def test_a_kind_chosen_on_the_bar_is_undone(editor):
     assert editor.to_document() == before
 
 
-def test_a_weight_asked_for_is_undone(editor, monkeypatch):
-    """The dialog is where a weight is asked for until there is a pane for it."""
+def test_a_weight_set_on_arcs_is_one_change_that_undoes(editor):
+    """What the Properties pane asks for, named for *Undo*."""
 
     _place, _free, _transition, arc = little_net(editor)
 
-    class Dialog:
-        def __init__(self, weight, parent=None):
-            self.weight = 5
-
-        def exec(self):
-            return QDialog.DialogCode.Accepted
-
-    monkeypatch.setattr('masafi_simtwin.documents.petri_net.ArcDialog', Dialog)
-
-    editor.edit_arc(arc)
+    assert editor.set_weight((arc.uuid,), 5)
 
     assert arc.weight == 5
     assert editor.undo_stack.command(editor.undo_stack.count() - 1).text() == 'Change Weight'
 
     editor.undo_stack.undo()
 
+    assert arc.weight == 1
+
+
+def test_a_weight_below_one_or_already_carried_is_not_a_change(editor):
+    """Nothing to undo."""
+
+    _place, _free, _transition, arc = little_net(editor)
+    count = editor.undo_stack.count()
+
+    assert not editor.set_weight((arc.uuid,), 1)
+    assert not editor.set_weight((arc.uuid,), 0)
+    assert editor.undo_stack.count() == count
     assert arc.weight == 1
 
 

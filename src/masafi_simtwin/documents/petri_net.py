@@ -50,9 +50,8 @@ from uuid import uuid4
 
 from PyQt6.QtCore import QPointF, Qt, pyqtSignal
 from PyQt6.QtGui import QUndoCommand, QUndoStack
-from PyQt6.QtWidgets import QDialog, QGraphicsItem, QWidget
+from PyQt6.QtWidgets import QGraphicsItem, QWidget
 
-from masafi_simtwin.dialogs.arc import ArcDialog
 from masafi_simtwin.documents.arc import (
     IMPLEMENTED_ARC_KINDS,
     Arc,
@@ -211,12 +210,16 @@ class Selection:
     names : tuple of str
         The names of every place and transition of the net, selected or not —
         what a new name is checked against, without the scene being asked.
+    node_names : tuple of tuple
+        Every place and transition of the net as a ``(uuid, name)`` pair, which
+        is how the ends of a selected arc are named.
     """
 
     places: tuple = ()
     transitions: tuple = ()
     arcs: tuple = ()
     names: tuple = ()
+    node_names: tuple = ()
 
     def __bool__(self) -> bool:
         """Say whether anything with properties is selected."""
@@ -374,6 +377,9 @@ class PetriNetEditor(Canvas):
         a gesture, a change done again, and — as its **inverse** — a change
         undone.  So what it says is the stream of what the net has actually
         become, which is what a journal writes and replays.
+    arc_activated : PyQt6.QtCore.pyqtSignal
+        Emitted with this model's UUID and an arc's when the arc is
+        double-clicked, which is how its weight is asked to be edited.
     selection_changed : PyQt6.QtCore.pyqtSignal
         Emitted with this model's UUID whenever what is selected on the sheet
         changes, so that a window can ask for :meth:`selection` without a lambda
@@ -389,6 +395,7 @@ class PetriNetEditor(Canvas):
     change_recorded = pyqtSignal(str, object)
     modified_changed = pyqtSignal(str, bool)
     selection_changed = pyqtSignal(str)
+    arc_activated = pyqtSignal(str, str)
 
     def __init__(
         self,
@@ -786,6 +793,7 @@ class PetriNetEditor(Canvas):
         by_name = lambda item: reading_order(item.name)  # noqa: E731
         return Selection(
             names=tuple(self.names),
+            node_names=tuple((item.uuid, item.name) for item in self.items_of(NetItem)),
             places=tuple(node_data(item) for item in sorted(places, key=by_name)),
             transitions=tuple(node_data(item) for item in sorted(transitions, key=by_name)),
             arcs=tuple(
@@ -1515,35 +1523,39 @@ class PetriNetEditor(Canvas):
         self.push(Change('set-description', operations))
         return bool(operations)
 
-    def edit_arc(self, arc: Arc) -> bool:
-        """Ask what an arc carries, and set it.
-
-        The weight is the only property a P/T arc has, and until the right-hand
-        properties pane exists a double click is where it is asked for.
+    def set_weight(self, uuids, weight: int) -> bool:
+        """Give some arcs the same weight, as one recorded change.
 
         Parameters
         ----------
-        arc : masafi_simtwin.documents.arc.Arc
-            The arc to ask about.
+        uuids : collections.abc.Iterable of str
+            The arcs.
+        weight : int
+            How many tokens each is to carry, one at least.
 
         Returns
         -------
         bool
-            Whether the weight was changed.
+            Whether any arc changed.  A weight below one is refused, as the
+            document refuses it.
         """
 
-        dialog = ArcDialog(arc.weight, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
+        if weight < 1:
             return False
-        was = arc.weight
-        arc.weight = dialog.weight
-        if arc.weight == was:
-            return False
-        self.record(Change('set-arc-weight', (SetArcWeight(arc.uuid, was, arc.weight),)))
-        return True
+        arcs = [self.arc(uuid) for uuid in uuids]
+        operations = tuple(
+            SetArcWeight(arc.uuid, arc.weight, weight) for arc in arcs if arc.weight != weight
+        )
+        self.push(Change('set-arc-weight', operations))
+        return bool(operations)
 
     def _on_item_activated(self, item) -> None:
-        """Open what was double-clicked, when it is something that opens.
+        """Say that an arc was double-clicked, so that its weight can be edited.
+
+        The weight is edited in the Properties pane, and a double click on an arc
+        is the gesture that asks for it: the document says which arc, and the
+        window opens the pane on it.  The press that began the double click has
+        already selected the arc, so the pane is showing it.
 
         Connected as a bound method rather than as a lambda, for the reason
         :meth:`_on_element_dropped` is.
@@ -1555,7 +1567,7 @@ class PetriNetEditor(Canvas):
         """
 
         if isinstance(item, Arc):
-            self.edit_arc(item)
+            self.arc_activated.emit(self.model_id, item.uuid)
 
     @property
     def model_id(self) -> str:

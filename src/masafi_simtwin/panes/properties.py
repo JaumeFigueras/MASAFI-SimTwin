@@ -11,6 +11,9 @@ The layout is :mod:`~masafi_simtwin.panes.forms.ui_properties`, compiled from
   kinds, a transition being a place without tokens: the tokens row is shown only
   when every node shown is a place.  With several nodes the name cannot be
   edited, and a field they do not agree on is left blank.
+* **Arc** — arcs alone selected: the weight, to be edited, and for one arc the
+  names of the nodes it runs between.  Its shape and its kind are chosen on the
+  arc tool bar and are not repeated here.
 * **Selection** — anything else, a mix of kinds among it: how many places,
   transitions and arcs.
 
@@ -50,6 +53,10 @@ UNIT_SYMBOLS: dict[str, str] = {'us': 'µs'}
 #: below the fewest tokens there can be, drawn as a blank.
 MIXED = -1
 
+#: What the weight field holds while the arcs shown do not agree on theirs: one
+#: below the lightest an arc can be, drawn as a blank.
+MIXED_WEIGHT = 0
+
 
 def unit_symbol(unit: str) -> str:
     """Give the symbol a unit is written with.
@@ -87,11 +94,15 @@ class PropertiesPane(QWidget, Ui_PropertiesPane):
     description_asked : PyQt6.QtCore.pyqtSignal
         Emitted with the UUIDs of the nodes shown and the description they are
         all to have.
+    weight_asked : PyQt6.QtCore.pyqtSignal
+        Emitted with the UUIDs of the arcs shown and the weight they are all to
+        carry.
     """
 
     name_asked = pyqtSignal(str, str)
     tokens_asked = pyqtSignal(object, int)
     description_asked = pyqtSignal(object, str)
+    weight_asked = pyqtSignal(object, int)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -100,6 +111,8 @@ class PropertiesPane(QWidget, Ui_PropertiesPane):
         #: The nodes on the node page, and the names the one shown may not take.
         self._nodes: tuple = ()
         self._taken: tuple[str, ...] = ()
+        #: The arcs on the arc page.
+        self._arcs: tuple = ()
         #: Set while fields are filled in, so that filling one is not an edit.
         self._showing = False
 
@@ -108,6 +121,8 @@ class PropertiesPane(QWidget, Ui_PropertiesPane):
         self.node_tokens_spin.setKeyboardTracking(False)
         self.node_tokens_spin.valueChanged.connect(self._on_tokens_changed)
         self.node_description_edit.editingFinished.connect(self._on_description_finished)
+        self.arc_weight_spin.setKeyboardTracking(False)
+        self.arc_weight_spin.valueChanged.connect(self._on_weight_changed)
 
         self.show_nothing()
 
@@ -130,7 +145,7 @@ class PropertiesPane(QWidget, Ui_PropertiesPane):
     def show_nothing(self) -> None:
         """Show that there is no model to say anything about."""
 
-        self._nodes = ()
+        self._nodes = self._arcs = ()
         self.page_stack.setCurrentWidget(self.nothing_page)
 
     def show_model(self, model: dict) -> None:
@@ -146,7 +161,7 @@ class PropertiesPane(QWidget, Ui_PropertiesPane):
 
         units = model.get('units') or {}
         distance = units.get('distance')
-        self._nodes = ()
+        self._nodes = self._arcs = ()
         self.model_name_value.setText(model.get('name', ''))
         self.model_kind_value.setText(self.kind_name(model.get('kind', '')))
         self.model_time_value.setText(unit_symbol(units.get('time', '')))
@@ -163,7 +178,7 @@ class PropertiesPane(QWidget, Ui_PropertiesPane):
             The places, transitions and arcs selected, as descriptions.
         """
 
-        self._nodes = ()
+        self._nodes = self._arcs = ()
         self.places_value.setText(str(len(selection.places)))
         self.transitions_value.setText(str(len(selection.transitions)))
         self.arcs_value.setText(str(len(selection.arcs)))
@@ -185,6 +200,7 @@ class PropertiesPane(QWidget, Ui_PropertiesPane):
 
         self._showing = True
         try:
+            self._arcs = ()
             self._nodes = tuple(nodes)
             places = self._places_shown
             if len(self._nodes) == 1:
@@ -231,6 +247,54 @@ class PropertiesPane(QWidget, Ui_PropertiesPane):
             self.page_stack.setCurrentWidget(self.node_page)
         finally:
             self._showing = False
+
+    def show_arcs(self, arcs, node_names=()) -> None:
+        """Show one arc or several, to be edited.
+
+        Parameters
+        ----------
+        arcs : collections.abc.Iterable of simtwin_core.petri_net.ArcData
+            The arcs, one at least.
+        node_names : collections.abc.Iterable, optional
+            Every node of the net as a ``(uuid, name)`` pair, which is how the
+            ends of one arc are named.  With several arcs no ends are shown.
+        """
+
+        names = dict(node_names)
+        self._showing = True
+        try:
+            self._nodes = ()
+            self._arcs = tuple(arcs)
+            one = len(self._arcs) == 1
+            if one:
+                arc = self._arcs[0]
+                self.arc_heading.setText(self.tr('Arc'))
+                self.arc_source_value.setText(names.get(arc.source, ''))
+                self.arc_target_value.setText(names.get(arc.target, ''))
+            else:
+                self.arc_heading.setText(self.tr('Arcs: {0}').format(len(self._arcs)))
+            self.arc_form.setRowVisible(self.arc_source_label, one)
+            self.arc_form.setRowVisible(self.arc_target_label, one)
+
+            weights = {arc.weight for arc in self._arcs}
+            if len(weights) == 1:
+                self.arc_weight_spin.setSpecialValueText('')
+                self.arc_weight_spin.setMinimum(1)
+                self.arc_weight_spin.setValue(weights.pop())
+            else:
+                self.arc_weight_spin.setMinimum(MIXED_WEIGHT)
+                self.arc_weight_spin.setSpecialValueText(' ')
+                self.arc_weight_spin.setValue(MIXED_WEIGHT)
+
+            self.page_stack.setCurrentWidget(self.arc_page)
+        finally:
+            self._showing = False
+
+    def focus_weight(self) -> None:
+        """Put the cursor in the weight, ready to be typed over."""
+
+        self.arc_weight_spin.setFocus()
+        self.arc_weight_spin.selectAll()
 
     def kind_name(self, kind: str) -> str:
         """Give what a kind of model is called.
@@ -339,6 +403,21 @@ class PropertiesPane(QWidget, Ui_PropertiesPane):
         if all(node.tokens == value for node in self._nodes):
             return
         self.tokens_asked.emit(tuple(node.uuid for node in self._nodes), value)
+
+    def _on_weight_changed(self, value: int) -> None:
+        """Ask for the weight chosen, for every arc shown.
+
+        Parameters
+        ----------
+        value : int
+            The weight, or :data:`MIXED_WEIGHT` while nothing has been chosen.
+        """
+
+        if self._showing or not self._arcs or value < 1:
+            return
+        if all(arc.weight == value for arc in self._arcs):
+            return
+        self.weight_asked.emit(tuple(arc.uuid for arc in self._arcs), value)
 
     def _on_description_finished(self) -> None:
         """Ask for the description typed, for every node shown."""
