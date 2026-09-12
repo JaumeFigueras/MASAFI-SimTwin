@@ -21,6 +21,12 @@ it.  Closing in code — :meth:`DocumentArea.close_document_for`,
 model's tab that way when the model is deleted, which is not a moment to save it,
 and when a project closes, having saved everything already.
 
+A document with **unsaved changes** carries :data:`MODIFIED_MARK` after its title.
+The area keeps each title apart from the mark, so a model renamed while it has
+changes keeps both, and what is reported as the current document's title is the
+title alone.  Whether a document has changes is the window's to say, through
+:meth:`DocumentArea.set_document_modified`.
+
 Like a tool pane, the documents are drawn as one rounded card — tab bar included,
 so the tabs belong to the card rather than floating on the ground beside it —
 inset by :data:`~masafi_simtwin.theme.PANE_GAP`.  The area itself is only the
@@ -49,6 +55,10 @@ from masafi_simtwin.theme import PANE_GAP
 #: Side, in pixels, of the close button drawn at the right of every tab.
 CLOSE_ICON_SIZE = 16
 
+#: What follows the title of a document that has changes not yet saved.  Not
+#: translated: an asterisk is the same mark in every language.
+MODIFIED_MARK = ' *'
+
 
 class DocumentArea(QWidget):
     """The tabbed document interface.
@@ -62,7 +72,11 @@ class DocumentArea(QWidget):
     ----------
     current_document_changed : PyQt6.QtCore.pyqtSignal
         Emitted with the title of the document that became current, or with an
-        empty string once the last one is closed.
+        empty string once the last one is closed.  The title alone, never the
+        mark of unsaved changes.
+    document_closed : PyQt6.QtCore.pyqtSignal
+        Emitted with the key of a document once its tab has gone, however it
+        was closed — an empty string for a document opened without one.
     may_close : collections.abc.Callable, optional
         Asked, with its key, whether a document may close when its close button
         is pressed; the tab stays when it answers false.  ``None`` lets every
@@ -72,6 +86,7 @@ class DocumentArea(QWidget):
     """
 
     current_document_changed = pyqtSignal(str)
+    document_closed = pyqtSignal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -91,6 +106,10 @@ class DocumentArea(QWidget):
         #: The document each key stands for.  Widgets rather than indices,
         #: because a tab that is dragged changes its index and not its widget.
         self._documents: dict[str, QWidget] = {}
+        #: Every document's title without the mark, by widget for the same
+        #: reason, and the documents that carry the mark.
+        self._titles: dict[QWidget, str] = {}
+        self._modified: set[QWidget] = set()
         self.may_close: Callable[[str], bool] | None = None
 
         self._stack = QStackedWidget(self)
@@ -163,6 +182,7 @@ class DocumentArea(QWidget):
         if key is not None:
             self.close_document_for(key)
 
+        self._titles[widget] = title
         index = self._tabs.addTab(widget, title)
         self._tabs.setTabToolTip(index, tool_tip or title)
         self._tabs.tabBar().setTabButton(
@@ -302,11 +322,63 @@ class DocumentArea(QWidget):
         widget = self._documents.get(key)
         if widget is None:
             return
+        self._titles[widget] = title
         index = self._tabs.indexOf(widget)
-        self._tabs.setTabText(index, title)
+        self._show_title(widget)
         self._tabs.setTabToolTip(index, tool_tip or title)
         if index == self._tabs.currentIndex():
             self.current_document_changed.emit(title)
+
+    def set_document_modified(self, key: str, modified: bool) -> None:
+        """Mark a document as having unsaved changes, or take the mark away.
+
+        Parameters
+        ----------
+        key : str
+            What was passed to :meth:`add_document`.  A key that is not open is
+            passed over.
+        modified : bool
+            Whether the document differs from what was last written.
+        """
+
+        widget = self._documents.get(key)
+        if widget is None:
+            return
+        if modified:
+            self._modified.add(widget)
+        else:
+            self._modified.discard(widget)
+        self._show_title(widget)
+
+    def is_document_modified(self, key: str) -> bool:
+        """Say whether a document carries the mark of unsaved changes.
+
+        Parameters
+        ----------
+        key : str
+            What was passed to :meth:`add_document`.
+
+        Returns
+        -------
+        bool
+            Whether it does; false for a key that is not open.
+        """
+
+        widget = self._documents.get(key)
+        return widget is not None and widget in self._modified
+
+    def _show_title(self, widget: QWidget) -> None:
+        """Write a document's tab text: its title, and the mark when it has one.
+
+        Parameters
+        ----------
+        widget : PyQt6.QtWidgets.QWidget
+            The document.
+        """
+
+        title = self._titles.get(widget, '')
+        mark = MODIFIED_MARK if widget in self._modified else ''
+        self._tabs.setTabText(self._tabs.indexOf(widget), title + mark)
 
     # ------------------------------------------------------------------
     # Closing
@@ -347,10 +419,12 @@ class DocumentArea(QWidget):
         widget = self._tabs.widget(index)
         if widget is None:
             return
+        key = self.key_of(widget)
         self._tabs.removeTab(index)
         self._forget(widget)
         widget.deleteLater()
         self._update_visible_page()
+        self.document_closed.emit(key or '')
 
     def close_document_for(self, key: str) -> None:
         """Close the document opened under a key, if it is open.
@@ -383,6 +457,8 @@ class DocumentArea(QWidget):
         for key, document in list(self._documents.items()):
             if document is widget:
                 del self._documents[key]
+        self._titles.pop(widget, None)
+        self._modified.discard(widget)
 
     # ------------------------------------------------------------------
     # State
@@ -397,7 +473,8 @@ class DocumentArea(QWidget):
             Index of the current tab, or ``-1`` when none is left.
         """
 
-        self.current_document_changed.emit('' if index < 0 else self._tabs.tabText(index))
+        widget = self._tabs.widget(index) if index >= 0 else None
+        self.current_document_changed.emit(self._titles.get(widget, '') if widget else '')
 
     def _update_visible_page(self) -> None:
         """Show the placeholder or the tabs, whichever the document count calls for."""

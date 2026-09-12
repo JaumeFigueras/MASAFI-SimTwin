@@ -13,7 +13,10 @@ from masafi_simtwin.documents import (
     PetriNetEditor,
     editor_for,
     file_of,
+    is_modified,
     load_file,
+    mark_saved,
+    mark_unsaved,
     new_model_file,
 )
 from simtwin_adapters.sim_petri import pnml
@@ -120,3 +123,40 @@ def test_a_file_that_is_not_a_net_is_refused_as_a_value_error(qtbot):
 
     with pytest.raises(ValueError):
         load_file(editor, b'not a net')
+
+
+def test_a_document_is_modified_until_it_is_marked_saved(qtbot):
+    """Which is the undo stack's clean state, asked through the documents."""
+
+    editor = editor_for({'uuid': 'u', 'name': 'Net', 'kind': 'petri-net'})
+    qtbot.addWidget(editor)
+    assert not is_modified(editor)
+
+    editor.add_element('pt-petri-net', 'place', QPointF(20.0, 20.0))
+    assert is_modified(editor)
+
+    mark_saved(editor)
+    assert not is_modified(editor)
+
+
+def test_a_document_can_be_marked_unsaved_whatever_its_history(qtbot):
+    """Work put back from a journal is read from a file, and never was saved."""
+
+    editor = editor_for({'uuid': 'u', 'name': 'Net', 'kind': 'petri-net'})
+    qtbot.addWidget(editor)
+
+    mark_unsaved(editor)
+
+    assert is_modified(editor)
+    assert editor.undo_stack.count() == 0
+
+
+def test_a_document_that_is_not_saved_is_never_modified(qtbot):
+    """There is nothing for it to differ from."""
+
+    widget = QWidget()
+    qtbot.addWidget(widget)
+
+    mark_unsaved(widget)
+
+    assert not is_modified(widget)

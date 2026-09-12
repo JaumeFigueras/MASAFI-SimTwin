@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import QDialog, QDockWidget, QMessageBox, QTabBar
 
 from masafi_simtwin import APPLICATION_NAME, paper, project
 from masafi_simtwin import documents
+from masafi_simtwin.document_area import MODIFIED_MARK
 from masafi_simtwin.documents import PetriNetEditor
 from masafi_simtwin.documents.arc import ArcKind
 from masafi_simtwin.library_tree import LibraryTree
@@ -220,7 +221,7 @@ def test_opening_a_project_updates_the_chrome(window, make_project):
     window.open_project_path(path)
 
     assert window.top_bar._project_button.text() == 'Bottling Line'
-    assert window.windowTitle() == f'Bottling Line — {APPLICATION_NAME}'
+    assert window.windowTitle() == f'Bottling Line[*] — {APPLICATION_NAME}'
     assert window.close_project_action.isEnabled()
     assert window._recent_projects[0] == path
 
@@ -591,7 +592,7 @@ def test_the_new_project_action_writes_and_opens_the_project(window, monkeypatch
 
     assert target.exists()
     assert project.name_of(target) == 'Bottling Line'
-    assert window.windowTitle() == f'Bottling Line — {APPLICATION_NAME}'
+    assert window.windowTitle() == f'Bottling Line[*] — {APPLICATION_NAME}'
     assert window._recent_projects[0] == str(target)
 
 
@@ -925,7 +926,7 @@ def test_clearing_leaves_the_open_project_alone(window, make_project):
     window.open_project_path(path)
     window.clear_recent_projects_action.trigger()
 
-    assert window.windowTitle() == f'Bottling Line — {APPLICATION_NAME}'
+    assert window.windowTitle() == f'Bottling Line[*] — {APPLICATION_NAME}'
     assert Path(path).exists()
     assert window.close_project_action.isEnabled()
 
@@ -1071,7 +1072,7 @@ def test_a_recent_entry_still_opens_its_project(window, make_project):
 
     window._recent_menu.actions()[1].trigger()
 
-    assert window.windowTitle() == f'One — {APPLICATION_NAME}'
+    assert window.windowTitle() == f'One[*] — {APPLICATION_NAME}'
 
 
 # ----------------------------------------------------------------------
@@ -1240,7 +1241,7 @@ def test_a_history_that_cannot_be_written_does_not_stop_the_project_opening(
 
     window.open_project_path(path)
 
-    assert window.windowTitle() == f'Bottling Line — {APPLICATION_NAME}'
+    assert window.windowTitle() == f'Bottling Line[*] — {APPLICATION_NAME}'
     assert 'history' in window.statusBar().currentMessage()
 
 
@@ -2453,3 +2454,226 @@ def test_work_survives_an_application_that_is_killed(window, make_project, tmp_p
     assert editor is not None
     assert len(editor.places) == 1
     assert len(editor.arcs) == 1
+
+
+# ----------------------------------------------------------------------
+# The mark of unsaved changes
+# ----------------------------------------------------------------------
+
+
+def marked(window, model: dict) -> bool:
+    """Say whether a model's tab carries the mark of unsaved changes.
+
+    Parameters
+    ----------
+    window : masafi_simtwin.main_window.MainWindow
+        The window.
+    model : dict
+        The model's entry in the manifest.
+
+    Returns
+    -------
+    bool
+        Whether its tab text ends in the mark, which is what a person sees.
+    """
+
+    area = window.document_area
+    text = area.tabs.tabText(area.tabs.indexOf(area.document(model['uuid'])))
+    return text.endswith(MODIFIED_MARK)
+
+
+def test_a_new_model_carries_no_mark(window, opened, monkeypatch):
+    """It is its file: nothing has been drawn on it yet."""
+
+    model = add_model(window, monkeypatch)
+
+    assert not marked(window, model)
+    assert not window.isWindowModified()
+
+
+def test_drawing_marks_the_tab_and_the_window(window, opened, monkeypatch):
+    """The net on the sheet is no longer the net in the file."""
+
+    model = add_model(window, monkeypatch)
+
+    draw(editor_of(window, model))
+
+    assert marked(window, model)
+    assert window.isWindowModified()
+
+
+def test_saving_takes_the_mark_away(window, opened, monkeypatch):
+    """And the next stroke puts it back."""
+
+    model = add_model(window, monkeypatch)
+    editor = editor_of(window, model)
+    draw(editor)
+
+    window.save_action.trigger()
+    assert not marked(window, model)
+    assert not window.isWindowModified()
+
+    editor.add_element('pt-petri-net', 'place', QPointF(100.0, 20.0))
+    assert marked(window, model)
+
+
+def test_undoing_back_to_what_was_saved_takes_the_mark_away(window, opened, monkeypatch):
+    """The sheet is the file again, so there is nothing to save."""
+
+    model = add_model(window, monkeypatch)
+    editor = editor_of(window, model)
+    editor.add_element('pt-petri-net', 'place', QPointF(20.0, 20.0))
+    assert marked(window, model)
+
+    window.undo_action.trigger()
+
+    assert not marked(window, model)
+    assert not window.isWindowModified()
+
+
+def test_only_the_changed_model_is_marked(window, opened, monkeypatch):
+    """One tab, one history, one mark; the window is marked while any is."""
+
+    first = add_model(window, monkeypatch, 'Filling Station')
+    second = add_model(window, monkeypatch, 'Capping')
+
+    draw(editor_of(window, first))
+
+    assert marked(window, first)
+    assert not marked(window, second)
+    assert window.isWindowModified()
+
+
+def test_a_renamed_model_keeps_its_mark(window, opened, monkeypatch):
+    """A new name is not a save."""
+
+    model = add_model(window, monkeypatch)
+    draw(editor_of(window, model))
+    window._project_tree.setCurrentItem(window._project_tree.model_items()[0])
+
+    stub_model_dialog(monkeypatch, QDialog.DialogCode.Accepted, name='Filling')
+    window.model_properties_action.trigger()
+
+    assert window.document_area.tabs.tabText(0) == 'Filling' + MODIFIED_MARK
+    assert window._document_label.text() == 'Filling'
+
+
+def test_a_deleted_model_takes_the_window_mark_with_it(window, opened, monkeypatch):
+    """Its changes went with it, and nothing else is unsaved."""
+
+    model = add_model(window, monkeypatch)
+    draw(editor_of(window, model))
+    window._project_tree.setCurrentItem(window._project_tree.model_items()[0])
+    answer(monkeypatch, QMessageBox.StandardButton.Yes)
+
+    window.delete_model_action.trigger()
+
+    assert window.document_area.document_count == 0
+    assert not window.isWindowModified()
+
+
+def test_discarding_a_tab_takes_the_window_mark_with_it(window, opened, monkeypatch):
+    """Changes that could not be saved and were let go are not unsaved any more."""
+
+    model = add_model(window, monkeypatch)
+    inhibit(editor_of(window, model))
+    assert window.isWindowModified()
+    answer(monkeypatch, QMessageBox.StandardButton.Discard)
+
+    window.document_area.tabs.tabBar().tabButton(0, QTabBar.ButtonPosition.RightSide).click()
+
+    assert window.document_area.document_count == 0
+    assert not window.isWindowModified()
+
+
+def test_a_model_that_cannot_be_saved_keeps_its_mark(window, opened, monkeypatch):
+    """What was not written is still unsaved."""
+
+    model = add_model(window, monkeypatch)
+    arc = inhibit(editor_of(window, model))
+    monkeypatch.setattr(
+        'masafi_simtwin.main_window.QMessageBox.warning', lambda *arguments, **keywords: None
+    )
+
+    window.save_project()
+
+    assert marked(window, model)
+    editor_of(window, model).view.remove(arc)
+
+
+def test_work_put_back_from_a_journal_is_marked(window, opened, monkeypatch):
+    """It was never saved, though it is drawn by reading a file."""
+
+    model = add_model(window, monkeypatch)
+    draw(editor_of(window, model))
+
+    reopen(window, opened)
+
+    assert marked(window, model)
+    assert window.isWindowModified()
+
+    window.save_action.trigger()
+
+    assert not marked(window, model)
+    assert not window.isWindowModified()
+
+
+MODIFIED_TEARDOWN_SESSION = """
+import gc, sys
+from PyQt6.QtCore import QEventLoop, QPointF, QSettings, QTimer
+from PyQt6.QtWidgets import QApplication
+
+QSettings.setDefaultFormat(QSettings.Format.IniFormat)
+
+from masafi_simtwin import documents, project
+from masafi_simtwin.main_window import MainWindow
+
+def session(path):
+    application = QApplication(sys.argv[:1])
+    window = MainWindow()
+    window.show()
+    model = project.add_model(
+        path,
+        'Filling Station',
+        project.ModelKind.PETRI_NET,
+        {'time': 's'},
+        document=lambda identifier: documents.new_model_file(
+            project.ModelKind.PETRI_NET, identifier
+        ),
+    )
+    window.open_project_path(path)
+    window.open_model(model['uuid'])
+    editor = window.document_area.document(model['uuid'])
+    editor.add_element('pt-petri-net', 'place', QPointF(20.0, 20.0))
+    loop = QEventLoop()
+    QTimer.singleShot(50, loop.quit)
+    loop.exec()
+    window._end_session()
+    del editor
+
+session(sys.argv[1])
+gc.collect()
+print('survived')
+"""
+
+
+def test_a_window_holding_unsaved_changes_is_torn_down_without_a_crash(tmp_path):
+    """The editor's stack is destroyed with the editor, and the editor reports on
+    it to the window.  A connection that outlived either would kill the
+    interpreter rather than raise, so the test watches from outside."""
+
+    path = str(project.create(project.path_for(tmp_path, 'Bottling Line'), 'Bottling Line'))
+    environment = dict(os.environ)
+    environment['QT_QPA_PLATFORM'] = 'offscreen'
+    environment['XDG_CONFIG_HOME'] = str(tmp_path / 'config')
+
+    finished = subprocess.run(
+        [sys.executable, '-c', MODIFIED_TEARDOWN_SESSION, path],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env=environment,
+    )
+
+    assert finished.returncode == 0, finished.stderr
+    assert 'survived' in finished.stdout

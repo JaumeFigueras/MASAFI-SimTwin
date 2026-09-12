@@ -435,6 +435,7 @@ class MainWindow(QMainWindow):
         self._document_area = DocumentArea(self)
         self._document_area.may_close = self._may_close_document
         self._document_area.current_document_changed.connect(self._on_document_changed)
+        self._document_area.document_closed.connect(self._on_document_closed)
         self.setCentralWidget(self._document_area)
 
     def _create_status_bar(self) -> None:
@@ -584,7 +585,8 @@ class MainWindow(QMainWindow):
 
         self._project_name = name
         self._top_bar.set_project_name(self._project_name)
-        self.setWindowTitle(f'{self._project_name} — {APPLICATION_NAME}')
+        # ``[*]`` is where Qt shows the window as modified; see _show_modified().
+        self.setWindowTitle(f'{self._project_name}[*] — {APPLICATION_NAME}')
         self.close_project_action.setEnabled(True)
         self.save_action.setEnabled(True)
         self._update_menus_for_project()
@@ -1039,6 +1041,7 @@ class MainWindow(QMainWindow):
         if stack is not None:
             self._undo_group.addStack(stack)
         editor.change_recorded.connect(self._on_change_recorded)
+        editor.modified_changed.connect(self._on_modified_changed)
 
     # ------------------------------------------------------------------
     # Saving
@@ -1195,6 +1198,8 @@ class MainWindow(QMainWindow):
             if document is None:
                 continue
             documents.load_file(document, data)
+            # Reading a file leaves a clean history, and this work was never saved.
+            documents.mark_unsaved(document)
             recovered.append(model.get('name', identifier))
 
         if recovered:
@@ -1207,6 +1212,50 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(
                 self, self.tr('Some work could not be put back'), '\n'.join(problems)
             )
+
+    def _on_modified_changed(self, key: str, modified: bool) -> None:
+        """Show on its tab, and on the window, that a model has unsaved changes.
+
+        Connected as a bound method, the signal belonging to a document this
+        window outlives.
+
+        Parameters
+        ----------
+        key : str
+            The model's UUID.
+        modified : bool
+            Whether it now differs from what was last written.
+        """
+
+        self._document_area.set_document_modified(key, modified)
+        self._show_modified()
+
+    def _on_document_closed(self, _key: str) -> None:
+        """Look again at whether anything is unsaved, a document having gone.
+
+        A document closed without being saved — a model deleted, or changes
+        discarded — takes its changes with it, and says nothing about them as
+        it goes.
+
+        Parameters
+        ----------
+        _key : str
+            The key of the document that closed.
+        """
+
+        self._show_modified()
+
+    def _show_modified(self) -> None:
+        """Mark the window modified while any open document has unsaved changes.
+
+        The title carries Qt's ``[*]`` placeholder, which Qt fills in from
+        :meth:`~PyQt6.QtWidgets.QWidget.setWindowModified` — as an asterisk, or
+        the way the platform shows it.
+        """
+
+        self.setWindowModified(
+            any(documents.is_modified(document) for document in self._document_area.documents)
+        )
 
     def _not_saved(self, key: str, error: Exception) -> str:
         """Say that one model was not saved, and why.

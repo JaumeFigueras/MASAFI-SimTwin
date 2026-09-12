@@ -357,9 +357,16 @@ class PetriNetEditor(Canvas):
         a gesture, a change done again, and — as its **inverse** — a change
         undone.  So what it says is the stream of what the net has actually
         become, which is what a journal writes and replays.
+    modified_changed : PyQt6.QtCore.pyqtSignal
+        Emitted with this model's UUID, and whether the sheet now differs from
+        what was last written, whenever that answer changes — which is what
+        the mark on a tab shows.  The editor passes it on from its own undo
+        stack, so a window listening needs no connection to a child of the
+        editor, and learns which model spoke without a lambda to tell it.
     """
 
     change_recorded = pyqtSignal(str, object)
+    modified_changed = pyqtSignal(str, bool)
 
     def __init__(
         self,
@@ -373,6 +380,7 @@ class PetriNetEditor(Canvas):
         self.view.empty_note = self.tr('Drag an element out of the Libraries pane')
 
         self.undo_stack = QUndoStack(self)
+        self.undo_stack.cleanChanged.connect(self._on_clean_changed)
         self.arc_tool_bar = ArcToolBar(self)
         self.add_tool_bar(self.arc_tool_bar)
 
@@ -1415,6 +1423,27 @@ class PetriNetEditor(Canvas):
         """str: The UUID of the model on the sheet, which is also its tab key."""
 
         return self.model.get('uuid', '')
+
+    @property
+    def is_modified(self) -> bool:
+        """bool: Whether the sheet differs from what was last written.
+
+        It is the undo stack's own answer: *clean* from a save until the next
+        change, and clean again when the changes since are undone.
+        """
+
+        return not self.undo_stack.isClean()
+
+    def _on_clean_changed(self, clean: bool) -> None:
+        """Say that the sheet has come to differ from its file, or stopped.
+
+        Parameters
+        ----------
+        clean : bool
+            Whether the undo stack is now at the state last written.
+        """
+
+        self.modified_changed.emit(self.model_id, not clean)
 
     @property
     def model_name(self) -> str:

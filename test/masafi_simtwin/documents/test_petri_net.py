@@ -1039,3 +1039,58 @@ def test_deleting_guides_from_the_menu_is_undone(editor):
     editor.undo_stack.undo()
 
     assert editor.to_document() == before
+
+
+# ----------------------------------------------------------------------
+# Whether the sheet differs from its file
+# ----------------------------------------------------------------------
+
+
+def test_a_new_sheet_has_nothing_unsaved(editor):
+    """Nothing has been done to it."""
+
+    assert not editor.is_modified
+
+
+def test_a_change_says_the_sheet_is_modified(editor, qtbot):
+    """With the model's UUID, so a window knows which tab to mark."""
+
+    with qtbot.waitSignal(editor.modified_changed, timeout=1000) as blocker:
+        editor.add_element('pt-petri-net', 'place', QPointF(20.0, 20.0))
+
+    assert blocker.args == [MODEL['uuid'], True]
+    assert editor.is_modified
+
+
+def test_undoing_back_to_the_saved_state_says_so(editor, qtbot):
+    """The sheet is what was written again, so nothing is unsaved."""
+
+    editor.undo_stack.setClean()
+    editor.add_element('pt-petri-net', 'place', QPointF(20.0, 20.0))
+
+    with qtbot.waitSignal(editor.modified_changed, timeout=1000) as blocker:
+        editor.undo_stack.undo()
+
+    assert blocker.args == [MODEL['uuid'], False]
+    assert not editor.is_modified
+
+
+def test_further_changes_say_nothing_more(editor, qtbot):
+    """The answer changed once; a second stroke does not change it again."""
+
+    editor.add_element('pt-petri-net', 'place', QPointF(20.0, 20.0))
+
+    with qtbot.assertNotEmitted(editor.modified_changed):
+        editor.add_element('pt-petri-net', 'place', QPointF(40.0, 20.0))
+
+
+def test_a_net_read_from_a_file_is_not_modified(editor, qtbot):
+    """What is drawn is the file."""
+
+    little_net(editor)
+    document = editor.to_document()
+    assert editor.is_modified
+
+    editor.load_document(document)
+
+    assert not editor.is_modified

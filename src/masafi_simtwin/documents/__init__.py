@@ -75,7 +75,9 @@ __all__ = [
     'Transition',
     'editor_for',
     'file_of',
+    'is_modified',
     'mark_saved',
+    'mark_unsaved',
     'load_file',
     'new_model_file',
     'recorded_change',
@@ -173,6 +175,44 @@ def mark_saved(document: QWidget) -> None:
     stack = undo_stack_of(document)
     if stack is not None:
         stack.setClean()
+
+
+def mark_unsaved(document: QWidget) -> None:
+    """Say that a document differs from what was last written, whatever its
+    history says.
+
+    Work put back from a journal is the case: it is drawn by reading a file,
+    which leaves an undo stack that is empty and therefore clean, while what is
+    drawn is exactly what was never saved.  No undo can reach the clean state
+    again from here, so only a save takes the mark away.
+
+    Parameters
+    ----------
+    document : PyQt6.QtWidgets.QWidget
+        The document.
+    """
+
+    stack = undo_stack_of(document)
+    if stack is not None:
+        stack.resetClean()
+
+
+def is_modified(document: QWidget) -> bool:
+    """Say whether a document differs from what was last written.
+
+    Parameters
+    ----------
+    document : PyQt6.QtWidgets.QWidget
+        The document.
+
+    Returns
+    -------
+    bool
+        Whether it does; always false for a document that is not saved at all.
+    """
+
+    stack = undo_stack_of(document)
+    return stack is not None and not stack.isClean()
 
 
 def file_of(document: QWidget) -> bytes | None:

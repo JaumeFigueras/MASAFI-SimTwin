@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from PyQt6.QtWidgets import QTabBar, QWidget
 
-from masafi_simtwin.document_area import DocumentArea
+from masafi_simtwin.document_area import MODIFIED_MARK, DocumentArea
 from masafi_simtwin.theme import PANE_GAP
 
 
@@ -322,3 +322,91 @@ def test_the_open_documents_are_found_by_their_keys(area):
     assert area.keyed_documents == {'u1': first, 'u2': second}
     assert area.key_of(second) == 'u2'
     assert area.key_of(QWidget()) is None
+
+
+# ----------------------------------------------------------------------
+# The mark of unsaved changes
+# ----------------------------------------------------------------------
+
+
+def test_a_document_with_unsaved_changes_carries_the_mark(area):
+    """After its title, and the mark goes when the changes are saved."""
+
+    area.add_document(QWidget(), 'Filling', key='u1')
+
+    area.set_document_modified('u1', True)
+    assert area.tabs.tabText(0) == 'Filling' + MODIFIED_MARK
+    assert area.is_document_modified('u1')
+
+    area.set_document_modified('u1', False)
+    assert area.tabs.tabText(0) == 'Filling'
+    assert not area.is_document_modified('u1')
+
+
+def test_the_mark_is_an_asterisk_after_the_title(area):
+    """As agreed: ``Filling *``."""
+
+    assert MODIFIED_MARK == ' *'
+
+
+def test_a_renamed_document_keeps_its_mark(area):
+    """The title changes and the changes are still unsaved."""
+
+    area.add_document(QWidget(), 'Filling Station', key='u1')
+    area.set_document_modified('u1', True)
+
+    area.set_document_title('u1', 'Filling')
+
+    assert area.tabs.tabText(0) == 'Filling' + MODIFIED_MARK
+
+
+def test_the_current_title_is_reported_without_the_mark(area, qtbot):
+    """The status bar names the document; the tab says it is unsaved."""
+
+    area.add_document(QWidget(), 'Filling', key='u1')
+    area.set_document_modified('u1', True)
+
+    with qtbot.waitSignal(area.current_document_changed, timeout=1000) as blocker:
+        area.set_document_title('u1', 'Capping')
+    assert blocker.args == ['Capping']
+
+    area.add_document(QWidget(), 'Other', key='u2')
+    with qtbot.waitSignal(area.current_document_changed, timeout=1000) as blocker:
+        area.show_document('u1')
+    assert blocker.args == ['Capping']
+
+
+def test_marking_a_key_that_is_not_open_is_harmless(area):
+    """A model closed a moment ago may still report on itself."""
+
+    area.set_document_modified('nobody', True)
+
+    assert not area.is_document_modified('nobody')
+
+
+def test_a_closed_document_takes_its_mark_with_it(area):
+    """The same key opened again is a fresh document."""
+
+    area.add_document(QWidget(), 'Filling', key='u1')
+    area.set_document_modified('u1', True)
+    area.close_document_for('u1')
+
+    area.add_document(QWidget(), 'Filling', key='u1')
+
+    assert area.tabs.tabText(0) == 'Filling'
+    assert not area.is_document_modified('u1')
+
+
+def test_closing_a_document_is_reported_with_its_key(area, qtbot):
+    """However it closes, which is how the window learns its changes went too."""
+
+    area.add_document(QWidget(), 'Filling', key='u1')
+    area.add_document(QWidget(), 'Scratch')
+
+    with qtbot.waitSignal(area.document_closed, timeout=1000) as blocker:
+        area.close_document_for('u1')
+    assert blocker.args == ['u1']
+
+    with qtbot.waitSignal(area.document_closed, timeout=1000) as blocker:
+        close_button(area).click()
+    assert blocker.args == ['']
