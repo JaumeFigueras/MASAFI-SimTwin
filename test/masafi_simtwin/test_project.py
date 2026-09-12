@@ -1339,3 +1339,169 @@ def test_a_journal_that_cannot_be_rewritten_is_left_as_it_was(created, monkeypat
 
     assert project.journal_path(created).read_bytes() == before
     assert not list(created.parent.glob('*.writing'))
+
+
+# ----------------------------------------------------------------------
+# Earlier versions
+# ----------------------------------------------------------------------
+
+
+def names_of(versions) -> list[str]:
+    """Give the file names of some versions.
+
+    Parameters
+    ----------
+    versions : list of pathlib.Path
+        The versions.
+
+    Returns
+    -------
+    list of str
+        Their names, in the order given.
+    """
+
+    return [version.name for version in versions]
+
+
+def test_the_versions_lie_in_a_folder_beside_the_project(created):
+    """Not loose beside it, where the Open dialog would offer them."""
+
+    assert project.versions_path(created).name == 'Bottling Line.mfstz.versions'
+    assert project.versions_path(created).parent == created.parent
+
+
+def test_a_project_that_was_never_saved_has_no_versions(created):
+    """And no folder is made just to say so."""
+
+    assert project.versions_of(created) == []
+    assert not project.versions_path(created).exists()
+
+
+def test_a_version_is_a_copy_of_the_project_under_the_next_number(created):
+    """Numbered upwards, four digits, the project's own suffix."""
+
+    before = created.read_bytes()
+
+    first = project.keep_version(created)
+    second = project.keep_version(created)
+
+    assert names_of(project.versions_of(created)) == ['0001.mfstz', '0002.mfstz']
+    assert (first.name, second.name) == ('0001.mfstz', '0002.mfstz')
+    assert first.read_bytes() == before
+    assert created.read_bytes() == before
+
+
+def test_versions_are_ordered_by_their_number_and_nothing_else_counts(created):
+    """``10000`` comes after ``0010``; a note, a directory or a copy cut short is
+    not a version, and is never counted or deleted."""
+
+    folder = project.versions_path(created)
+    folder.mkdir()
+    for name in ('0010.mfstz', '10000.mfstz', '0009.mfstz'):
+        (folder / name).write_bytes(b'version')
+    (folder / 'notes.txt').write_text('mine', encoding='utf-8')
+    (folder / '0011.mfstz.writing').write_bytes(b'cut short')
+    (folder / '0012.mfstz').mkdir()
+
+    assert names_of(project.versions_of(created)) == ['0009.mfstz', '0010.mfstz', '10000.mfstz']
+    assert project.keep_version(created).name == '10001.mfstz'
+
+
+def test_purging_keeps_the_newest_and_says_how_many_went(created):
+    """The oldest are deleted; what is not a version is left alone."""
+
+    for _ in range(13):
+        project.keep_version(created)
+    (project.versions_path(created) / 'notes.txt').write_text('mine', encoding='utf-8')
+
+    removed = project.purge_versions(created, 10)
+
+    assert removed == 3
+    assert names_of(project.versions_of(created)) == [f'{n:04d}.mfstz' for n in range(4, 14)]
+    assert (project.versions_path(created) / 'notes.txt').exists()
+
+
+def test_purging_fewer_versions_than_are_kept_deletes_nothing(created):
+    """Nor does purging a project that has none."""
+
+    assert project.purge_versions(created) == 0
+    project.keep_version(created)
+
+    assert project.purge_versions(created, project.VERSIONS_KEPT) == 0
+    assert len(project.versions_of(created)) == 1
+
+
+def test_the_numbering_goes_on_after_the_oldest_are_deleted(created):
+    """The highest number plus one, never the count plus one."""
+
+    for _ in range(12):
+        project.keep_version(created)
+    project.purge_versions(created, 10)
+
+    assert project.keep_version(created).name == '0013.mfstz'
+
+
+def test_the_limits_are_fifty_before_asking_and_ten_kept():
+    """As agreed."""
+
+    assert project.VERSIONS_BEFORE_ASKING == 50
+    assert project.VERSIONS_KEPT == 10
+
+
+def test_a_version_that_cannot_be_kept_is_said_and_leaves_nothing(created):
+    """The folder's place taken by a file, say."""
+
+    project.versions_path(created).write_text('in the way', encoding='utf-8')
+
+    with pytest.raises(project.ProjectError):
+        project.keep_version(created)
+
+    assert project.versions_path(created).is_file()
+
+
+def test_a_copy_cut_short_is_not_left_under_a_number(created, monkeypatch):
+    """It is written beside its name and renamed into it."""
+
+    def fail(source, target):
+        Path(target).write_bytes(b'half')
+        raise OSError('disk full')
+
+    monkeypatch.setattr(project.shutil, 'copyfile', fail)
+
+    with pytest.raises(project.ProjectError, match='could not be kept'):
+        project.keep_version(created)
+
+    assert project.versions_of(created) == []
+    assert list(project.versions_path(created).iterdir()) == []
+
+
+def test_a_save_that_changes_the_archive_is_told_before_it_does(two_models):
+    """Which is the moment a version of the project as it was can be kept."""
+
+    path, first, _ = two_models
+    before = path.read_bytes()
+    seen = []
+
+    project.write_models(
+        path,
+        {first['uuid']: b'changed'},
+        before_writing=lambda: seen.append(path.read_bytes()),
+    )
+
+    assert seen == [before]
+    assert project.read_model(path, first['uuid']) == b'changed'
+
+
+def test_a_save_that_changes_nothing_is_not_told_anything(two_models):
+    """So a save of an untouched project leaves no version."""
+
+    path, first, _ = two_models
+    seen = []
+
+    project.write_models(
+        path, {first['uuid']: empty_net(first['uuid'])}, before_writing=lambda: seen.append(1)
+    )
+    with pytest.raises(project.ProjectError):
+        project.write_models(path, {'not-a-uuid': b'X'}, before_writing=lambda: seen.append(1))
+
+    assert seen == []

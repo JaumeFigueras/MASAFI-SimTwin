@@ -34,9 +34,15 @@ its history in the manifest.  It is read from there, and **moved into the log th
 first time the project is written**, entries untouched, so the chain goes on
 holding across the move and nothing of what it records is lost.
 
-This module has no Qt in it, on purpose.  It is stdlib only — ``zipfile`` and
-``json`` — so that it can move to :mod:`simtwin_core` unchanged once that
-package exists, which is where a document format belongs.
+**Three things live beside a project rather than inside it**, under its name:
+the lock (:func:`lock_path`), the journal (:func:`journal_path`) and the earlier
+versions (:func:`versions_path`).  Beside, because a zip cannot be appended to or
+updated in place, and because a crash must leave something that can be cleared
+without opening the project it blocks.
+
+This module has no Qt in it, on purpose.  It is stdlib only — ``zipfile``,
+``json`` and ``shutil`` among them — so that it can move to :mod:`simtwin_core`
+unchanged, which is where a document format belongs.
 """
 
 from __future__ import annotations
@@ -46,6 +52,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import socket
 import uuid
 import zipfile
@@ -112,6 +119,22 @@ LOCK_SUFFIX = '.lock'
 #: What is appended to make the file that holds its journal: what has been done
 #: to the project since it was last saved.
 JOURNAL_SUFFIX = '.journal'
+
+#: What follows a project's file name to name the folder its earlier versions
+#: are kept in, beside it: ``Bottling Line.mfstz.versions/0007.mfstz``.
+VERSIONS_SUFFIX = '.versions'
+
+#: How many digits a version's number is written with at least.  A number that
+#: outgrows them is simply written longer, and still sorts by its value.
+VERSION_DIGITS = 4
+
+#: How many versions a project may keep before opening it asks whether to delete
+#: the oldest, and how many are kept when it is told to.
+VERSIONS_BEFORE_ASKING = 50
+VERSIONS_KEPT = 10
+
+#: What the name of a version is: its number and the project suffix, nothing more.
+_VERSION_NAME = re.compile(r'(\d+)' + re.escape(PROJECT_SUFFIX))
 
 
 #: What is put in place of anything that has no business in a file name.
@@ -520,6 +543,144 @@ def rewrite_journal(path: str | Path, entries: list[dict]) -> None:
     except OSError as error:
         beside.unlink(missing_ok=True)
         raise ProjectError(f'{target} could not be written: {error}') from error
+
+
+def versions_path(path: str | Path) -> Path:
+    """Give the folder a project's earlier versions are kept in.
+
+    A folder beside the project rather than loose files beside it: a loose
+    ``.mfstz`` would be offered by the Open dialog and could reach the recent
+    projects list, while a folder is as easy to restore from by hand and is
+    deleted as one thing.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        The project file.
+
+    Returns
+    -------
+    pathlib.Path
+        The folder, which need not exist.
+    """
+
+    target = Path(path)
+    return target.with_name(f'{target.name}{VERSIONS_SUFFIX}')
+
+
+def versions_of(path: str | Path) -> list[Path]:
+    """List a project's earlier versions, oldest first.
+
+    Only the files named as versions are — a number and the project suffix —
+    so anything else a person has put in the folder is left out of the count and
+    never deleted.  They are ordered by the number's value, not by its text.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        The project file.
+
+    Returns
+    -------
+    list of pathlib.Path
+        The versions, the newest last, and none when the folder is not there.
+
+    Raises
+    ------
+    ProjectError
+        When the folder is there and cannot be read.
+    """
+
+    folder = versions_path(path)
+    try:
+        found = [
+            (int(match.group(1)), entry)
+            for entry in folder.iterdir()
+            if (match := _VERSION_NAME.fullmatch(entry.name)) and entry.is_file()
+        ]
+    except FileNotFoundError:
+        return []
+    except OSError as error:
+        raise ProjectError(f'{folder} could not be read: {error}') from error
+    return [entry for _number, entry in sorted(found)]
+
+
+def keep_version(path: str | Path) -> Path:
+    """Keep a copy of a project as it is now, under the next number.
+
+    Called before a save changes the archive, so a version is the project **as
+    it was** before that save, and none of them is ever the same as the project
+    itself.  The number is the highest there plus one rather than the count
+    plus one, so the numbering goes on after the oldest have been deleted.
+    Nothing already there is touched: numbering upwards writes one new file and
+    renames nothing.
+
+    The copy is made beside its name and renamed into it, so a copy cut short
+    never stands under a number as a broken project.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        The project file.
+
+    Returns
+    -------
+    pathlib.Path
+        The version just kept.
+
+    Raises
+    ------
+    ProjectError
+        When the folder cannot be read or made, or the copy cannot be written.
+    """
+
+    folder = versions_path(path)
+    existing = versions_of(path)
+    number = int(_VERSION_NAME.fullmatch(existing[-1].name).group(1)) + 1 if existing else 1
+    target = folder / f'{number:0{VERSION_DIGITS}d}{PROJECT_SUFFIX}'
+    beside = folder / f'{target.name}.writing'
+    try:
+        folder.mkdir(exist_ok=True)
+        shutil.copyfile(Path(path), beside)
+        beside.rename(target)
+    except OSError as error:
+        try:
+            beside.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise ProjectError(f'{target} could not be kept: {error}') from error
+    return target
+
+
+def purge_versions(path: str | Path, keep: int = VERSIONS_KEPT) -> int:
+    """Delete a project's oldest versions, keeping the newest.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        The project file.
+    keep : int, optional
+        How many of the newest to keep.
+
+    Returns
+    -------
+    int
+        How many were deleted.
+
+    Raises
+    ------
+    ProjectError
+        When the folder cannot be read or a version cannot be deleted.
+    """
+
+    existing = versions_of(path)
+    oldest = existing[: max(len(existing) - keep, 0)]
+    for entry in oldest:
+        try:
+            entry.unlink()
+        except OSError as error:
+            raise ProjectError(f'{entry} could not be deleted: {error}') from error
+    return len(oldest)
 
 
 def file_name_for(name: str) -> str:
@@ -1135,14 +1296,18 @@ def read_model(path: str | Path, identifier: str) -> bytes:
     return _read_entry(path, model['file'])
 
 
-def write_models(path: str | Path, contents: dict[str, bytes]) -> list[str]:
+def write_models(
+    path: str | Path,
+    contents: dict[str, bytes],
+    before_writing: Callable[[], None] | None = None,
+) -> list[str]:
     """Write the files of some models back, in one write of the archive.
 
     Saving is this: every open model given at once, so a project is rewritten
     **once** however many of its models are open.  A model whose file has not
     changed is not written, and when none has the archive is not touched at all
-    — a save of a project nobody has changed writes nothing, which is what the
-    numbered backups a save will leave behind are going to count on.
+    — a save of a project nobody has changed writes nothing, which is also why
+    it leaves no numbered version behind.
 
     **No history entry is made.**  The history records sessions and the changes
     to what a project holds — a model added, renamed, removed — and saving is
@@ -1154,6 +1319,12 @@ def write_models(path: str | Path, contents: dict[str, bytes]) -> list[str]:
         The project file.
     contents : dict
         What each model's file is to hold, by the model's UUID.
+    before_writing : collections.abc.Callable, optional
+        Called with no arguments once it is known that the archive is going to
+        change and before it does — which is the moment to keep a version of
+        it, :func:`keep_version`.  It is not called when nothing has changed.
+        What it raises is not caught here: a caller that must not stop the save
+        catches its own.
 
     Returns
     -------
@@ -1188,6 +1359,8 @@ def write_models(path: str | Path, contents: dict[str, bytes]) -> list[str]:
         identifier for identifier, data in contents.items() if stored[identifier] != bytes(data)
     ]
     if changed:
+        if before_writing is not None:
+            before_writing()
         _rewrite_manifest(
             path,
             content,

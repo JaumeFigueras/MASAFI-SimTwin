@@ -174,15 +174,16 @@ model.
 
 ---
 
-## Saving happens at boundaries and on a timer; the versions are what is left
+## Saving happens at boundaries and on a timer, and keeps what it replaces
 
 **Now.** What a project *holds* — a model added, renamed, removed — is written as it is made. What a
 model *is* — the net drawn on its sheet — is written at **boundaries**: *File → Save* (`Ctrl+S`),
 closing a tab, closing the project, opening another, and quitting — and **every few minutes**, by the
 autosave timer. Every open model goes into **one** rewrite of the archive, and a model whose bytes have
 not changed is not written at all. A **journal** beside the archive holds every change not yet saved, so
-a session that ends badly loses nothing: the next opening puts the work back. What is left is the
-**numbered backups**; until they exist a saved mistake is saved.
+a session that ends badly loses nothing: the next opening puts the work back. And every save that
+changes the archive first keeps the project as it was, as a **numbered version** — see *Versions are
+counted, not thinned*.
 
 **Why not simply write more often.** The cost is not that saving is slow — it is that **a zip must be
 rewritten whole**. A single entry cannot be updated in place. Adding a model is a rare, deliberate
@@ -220,25 +221,41 @@ produced; it is large, write-once, and a crashed run is re-run rather than recov
 
 ---
 
-## Project files are not versioned
+## Versions are counted, not thinned
 
-**Now.** A project has exactly one state on disk. A mistake survives the next write.
+**Now.** Every save that changes the archive — by hand, at a boundary or by the autosave — first copies
+the project **as it was** into `Bottling Line.mfstz.versions/`, in the manner of VMS's `NAME.EXT;n`:
 
-**The decided shape.** Keep numbered versions after each save and autosave, in the manner of VMS's
-`NAME.EXT;n`:
+- **In a sibling folder** rather than as sibling files. Loose siblings would be listed by the Open
+  dialog's `*.mfstz` filter and could fill the recent projects list; a folder is just as visible and
+  restorable by hand, and deletes as one unit.
+- **Ascending numbers, newest highest**, four digits at least (`0007.mfstz`), the next being the highest
+  there plus one — so the numbering goes on after a purge. Logrotate-style descending numbering would
+  rename every file on every save; ascending writes exactly one new file and touches nothing else.
+- **The state before the save, not after it** — decided with Jaume. No version is ever the same as the
+  project, and the newest is always one step back.
+- **No version when nothing changed.** A save or an autosave tick on an untouched project writes nothing.
+- **A version that cannot be kept does not stop the save**; the sentence saying the project was saved
+  says so.
+- **Only files named as versions count**, and nothing else in the folder is ever deleted.
 
-- **In a sibling folder**, `Bottling Line.mfstz.versions/0007.mfstz`, rather than as sibling files.
-  Loose siblings would be listed by the Open dialog's `*.mfstz` filter and could fill the recent
-  projects list; a folder is just as visible and restorable by hand, and deletes as one unit.
-- **Ascending numbers, newest highest** — true VMS, and not only for nostalgia: logrotate-style
-  descending numbering renames every file on every save, which is N copies of a multi-megabyte
-  archive per autosave. Ascending writes exactly one new file and touches nothing else.
-- **A purge limit is not optional.** VMS had `/VERSION_LIMIT` for the same reason: an autosave every
-  two minutes on a 50 MB project is about 1.5 GB an hour. Note that the limit and the interval
-  interact — "keep the last ten" with a two-minute autosave is twenty minutes of history. Thinning
-  (everything from the last hour, then hourly, then daily) beats a flat count, but a count is the
-  place to start.
-- **Skip the backup when nothing changed.** An autosave tick on an untouched project writes nothing.
+**The purge is a question, asked when the project opens** — decided with Jaume: more than fifty versions
+(`VERSIONS_BEFORE_ASKING`) and the user is asked whether to delete the oldest and keep the last ten
+(`VERSIONS_KEPT`). *No* keeps them all and the question comes back next time. Nothing else ever deletes
+a version.
+
+**Why a count and not thinning.** A count is the place to start, and a question means nothing is lost
+behind the user's back. Note that the limit and the interval interact: at the default five minutes a
+busy afternoon passes fifty versions in about four hours, and *the last ten* is then fifty minutes of
+history. An autosave every two minutes on a 50 MB project is about 1.5 GB an hour.
+
+**Options, when a count is not enough.**
+
+- **Thinning**: everything from the last hour, then one an hour, then one a day. Beats a flat count for
+  the same disk, and it is what a person restoring actually wants.
+- A limit in megabytes rather than in versions, since a project's size is what fills a disk.
+- A *Versions* entry in the *Project* menu: list them with their dates, restore one, delete some — which
+  would also let the purge stop being a question at start-up.
 
 **A side effect worth knowing.** Versions help the copy detection above — a real backup chain is more
 evidence — but they also let a student restore an old state and shed inconvenient history. The chain
@@ -381,7 +398,7 @@ no *Cut*, no *Copy*, no *Paste*, and no *Delete* entry — deleting is the key a
 
 **Why it was done this way.** Persisting undo is a great deal of machinery for almost none: what a
 person needs after a crash is their work back, not the ability to undo past it, and that is the
-journal's job (see *Saving happens at boundaries*). Cut, Copy and Paste were left until there is
+journal's job (see *Saving happens at boundaries and on a timer*). Cut, Copy and Paste were left until there is
 somewhere to put what is copied — a net's items carry identities, and pasting one has to decide
 whether it is the same place or a new one, which is a decision nobody has needed yet.
 
@@ -719,3 +736,46 @@ them are drawn: a horizontal bar between two places stacked above one another is
   lands on the millimetre grid the way an unturned one does.
 - A free rotation with a handle, when there is a selection model and a properties pane to show the
   angle in. That is an editor feature rather than an item feature.
+
+---
+
+## A project's companions do not follow it when it is renamed or moved
+
+**Now.** A project is one file, but three things live beside it under its name: the lock
+(`Bottling Line.mfstz.lock`), the journal (`.journal`) and the versions (`.versions/`). Renaming or
+moving the `.mfstz` in a file manager leaves them behind. A lock or a journal left behind is harmless or
+nearly so — the lock names a process that is gone, and a journal left behind is simply not found — but a
+versions folder left behind is history the renamed project no longer knows it has, and a new project of
+the old name would take it over and number on from it.
+
+**Why it was done this way.** Beside rather than inside, for the reason each of them gives: a zip cannot
+be appended to or updated in place, and a crash must leave something that can be cleared without opening
+the project it blocks. The application never sees a file being renamed, so it cannot carry anything
+along.
+
+**Options.**
+
+- *Save As…* / *Move Project…* in the application, carrying the three along. It fixes the case the
+  application takes part in and no other.
+- Recognise a versions folder by the project's UUID rather than by its name: every version holds the
+  manifest, so a folder whose versions carry another UUID can be told apart and left alone.
+- Say it in the documentation, and leave it.
+
+---
+
+## A version opened by itself is a second copy of the project
+
+**Now.** A version is a whole `.mfstz`, and nothing stops it being opened from inside its folder. It
+then carries the same UUID as the project it was kept from, and opening it gives it a lock, a journal
+and a versions folder of its own — inside the versions folder — and adds an *opened* entry to its
+history, so the version no longer is what was kept.
+
+**Why it was done this way.** Keeping versions was the step; restoring one was not designed, and until it
+is, opening one by hand is how a person gets something back.
+
+**Options.**
+
+- Recognise a version on opening — a file inside a `.versions` folder — and offer *Restore* (copy it over
+  the project, itself keeping a version first) or *Open a copy* (a new UUID, somewhere else) rather than
+  opening it in place.
+- Open a version read-only: no lock, no journal, no history entry, nothing saved.

@@ -2944,3 +2944,202 @@ def test_discarded_work_is_not_put_back(window, opened, monkeypatch):
     window.document_area.tabs.tabBar().tabButton(0, QTabBar.ButtonPosition.RightSide).click()
 
     assert journal_of(opened) == []
+
+
+# ----------------------------------------------------------------------
+# Earlier versions
+# ----------------------------------------------------------------------
+
+
+def version_names(path: str) -> list[str]:
+    """Give the names of a project's earlier versions, oldest first.
+
+    Parameters
+    ----------
+    path : str
+        The project file.
+
+    Returns
+    -------
+    list of str
+        The file names.
+    """
+
+    return [version.name for version in project.versions_of(path)]
+
+
+def make_versions(path: str, count: int) -> None:
+    """Give a project a number of earlier versions, as a long history of saving would.
+
+    Parameters
+    ----------
+    path : str
+        The project file.
+    count : int
+        How many.
+    """
+
+    for _ in range(count):
+        project.keep_version(path)
+
+
+def test_a_save_keeps_the_project_as_it_was_before_it(window, opened, monkeypatch):
+    """So the newest version is always one step back."""
+
+    model = add_model(window, monkeypatch)
+    before = Path(opened).read_bytes()
+    draw(editor_of(window, model))
+
+    window.save_action.trigger()
+
+    assert version_names(opened) == ['0001.mfstz']
+    assert project.versions_of(opened)[0].read_bytes() == before
+    assert Path(opened).read_bytes() != before
+
+
+def test_a_save_of_an_untouched_project_keeps_no_version(window, opened, monkeypatch):
+    """Nothing was written, so there is nothing to go back from."""
+
+    add_model(window, monkeypatch)
+
+    window.save_action.trigger()
+
+    assert version_names(opened) == []
+
+
+def test_every_save_that_changes_something_keeps_one_more(window, opened, monkeypatch):
+    """And the second is the project as the first save left it."""
+
+    model = add_model(window, monkeypatch)
+    editor = editor_of(window, model)
+    draw(editor)
+    window.save_action.trigger()
+    after_first = Path(opened).read_bytes()
+
+    editor.add_element('pt-petri-net', 'place', QPointF(100.0, 20.0))
+    window.save_action.trigger()
+
+    assert version_names(opened) == ['0001.mfstz', '0002.mfstz']
+    assert project.versions_of(opened)[1].read_bytes() == after_first
+
+
+def test_the_autosave_keeps_a_version_too(window, opened, monkeypatch):
+    """It is a save like any other."""
+
+    model = add_model(window, monkeypatch)
+    draw(editor_of(window, model))
+    reports_of(window, monkeypatch)
+
+    window._autosave()
+
+    assert version_names(opened) == ['0001.mfstz']
+
+
+def test_a_version_that_cannot_be_kept_does_not_stop_the_save(window, opened, monkeypatch):
+    """The work in front of the person matters more than a copy of the past,
+    and the sentence saying it was saved says the copy was not kept."""
+
+    model = add_model(window, monkeypatch)
+    drawn = draw(editor_of(window, model))
+    project.versions_path(opened).write_text('in the way', encoding='utf-8')
+    said = reports_of(window, monkeypatch)
+
+    window.save_action.trigger()
+
+    assert saved(opened, model) == drawn
+    assert said == ['The project was saved, but its earlier version could not be kept']
+
+    editor_of(window, model).add_element('pt-petri-net', 'place', QPointF(100.0, 20.0))
+    window._autosave()
+
+    assert said[-1] == (
+        'The project was saved automatically, but its earlier version could not be kept'
+    )
+
+
+def test_a_project_keeping_too_many_versions_asks_to_delete_the_oldest(
+    window, make_project, monkeypatch
+):
+    """More than fifty, and yes keeps the last ten."""
+
+    path = make_project('Bottling Line')
+    make_versions(path, 51)
+    asked = answer(monkeypatch, QMessageBox.StandardButton.Yes)
+
+    window.open_project_path(path)
+
+    assert asked == ['Delete old versions?']
+    assert version_names(path) == [f'{n:04d}.mfstz' for n in range(42, 52)]
+    assert window._project_name == 'Bottling Line'
+
+
+def test_fifty_versions_are_not_too_many(window, make_project, monkeypatch):
+    """The question is for more than fifty."""
+
+    path = make_project('Bottling Line')
+    make_versions(path, 50)
+    asked = answer(monkeypatch, QMessageBox.StandardButton.Yes)
+
+    window.open_project_path(path)
+
+    assert asked == []
+    assert len(version_names(path)) == 50
+
+
+def test_answering_no_keeps_every_version_and_asks_again_next_time(
+    window, make_project, monkeypatch
+):
+    """Deleting a version is only ever done when asked for."""
+
+    path = make_project('Bottling Line')
+    make_versions(path, 51)
+    asked = answer(monkeypatch, QMessageBox.StandardButton.No)
+
+    window.open_project_path(path)
+    assert len(version_names(path)) == 51
+
+    window.close_project()
+    window.open_project_path(path)
+
+    assert asked == ['Delete old versions?', 'Delete old versions?']
+    assert len(version_names(path)) == 51
+
+
+def test_the_question_names_the_project_and_the_numbers(window, make_project, monkeypatch):
+    """How many there are, and how many will be kept."""
+
+    path = make_project('Bottling Line')
+    make_versions(path, 60)
+    texts = []
+    monkeypatch.setattr(
+        'masafi_simtwin.main_window.QMessageBox.question',
+        lambda *arguments, **keywords: texts.append(arguments[2])
+        or QMessageBox.StandardButton.No,
+    )
+
+    window.open_project_path(path)
+
+    assert texts == [
+        'Bottling Line keeps 60 earlier versions of itself. '
+        'Delete the oldest of them and keep the last 10?'
+    ]
+
+
+def test_deleting_a_model_says_it_cannot_be_undone(window, opened, monkeypatch):
+    """A deleted model is gone forever, and the question says so before it goes."""
+
+    add_model(window, monkeypatch)
+    window._project_tree.setCurrentItem(window._project_tree.model_items()[0])
+    texts = []
+    monkeypatch.setattr(
+        'masafi_simtwin.main_window.QMessageBox.question',
+        lambda *arguments, **keywords: texts.append(arguments[2])
+        or QMessageBox.StandardButton.No,
+    )
+
+    window.delete_model_action.trigger()
+
+    assert len(texts) == 1
+    assert texts[0].startswith('Filling Station and everything in it')
+    assert 'cannot be undone' in texts[0]
+    assert 'gone forever' in texts[0]

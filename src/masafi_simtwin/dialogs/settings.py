@@ -20,17 +20,17 @@ Two things a page cannot say for itself and this module writes into it:
   ``<stem>_links`` layout the form leaves empty on such a page.  Clicking one
   selects the child in the tree, which is what shows its page.
 
-The pages hold nothing but a placeholder yet.  Each is a plain ``QWidget`` in
-the form, so the parameters of a category are added by opening the form and
-dropping widgets into the page that already carries its name.
+Each page is a plain ``QWidget`` in the form, so the parameters of a category are
+added by opening the form and dropping widgets into the page that already carries
+its name.  The leaves hold them — language, theme, page, time, space and saving —
+and the two parents hold the links to their children.
 
-What those parameters will read and write is :attr:`SettingsDialog.edit`, a
+What those parameters read and write is :attr:`SettingsDialog.edit`, a
 :class:`~masafi_simtwin.preferences.PreferenceEdit` that holds changes aside
 until the dialog is accepted.  That is what OK and Cancel mean here: OK writes
-the pending changes and Cancel drops them, so a page never has to undo itself.
-No page changes anything yet, so both buttons only close the dialog — but the
-edit is opened, committed and discarded already, and a page added later needs
-nothing more than to call :meth:`~masafi_simtwin.preferences.PreferenceEdit.set_value`.
+the pending changes and Cancel drops them, so a page never has to undo itself,
+and a page added later needs nothing more than to call
+:meth:`~masafi_simtwin.preferences.PreferenceEdit.set_value`.
 """
 
 from __future__ import annotations

@@ -89,6 +89,9 @@ class MainWindow(QMainWindow):
         #: What the last automatic save could not write, for the same reason: a
         #: model that cannot be saved is refused again at every tick.
         self._autosave_problems: list[str] = []
+        #: Whether the write just made could not keep the version before it,
+        #: which the sentence saying the project was saved then says too.
+        self._version_not_kept: bool = False
         self._recent_projects: list[str] = self._load_recent_projects()
 
         #: One history per open document, and the group that says which of them
@@ -615,6 +618,7 @@ class MainWindow(QMainWindow):
         self.show_pane('project')
         self._remember_project(path)
         self.statusBar().showMessage(self.tr('Opened {0}').format(path), 4000)
+        self._offer_to_purge_versions(path, name)
         self._recover(path)
         self._schedule_autosave()
 
@@ -916,9 +920,10 @@ class MainWindow(QMainWindow):
         answer = QMessageBox.question(
             self,
             self.tr('Delete the model?'),
-            self.tr('{0} and everything in it will be removed from the project.').format(
-                model.get('name', '')
-            ),
+            self.tr(
+                '{0} and everything in it will be removed from the project. '
+                'This cannot be undone: the model will be gone forever.'
+            ).format(model.get('name', '')),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -1086,7 +1091,9 @@ class MainWindow(QMainWindow):
                 self, self.tr('The project could not be saved'), '\n'.join(problems)
             )
             return False
-        if self._project_path is not None:
+        if self._project_path is not None and self._version_not_kept:
+            self._report(self.tr('The project was saved, but its earlier version could not be kept'))
+        elif self._project_path is not None:
             self._report(self.tr('The project was saved'))
         return True
 
@@ -1112,6 +1119,7 @@ class MainWindow(QMainWindow):
             nothing when every one was.
         """
 
+        self._version_not_kept = False
         if self._project_path is None:
             return []
         wanted = None if keys is None else set(keys)
@@ -1131,7 +1139,9 @@ class MainWindow(QMainWindow):
 
         if contents:
             try:
-                project.write_models(self._project_path, contents)
+                project.write_models(
+                    self._project_path, contents, before_writing=self._keep_version
+                )
             except project.ProjectError as error:
                 problems.extend(self._not_saved(key, error) for key in contents)
             else:
@@ -1261,7 +1271,15 @@ class MainWindow(QMainWindow):
         problems = self._write_documents(keys)
         if not problems:
             self._autosave_problems = []
-            self._report(self.tr('The project was saved automatically'))
+            if self._version_not_kept:
+                self._report(
+                    self.tr(
+                        'The project was saved automatically, but its earlier version '
+                        'could not be kept'
+                    )
+                )
+            else:
+                self._report(self.tr('The project was saved automatically'))
         elif problems != self._autosave_problems:
             self._autosave_problems = problems
             self._report(self.tr('Autosave: {0}').format(' '.join(problems)))
@@ -1327,6 +1345,67 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(
                 self, self.tr('Some work could not be put back'), '\n'.join(problems)
             )
+
+    def _keep_version(self) -> None:
+        """Keep the project as it is, just before a save changes it.
+
+        Handed to :func:`~masafi_simtwin.project.write_models`, which calls it
+        only when the archive is about to change, so a save of an untouched
+        project leaves no version.  A version that cannot be kept **does not
+        stop the save** — losing a copy of the past must not cost the person
+        the work in front of them — and the sentence saying the project was
+        saved says it.
+        """
+
+        if self._project_path is None:
+            return
+        try:
+            project.keep_version(self._project_path)
+        except project.ProjectError:
+            self._version_not_kept = True
+
+    def _offer_to_purge_versions(self, path: str, name: str) -> None:
+        """Ask to delete a project's oldest versions, when it keeps too many.
+
+        More than :data:`~masafi_simtwin.project.VERSIONS_BEFORE_ASKING` is too
+        many, and the answer *yes* keeps the newest
+        :data:`~masafi_simtwin.project.VERSIONS_KEPT`.  *No* changes nothing, and
+        the question comes back the next time the project is opened: this is the
+        only thing that ever deletes a version, so it is asked rather than done.
+        A folder that cannot be read is not a reason to hold the project up.
+
+        Parameters
+        ----------
+        path : str
+            The project file, already locked by this window.
+        name : str
+            What the project is called.
+        """
+
+        try:
+            count = len(project.versions_of(path))
+        except project.ProjectError:
+            return
+        if count <= project.VERSIONS_BEFORE_ASKING:
+            return
+        answer = QMessageBox.question(
+            self,
+            self.tr('Delete old versions?'),
+            self.tr(
+                '{0} keeps {1} earlier versions of itself. Delete the oldest of them '
+                'and keep the last {2}?'
+            ).format(name, count, project.VERSIONS_KEPT),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            removed = project.purge_versions(path, project.VERSIONS_KEPT)
+        except project.ProjectError as error:
+            QMessageBox.warning(self, self.tr('The old versions could not be deleted'), str(error))
+            return
+        self._report(self.tr('Earlier versions deleted: {0}').format(removed))
 
     def _on_modified_changed(self, key: str, modified: bool) -> None:
         """Show on its tab, and on the window, that a model has unsaved changes.
