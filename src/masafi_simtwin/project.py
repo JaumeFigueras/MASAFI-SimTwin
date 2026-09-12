@@ -483,6 +483,45 @@ def clear_journal(path: str | Path) -> None:
     journal_path(path).unlink(missing_ok=True)
 
 
+def rewrite_journal(path: str | Path, entries: list[dict]) -> None:
+    """Replace a project's journal with some of the entries it held.
+
+    What a save leaves of a journal: the changes of the models it did not
+    write, which a crash must still be able to put back.  The journal is written
+    beside itself and moved over, so an interrupted rewrite leaves it as it was
+    rather than half of it, and a journal left with nothing in it is removed,
+    as :func:`clear_journal` does.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        The project file.
+    entries : list of dict
+        What the journal is to hold, oldest first, as :func:`read_journal` gave
+        them.
+
+    Raises
+    ------
+    ProjectError
+        When the journal cannot be written.
+    """
+
+    if not entries:
+        clear_journal(path)
+        return
+    target = journal_path(path)
+    beside = target.with_name(f'{target.name}.writing')
+    try:
+        with beside.open('w', encoding='utf-8') as journal:
+            for entry in entries:
+                journal.write(json.dumps(entry, separators=(',', ':'), ensure_ascii=False))
+                journal.write('\n')
+        os.replace(beside, target)
+    except OSError as error:
+        beside.unlink(missing_ok=True)
+        raise ProjectError(f'{target} could not be written: {error}') from error
+
+
 def file_name_for(name: str) -> str:
     """Give the file a model of this name is kept in.
 

@@ -15,7 +15,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from PyQt6.QtCore import QSettings, QSize, Qt
+from PyQt6.QtCore import QSettings, QSize, Qt, QTimer
 from PyQt6.QtGui import QAction, QKeySequence, QUndoGroup
 from PyQt6.QtWidgets import (
     QApplication,
@@ -55,6 +55,13 @@ MAX_RECENT_PROJECTS = 10
 #: Default size of the window the first time the application is started.
 DEFAULT_WINDOW_SIZE = QSize(1440, 900)
 
+#: Milliseconds in a minute, the unit the autosave interval is chosen in.
+MS_PER_MINUTE = 60_000
+
+#: How long, in milliseconds, an autosave that found a gesture under way or a
+#: dialog open waits before it tries again, rather than a whole interval.
+AUTOSAVE_RETRY_MS = 5_000
+
 
 class MainWindow(QMainWindow):
     """The application's main window.
@@ -79,11 +86,24 @@ class MainWindow(QMainWindow):
         #: cannot be written fails on every change, and a status bar repeating
         #: itself is a status bar nobody reads.
         self._journal_failed: bool = False
+        #: What the last automatic save could not write, for the same reason: a
+        #: model that cannot be saved is refused again at every tick.
+        self._autosave_problems: list[str] = []
         self._recent_projects: list[str] = self._load_recent_projects()
 
         #: One history per open document, and the group that says which of them
         #: *Undo* acts on: the one being looked at.
         self._undo_group = QUndoGroup(self)
+
+        #: The timer that saves the open project every so often, and the one that
+        #: tries again shortly when a tick finds the user in the middle of
+        #: something.  Both are the window's children, connected to bound methods.
+        self._autosave_timer = QTimer(self)
+        self._autosave_timer.timeout.connect(self._autosave)
+        self._autosave_retry = QTimer(self)
+        self._autosave_retry.setSingleShot(True)
+        self._autosave_retry.setInterval(AUTOSAVE_RETRY_MS)
+        self._autosave_retry.timeout.connect(self._autosave)
 
         self._create_actions()
         self._create_top_bar()
@@ -580,6 +600,7 @@ class MainWindow(QMainWindow):
         self._document_area.close_all_documents()
         self._project_path = path
         self._journal_failed = False
+        self._autosave_problems = []
         self._session_started = time.monotonic()
         self._record(path, project.EVENT_OPENED)
 
@@ -595,6 +616,7 @@ class MainWindow(QMainWindow):
         self._remember_project(path)
         self.statusBar().showMessage(self.tr('Opened {0}').format(path), 4000)
         self._recover(path)
+        self._schedule_autosave()
 
     def _last_location(self) -> str:
         """Give the directory to offer first in a project dialog.
@@ -632,6 +654,7 @@ class MainWindow(QMainWindow):
 
         self._end_session()
         self._document_area.close_all_documents()
+        self._schedule_autosave()
 
         self._project_name = ''
         self._top_bar.set_project_name(self.tr('No Project'))
@@ -756,6 +779,7 @@ class MainWindow(QMainWindow):
             event.ignore()
             return
         self._end_session()
+        self._schedule_autosave()
         super().closeEvent(event)
 
     def _forget_missing_projects(self) -> None:
@@ -1113,7 +1137,7 @@ class MainWindow(QMainWindow):
             else:
                 for key in contents:
                     documents.mark_saved(self._document_area.document(key))
-                project.clear_journal(self._project_path)
+                self._forget_journal_of(contents)
         return problems
 
     def _on_change_recorded(self, model: str, change) -> None:
@@ -1142,14 +1166,105 @@ class MainWindow(QMainWindow):
                 {'model': model, 'change': documents.recorded_change(change)},
             )
         except project.ProjectError:
-            if not self._journal_failed:
-                self._journal_failed = True
-                self._report(
-                    self.tr(
-                        'The journal could not be written, so work will not be '
-                        'recovered if the application stops'
-                    )
+            self._report_journal_failure()
+
+    def _report_journal_failure(self) -> None:
+        """Say that the journal could not be written, once per project."""
+
+        if not self._journal_failed:
+            self._journal_failed = True
+            self._report(
+                self.tr(
+                    'The journal could not be written, so work will not be '
+                    'recovered if the application stops'
                 )
+            )
+
+    def _forget_journal_of(self, keys) -> None:
+        """Take out of the journal the work that no longer needs putting back.
+
+        The journal is the work that is not in the project yet.  A save puts some
+        of it there — the models just written — and a model that is not open
+        any more was saved or let go as it closed.  What is left is the changes
+        of the models still open and not written, and those a crash must still
+        be able to put back.  Clearing the whole journal at every write threw
+        exactly those away: closing one tab, or saving beside a model that
+        cannot be saved, lost the recovery of every other model with work in it.
+
+        Parameters
+        ----------
+        keys : collections.abc.Iterable of str
+            The UUIDs of the models whose changes are over: written, or
+            discarded.
+        """
+
+        if self._project_path is None:
+            return
+        over = set(keys)
+        still_open = set(self._document_area.keyed_documents)
+        try:
+            entries = project.read_journal(self._project_path)
+            kept = [
+                entry
+                for entry in entries
+                if entry.get('model') in still_open and entry.get('model') not in over
+            ]
+            if len(kept) != len(entries) or not kept:
+                project.rewrite_journal(self._project_path, kept)
+        except project.ProjectError:
+            self._report_journal_failure()
+
+    def _schedule_autosave(self) -> None:
+        """Start the autosave timer at the chosen interval, or stop it.
+
+        It runs while a project is open and the interval is not nought, and is
+        started afresh — a whole interval from now — each time this is called:
+        when a project opens, when one closes, and when the interval is chosen.
+        """
+
+        self._autosave_retry.stop()
+        interval = preferences.Preferences().value(preferences.AUTOSAVE_KEY)
+        if self._project_path is None or interval <= 0:
+            self._autosave_timer.stop()
+            return
+        self._autosave_timer.start(interval * MS_PER_MINUTE)
+
+    def _autosave(self) -> None:
+        """Save the models that have changed, without asking anything.
+
+        A timer never puts up a dialog: a model that cannot be saved is said in
+        the status bar, once for as long as the same models keep being refused.
+        Two moments are passed over, and tried again a few seconds later rather
+        than a whole interval later:
+
+        * **a gesture under way** — what the sheet shows halfway through a drag
+          is not a recorded change, and writing it would mark the undo stack
+          clean at a state it never held;
+        * **a dialog open** — a timer fires inside a modal dialog's own event
+          loop, and saving there could run inside *Close without saving?*
+          while the question is still being asked.
+
+        A project nobody has changed is not written at all.
+        """
+
+        if self._project_path is None:
+            return
+        opened = self._document_area.keyed_documents
+        if QApplication.activeModalWidget() is not None or any(
+            documents.busy(document) for document in opened.values()
+        ):
+            self._autosave_retry.start()
+            return
+        keys = [key for key, document in opened.items() if documents.is_modified(document)]
+        if not keys:
+            return
+        problems = self._write_documents(keys)
+        if not problems:
+            self._autosave_problems = []
+            self._report(self.tr('The project was saved automatically'))
+        elif problems != self._autosave_problems:
+            self._autosave_problems = problems
+            self._report(self.tr('Autosave: {0}').format(' '.join(problems)))
 
     def _recover(self, path: str) -> None:
         """Put back the work a journal says was never saved.
@@ -1307,7 +1422,11 @@ class MainWindow(QMainWindow):
             QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
             QMessageBox.StandardButton.Cancel,
         )
-        return answer == QMessageBox.StandardButton.Discard
+        if answer != QMessageBox.StandardButton.Discard:
+            return False
+        # What the user let go is not work to put back after a crash.
+        self._forget_journal_of(self._document_area.keyed_documents if keys is None else keys)
+        return True
 
     def _may_close_document(self, key: str) -> bool:
         """Save a model as its tab is closed by hand, asking when it cannot be.
@@ -1361,6 +1480,7 @@ class MainWindow(QMainWindow):
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         self._apply_page(dialog.written)
+        self._apply_autosave(dialog.written)
         if needs_restart(dialog.written) and ask_to_restart(self):
             application = QApplication.instance()
             if application is not None:
@@ -1387,6 +1507,19 @@ class MainWindow(QMainWindow):
         for document in self._document_area.documents:
             if isinstance(document, Canvas):
                 document.set_page(page)
+
+    def _apply_autosave(self, written: tuple[str, ...]) -> None:
+        """Start the autosave timer again at the interval that has just been chosen.
+
+        Parameters
+        ----------
+        written : tuple of str
+            The keys the settings dialog wrote, so that the timer is left to run
+            on when the interval was not among them.
+        """
+
+        if preferences.AUTOSAVE_KEY in written:
+            self._schedule_autosave()
 
     # ------------------------------------------------------------------
     # Slots

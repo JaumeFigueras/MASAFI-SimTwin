@@ -6,7 +6,7 @@ on the right, in the arrangement of the settings dialog of an IDE.
 
 Both halves live in the form, and they are paired **by order**.  Walking the
 tree depth first gives ``Appearance, Language, Themes, Page, Default Units,
-Time, Space``, and the pages of the stack are in exactly that order, so the
+Time, Space, Saving``, and the pages of the stack are in exactly that order, so the
 *n*-th item shows the *n*-th page.  Adding a category therefore means adding both, in
 the same place; :mod:`test.masafi_simtwin.dialogs.test_settings` fails when the
 two lists stop lining up, so the pairing cannot drift unnoticed.
@@ -36,7 +36,7 @@ nothing more than to call :meth:`~masafi_simtwin.preferences.PreferenceEdit.set_
 from __future__ import annotations
 
 from html import escape
-from typing import Iterator
+from typing import Any, Iterator
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
@@ -53,6 +53,8 @@ from masafi_simtwin import paper
 from masafi_simtwin.dialogs.forms.ui_settings import Ui_SettingsDialog
 from masafi_simtwin.dialogs.restart import warn_restart_needed
 from masafi_simtwin.preferences import (
+    AUTOSAVE_INTERVALS,
+    AUTOSAVE_KEY,
     DISTANCE_UNITS,
     SURFACE_UNITS,
     SYSTEM_LANGUAGE,
@@ -123,6 +125,7 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
             (self.time_combo, 'units/time', TIME_UNITS),
             (self.distance_combo, 'units/distance', DISTANCE_UNITS),
             (self.surface_combo, 'units/surface', SURFACE_UNITS),
+            (self.autosave_combo, AUTOSAVE_KEY, AUTOSAVE_INTERVALS),
         ):
             self._bind_choice(combo, key, values)
 
@@ -412,7 +415,7 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
         self._warn_once_about_restart()
 
     def _bind_choice(
-        self, combo: QComboBox, key: str, values: tuple[str, ...]
+        self, combo: QComboBox, key: str, values: tuple[Any, ...]
     ) -> None:
         """Put a stored preference in a combo box and follow it from there.
 
@@ -429,8 +432,9 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
             The combo box in the form.
         key : str
             The preference it edits.
-        values : tuple of str
-            What each of its entries is worth, in the order they are in.
+        values : tuple
+            What each of its entries is worth, in the order they are in, of the
+            preference's own type.
 
         Raises
         ------

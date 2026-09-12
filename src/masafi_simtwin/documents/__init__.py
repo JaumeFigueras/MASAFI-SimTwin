@@ -73,6 +73,7 @@ __all__ = [
     'PetriNetEditor',
     'Place',
     'Transition',
+    'busy',
     'editor_for',
     'file_of',
     'is_modified',
@@ -195,6 +196,25 @@ def mark_unsaved(document: QWidget) -> None:
     stack = undo_stack_of(document)
     if stack is not None:
         stack.resetClean()
+
+
+def busy(document: QWidget) -> bool:
+    """Say whether a document is in the middle of a gesture.
+
+    Parameters
+    ----------
+    document : PyQt6.QtWidgets.QWidget
+        The document.
+
+    Returns
+    -------
+    bool
+        Whether something has been pressed and not yet let go — an item being
+        dragged, an arc being drawn, a guide being pulled off a ruler — which
+        is when what the document shows is not yet a recorded change.
+    """
+
+    return isinstance(document, Canvas) and document.gesture_in_progress
 
 
 def is_modified(document: QWidget) -> bool:

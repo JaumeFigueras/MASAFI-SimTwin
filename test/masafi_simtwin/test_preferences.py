@@ -9,6 +9,8 @@ from PyQt6.QtCore import QSettings, QSizeF
 
 from masafi_simtwin import paper
 from masafi_simtwin.preferences import (
+    AUTOSAVE_INTERVALS,
+    AUTOSAVE_KEY,
     BY_KEY,
     INSTALL_KEY,
     PAGE_KEYS,
@@ -99,6 +101,7 @@ def test_the_keys_are_grouped_like_the_settings_tree():
         'units/time',
         'units/distance',
         'units/surface',
+        'saving/autosave_interval',
     ]
 
 
@@ -374,3 +377,39 @@ def test_a_page_size_that_names_nothing_falls_back(preferences):
     preferences.settings.setValue('appearance/page_size', 'Papyrus')
 
     assert page(preferences) == paper.dimensions(paper.default_key(), paper.PORTRAIT)
+
+
+# ----------------------------------------------------------------------
+# Saving
+# ----------------------------------------------------------------------
+
+
+def test_the_autosave_runs_every_five_minutes_unless_told_otherwise():
+    """Nought is one of the choices, and it means never."""
+
+    declaration = BY_KEY[AUTOSAVE_KEY]
+
+    assert declaration.default == 5
+    assert declaration.type is int
+    assert declaration.choices == AUTOSAVE_INTERVALS == (0, 1, 2, 5, 10, 15, 30)
+    assert not needs_restart([AUTOSAVE_KEY])
+
+
+def test_an_interval_reads_back_as_a_number(preferences, path):
+    """Stored as text in the file, read back as the declared type."""
+
+    preferences.set_value(AUTOSAVE_KEY, 15)
+
+    assert '15' in written(preferences, path)
+    reread = Preferences(QSettings(str(path), QSettings.Format.IniFormat))
+    assert reread.value(AUTOSAVE_KEY) == 15
+
+
+@pytest.mark.parametrize('stored', ['abc', '7', '-3', ''])
+def test_a_hand_written_interval_that_is_not_one_falls_back(path, stored):
+    """Not a number at all, which Qt refuses to convert, or not one of the choices."""
+
+    path.write_text(f'[saving]\nautosave_interval={stored}\n', encoding='utf-8')
+    reread = Preferences(QSettings(str(path), QSettings.Format.IniFormat))
+
+    assert reread.value(AUTOSAVE_KEY) == 5

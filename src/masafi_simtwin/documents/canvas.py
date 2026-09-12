@@ -899,6 +899,22 @@ class CanvasView(QGraphicsView):
     # ------------------------------------------------------------------
 
     @property
+    def gesture_in_progress(self) -> bool:
+        """bool: Whether a gesture has begun on the sheet and not yet ended.
+
+        A press that may be dragging something, an arc being drawn, an arc's end
+        being moved.  What the sheet shows in the middle of one is not a recorded
+        change — a dragged item is somewhere the undo stack has not heard of —
+        so it is no moment to write the sheet down.
+        """
+
+        return (
+            self._before_drag is not None
+            or self._connecting_from is not None
+            or self._moving_end is not None
+        )
+
+    @property
     def connecting(self) -> NetItem | None:
         """NetItem, optional: The item an arc is being drawn from, if one is."""
 
@@ -2123,6 +2139,13 @@ class Canvas(QWidget):
         """Take every guide off the sheet."""
 
         self.view.clear_guides()
+
+    @property
+    def gesture_in_progress(self) -> bool:
+        """bool: Whether a gesture has begun and not yet ended — one on the sheet,
+        or a guide being pulled off a ruler, which the view never sees."""
+
+        return self.view.gesture_in_progress or self._new_guide is not None
 
     def _on_guide_dragged(self, ruler: Ruler, position: QPointF) -> None:
         """Make or move the guide being pulled out of a ruler.

@@ -11,6 +11,7 @@ from masafi_simtwin.documents import (
     EDITORS,
     NEW_MODEL_FILES,
     PetriNetEditor,
+    busy,
     editor_for,
     file_of,
     is_modified,
@@ -160,3 +161,26 @@ def test_a_document_that_is_not_saved_is_never_modified(qtbot):
     mark_unsaved(widget)
 
     assert not is_modified(widget)
+
+
+def test_a_document_is_busy_while_a_gesture_is_under_way(qtbot):
+    """A press noted and not yet let go is not a recorded change."""
+
+    editor = editor_for({'uuid': 'u', 'name': 'Net', 'kind': 'petri-net'})
+    qtbot.addWidget(editor)
+    assert not busy(editor)
+
+    editor.view._remember_before_a_drag()
+    assert busy(editor)
+
+    editor.view._report_a_drag()
+    assert not busy(editor)
+
+
+def test_a_document_that_is_not_drawn_is_never_busy(qtbot):
+    """There is no gesture to be in the middle of."""
+
+    widget = QWidget()
+    qtbot.addWidget(widget)
+
+    assert not busy(widget)

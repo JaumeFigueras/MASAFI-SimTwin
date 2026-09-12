@@ -8,6 +8,7 @@ from PyQt6.QtGui import QImage, QMouseEvent, QPainter, QPalette, QWheelEvent
 from PyQt6.QtWidgets import QGraphicsView
 
 from masafi_simtwin import paper
+from masafi_simtwin.documents.place import Place
 from masafi_simtwin.documents.canvas import (
     GRID_MAJOR_ALPHA,
     MAX_ZOOM,
@@ -613,3 +614,49 @@ def test_no_page_is_ruled_off_the_sheet(canvas):
     beyond = QRectF(canvas.scene().sceneRect().right() + 10.0, 0.0, 400.0, 400.0)
 
     assert grid_of(canvas, beyond).page_lines == []
+
+
+# ----------------------------------------------------------------------
+# Whether a gesture is under way
+# ----------------------------------------------------------------------
+
+
+def test_nothing_is_under_way_on_a_sheet_at_rest(canvas):
+    """Which is when what it shows can be written down."""
+
+    assert not canvas.view.gesture_in_progress
+    assert not canvas.gesture_in_progress
+
+
+def test_a_press_that_may_drag_is_a_gesture_until_it_is_let_go(canvas):
+    """Qt moves what is dragged before anything is recorded."""
+
+    canvas.view._remember_before_a_drag()
+    assert canvas.gesture_in_progress
+
+    canvas.view._report_a_drag()
+    assert not canvas.gesture_in_progress
+
+
+def test_an_arc_being_drawn_is_a_gesture_until_it_lands_or_is_given_up(canvas):
+    """Whether its button is held or not, in click-click."""
+
+    item = Place()
+    canvas.scene().addItem(item)
+
+    canvas.view.begin_connection(item, 0, QPointF(10.0, 10.0))
+    assert canvas.gesture_in_progress
+
+    canvas.view.abandon_connection()
+    assert not canvas.gesture_in_progress
+
+
+def test_a_guide_pulled_off_a_ruler_is_a_gesture_until_it_is_dropped(canvas):
+    """The ruler holds the mouse, so the view never sees this one."""
+
+    canvas._on_guide_dragged(canvas.horizontal_ruler, QPointF(40.0, 40.0))
+    assert not canvas.view.gesture_in_progress
+    assert canvas.gesture_in_progress
+
+    canvas._on_guide_dropped(True)
+    assert not canvas.gesture_in_progress

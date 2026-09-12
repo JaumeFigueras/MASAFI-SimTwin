@@ -87,6 +87,11 @@
       </property>
      </item>
      </item>
+     <item>
+      <property name="text">
+       <string extracomment="settings category: how and when a project is saved">Saving</string>
+      </property>
+     </item>
      </widget>
      <widget class="QStackedWidget" name="page_stack">
       <property name="sizePolicy">
@@ -674,6 +679,117 @@
      </item>
      <item>
       <spacer name="space_spacer">
+       <property name="orientation">
+        <enum>Qt::Orientation::Vertical</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     </layout>
+    </widget>
+    <widget class="QWidget" name="saving_page">
+     <layout class="QVBoxLayout" name="saving_layout">
+      <property name="spacing">
+       <number>12</number>
+      </property>
+     <item>
+      <widget class="QLabel" name="saving_heading">
+       <property name="font">
+        <font>
+         <pointsize>13</pointsize>
+         <bold>true</bold>
+        </font>
+       </property>
+       <property name="text">
+        <string notr="true">Saving</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <layout class="QFormLayout" name="saving_form">
+       <property name="fieldGrowthPolicy">
+        <enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum>
+       </property>
+       <property name="horizontalSpacing">
+        <number>12</number>
+       </property>
+       <property name="verticalSpacing">
+        <number>8</number>
+       </property>
+       <item row="0" column="0">
+        <widget class="QLabel" name="autosave_label">
+         <property name="text">
+          <string extracomment="label of the chooser of how often a project is saved automatically">Autosave interval (minutes):</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="1">
+        <widget class="QComboBox" name="autosave_combo">
+         <property name="minimumSize">
+          <size>
+           <width>200</width>
+           <height>0</height>
+          </size>
+         </property>
+         <item>
+          <property name="text">
+           <string extracomment="autosave interval of zero minutes, which turns automatic saving off">0 (Off)</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string notr="true">1</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string notr="true">2</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string notr="true">5</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string notr="true">10</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string notr="true">15</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string notr="true">30</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+      </layout>
+     </item>
+     <item>
+      <widget class="QLabel" name="saving_note">
+       <property name="placeholder" stdset="0">
+        <bool>true</bool>
+       </property>
+       <property name="wordWrap">
+        <bool>true</bool>
+       </property>
+       <property name="text">
+        <string extracomment="under the autosave interval chooser on the Saving page">Every change is also written to a journal beside the project as it is made, so work done between two saves is put back if the application stops.</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="saving_spacer">
        <property name="orientation">
         <enum>Qt::Orientation::Vertical</enum>
        </property>

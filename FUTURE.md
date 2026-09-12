@@ -174,15 +174,15 @@ model.
 
 ---
 
-## Saving happens at boundaries; the timer and the versions are what is left
+## Saving happens at boundaries and on a timer; the versions are what is left
 
 **Now.** What a project *holds* — a model added, renamed, removed — is written as it is made. What a
 model *is* — the net drawn on its sheet — is written at **boundaries**: *File → Save* (`Ctrl+S`),
-closing a tab, closing the project, opening another, and quitting. Every open model goes into **one**
-rewrite of the archive, and a model whose bytes have not changed is not written at all. A **journal** beside the archive holds every change since the last save, so a session that ends badly
-loses nothing: the next opening puts the work back. What is left is the **timer** and the **numbered
-backups**; until the timer exists, work reaches the archive only at a boundary, and until the backups
-exist a saved mistake is saved.
+closing a tab, closing the project, opening another, and quitting — and **every few minutes**, by the
+autosave timer. Every open model goes into **one** rewrite of the archive, and a model whose bytes have
+not changed is not written at all. A **journal** beside the archive holds every change not yet saved, so
+a session that ends badly loses nothing: the next opening puts the work back. What is left is the
+**numbered backups**; until they exist a saved mistake is saved.
 
 **Why not simply write more often.** The cost is not that saving is slow — it is that **a zip must be
 rewritten whole**. A single entry cannot be updated in place. Adding a model is a rare, deliberate
@@ -191,12 +191,16 @@ canvas produces hundreds of small changes a minute against an archive that may b
 
 **The decided shape**, in the order it is being built:
 
-1. **The document lives in memory**, written in full at the boundaries above — *done*. What is left is
-   the **timer**: a full write every so often, its interval a preference.
+1. **The document lives in memory**, written in full at the boundaries above — *done* — and by a
+   **timer**, every `saving/autosave_interval` minutes (`0 (Off)`, 1, 2, 5, 10, 15, 30; five by
+   default) — *done*. A tick writes only the models that have changed, never asks anything, and waits a
+   few seconds rather than a whole interval when it finds a gesture under way or a dialog open.
 2. **Journal every mutation** — *done*. `Bottling Line.mfstz.journal`, beside the archive as the lock
-   is, one line of JSON per change: O(1) rather than O(project). Replayed when the project is opened,
-   and deleted after a successful save. A change undone is written as its **inverse**, so replaying is
-   a straight line from the last save to what the sheet showed.
+   is, one line of JSON per change: O(1) rather than O(project). Replayed when the project is opened.
+   A save takes out the entries of the models it wrote and of the models no longer open, and keeps the
+   rest — so closing one tab, or saving beside a model that cannot be saved, costs no other model its
+   recovery. A change undone is written as its **inverse**, so replaying is a straight line from the
+   last save to what the sheet showed.
 3. **The undo stack stays in memory only** — *done*, and see *Undo dies with the session*. Recovering
    *to* the crash point is enough: nobody needs to undo past it, and persisting undo is a great deal of
    machinery for almost none.

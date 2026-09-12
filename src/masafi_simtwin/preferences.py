@@ -123,6 +123,14 @@ DISTANCE_UNITS: tuple[str, ...] = ('mm', 'cm', 'm', 'dam', 'km')
 #: which is the one that is not a power of ten of the others' names.
 SURFACE_UNITS: tuple[str, ...] = ('mm2', 'cm2', 'm2', 'dam2', 'ha', 'km2')
 
+#: How often, in minutes, an open project may be saved automatically, and ``0``
+#: for never.  The settings dialog pairs these with its entries by order.
+AUTOSAVE_INTERVALS: tuple[int, ...] = (0, 1, 2, 5, 10, 15, 30)
+
+#: The key of the autosave interval, which the window reads when a project opens
+#: and whenever the settings dialog writes it.
+AUTOSAVE_KEY = 'saving/autosave_interval'
+
 #: Every preference the application has, in the order of the settings tree.
 #:
 #: Every unit defaults to the SI base unit of its quantity: the second, the
@@ -149,6 +157,7 @@ PREFERENCES: tuple[Preference, ...] = (
     Preference('units/time', 's', str, TIME_UNITS),
     Preference('units/distance', 'm', str, DISTANCE_UNITS),
     Preference('units/surface', 'm2', str, SURFACE_UNITS),
+    Preference(AUTOSAVE_KEY, 5, int, AUTOSAVE_INTERVALS),
 )
 
 #: The preferences by key, which is how they are asked for.
@@ -305,9 +314,14 @@ class Preferences:
         """
 
         declaration = preference(key)
-        stored = self._settings.value(
-            declaration.key, declaration.default, type=declaration.type
-        )
+        try:
+            stored = self._settings.value(
+                declaration.key, declaration.default, type=declaration.type
+            )
+        except TypeError:
+            # Hand-edited into something that is not of the type at all, such as
+            # ``abc`` for a number, which Qt refuses to convert.
+            return declaration.default
         return stored if declaration.holds(stored) else declaration.default
 
     def set_value(self, key: str, value: Any) -> None:

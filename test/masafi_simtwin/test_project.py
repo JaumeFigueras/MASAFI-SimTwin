@@ -1297,3 +1297,45 @@ def test_a_project_that_is_locked_is_still_a_project(created):
     project.acquire(created)
 
     assert project.read_manifest(created)['name'] == 'Bottling Line'
+
+
+def test_a_journal_can_be_rewritten_with_some_of_its_entries(created):
+    """What a save leaves of it: the changes of the models it did not write."""
+
+    project.append_to_journal(created, {'model': 'a', 'change': 1})
+    project.append_to_journal(created, {'model': 'b', 'change': 2})
+    project.append_to_journal(created, {'model': 'a', 'change': 3})
+
+    project.rewrite_journal(created, [{'model': 'b', 'change': 2}])
+
+    assert project.read_journal(created) == [{'model': 'b', 'change': 2}]
+    project.append_to_journal(created, {'model': 'b', 'change': 4})
+    assert len(project.read_journal(created)) == 2
+
+
+def test_a_journal_rewritten_with_nothing_is_gone(created):
+    """As a cleared one is."""
+
+    project.append_to_journal(created, {'model': 'a'})
+
+    project.rewrite_journal(created, [])
+
+    assert not project.journal_path(created).exists()
+
+
+def test_a_journal_that_cannot_be_rewritten_is_left_as_it_was(created, monkeypatch):
+    """Written beside and moved over, so a failure leaves the whole journal."""
+
+    project.append_to_journal(created, {'model': 'a'})
+    before = project.journal_path(created).read_bytes()
+
+    def refuse(source, target):
+        raise OSError('disk full')
+
+    monkeypatch.setattr(project.os, 'replace', refuse)
+
+    with pytest.raises(project.ProjectError, match='could not be written'):
+        project.rewrite_journal(created, [{'model': 'b'}])
+
+    assert project.journal_path(created).read_bytes() == before
+    assert not list(created.parent.glob('*.writing'))

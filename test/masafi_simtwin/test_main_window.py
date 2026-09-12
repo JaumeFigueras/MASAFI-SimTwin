@@ -19,7 +19,13 @@ from masafi_simtwin.document_area import MODIFIED_MARK
 from masafi_simtwin.documents import PetriNetEditor
 from masafi_simtwin.documents.arc import ArcKind
 from masafi_simtwin.library_tree import LibraryTree
-from masafi_simtwin.main_window import MAX_RECENT_PROJECTS, MainWindow
+from masafi_simtwin import preferences
+from masafi_simtwin.main_window import (
+    AUTOSAVE_RETRY_MS,
+    MAX_RECENT_PROJECTS,
+    MS_PER_MINUTE,
+    MainWindow,
+)
 from masafi_simtwin.preferences import install_id
 from masafi_simtwin.project_tree import NodeKind
 from masafi_simtwin.top_bar import TopBar
@@ -2097,12 +2103,13 @@ def test_a_net_that_cannot_be_saved_is_named_on_saving(window, opened, monkeypat
         lambda *arguments, **keywords: warned.append(arguments[2]),
     )
 
-    assert not window.save_project()
+    everything_saved = window.save_project()
+    editor_of(window, held).view.remove(arc)
 
+    assert not everything_saved
     assert len(warned) == 1
     assert 'Filling Station' in warned[0]
     assert saved(opened, fine) == drawn
-    editor_of(window, held).view.remove(arc)
 
 
 def test_closing_a_project_that_cannot_be_saved_can_be_cancelled(window, opened, monkeypatch):
@@ -2596,9 +2603,10 @@ def test_a_model_that_cannot_be_saved_keeps_its_mark(window, opened, monkeypatch
     )
 
     window.save_project()
-
-    assert marked(window, model)
+    was_marked = marked(window, model)
     editor_of(window, model).view.remove(arc)
+
+    assert was_marked
 
 
 def test_work_put_back_from_a_journal_is_marked(window, opened, monkeypatch):
@@ -2677,3 +2685,262 @@ def test_a_window_holding_unsaved_changes_is_torn_down_without_a_crash(tmp_path)
 
     assert finished.returncode == 0, finished.stderr
     assert 'survived' in finished.stdout
+
+
+# ----------------------------------------------------------------------
+# Autosave
+# ----------------------------------------------------------------------
+
+
+def autosave_every(monkeypatch, minutes: int) -> None:
+    """Make the autosave interval read as a number of minutes, for this test only.
+
+    The preferences of the whole run share one settings file, so the value is
+    answered rather than written.
+
+    Parameters
+    ----------
+    monkeypatch : pytest.MonkeyPatch
+        The patcher.
+    minutes : int
+        The interval.
+    """
+
+    real = preferences.Preferences.value
+    monkeypatch.setattr(
+        preferences.Preferences,
+        'value',
+        lambda self, key: minutes if key == preferences.AUTOSAVE_KEY else real(self, key),
+    )
+
+
+def reports_of(window, monkeypatch) -> list:
+    """Collect what the window says in its status bar.
+
+    Parameters
+    ----------
+    window : masafi_simtwin.main_window.MainWindow
+        The window.
+    monkeypatch : pytest.MonkeyPatch
+        The patcher.
+
+    Returns
+    -------
+    list of str
+        The sentences, as they are said.
+    """
+
+    said = []
+    monkeypatch.setattr(window, '_report', said.append)
+    return said
+
+
+def test_there_is_no_autosave_without_a_project(window):
+    """Nothing to save."""
+
+    assert not window._autosave_timer.isActive()
+
+
+def test_opening_a_project_starts_the_autosave_at_the_chosen_interval(
+    window, make_project, monkeypatch
+):
+    """In minutes."""
+
+    autosave_every(monkeypatch, 10)
+
+    window.open_project_path(make_project('Bottling Line'))
+
+    assert window._autosave_timer.isActive()
+    assert window._autosave_timer.interval() == 10 * MS_PER_MINUTE
+
+
+def test_an_interval_of_nought_saves_nothing_automatically(window, make_project, monkeypatch):
+    """``0 (Off)``."""
+
+    autosave_every(monkeypatch, 0)
+
+    window.open_project_path(make_project('Bottling Line'))
+
+    assert not window._autosave_timer.isActive()
+
+
+def test_closing_the_project_stops_the_autosave(window, opened):
+    """And so does closing the window."""
+
+    assert window._autosave_timer.isActive()
+
+    window.close_project()
+
+    assert not window._autosave_timer.isActive()
+
+
+def test_choosing_an_interval_takes_effect_at_once(window, opened, monkeypatch):
+    """No restart: the timer starts again at the new interval."""
+
+    autosave_every(monkeypatch, 2)
+    window._apply_autosave((preferences.AUTOSAVE_KEY,))
+    assert window._autosave_timer.interval() == 2 * MS_PER_MINUTE
+
+    autosave_every(monkeypatch, 30)
+    window._apply_autosave(('units/time',))
+    assert window._autosave_timer.interval() == 2 * MS_PER_MINUTE
+
+    autosave_every(monkeypatch, 0)
+    window._apply_autosave((preferences.AUTOSAVE_KEY,))
+    assert not window._autosave_timer.isActive()
+
+
+def test_the_autosave_writes_what_is_drawn(window, opened, monkeypatch):
+    """And it is a save like any other: the mark goes, and so does the journal."""
+
+    model = add_model(window, monkeypatch)
+    drawn = draw(editor_of(window, model))
+    said = reports_of(window, monkeypatch)
+
+    window._autosave()
+
+    assert saved(opened, model) == drawn
+    assert not window.document_area.is_document_modified(model['uuid'])
+    assert journal_of(opened) == []
+    assert said == ['The project was saved automatically']
+
+
+def test_the_timer_is_what_runs_the_autosave(window, make_project, monkeypatch, qtbot):
+    """With a minute made very short."""
+
+    monkeypatch.setattr('masafi_simtwin.main_window.MS_PER_MINUTE', 20)
+    autosave_every(monkeypatch, 1)
+    path = make_project('Bottling Line')
+    window.open_project_path(path)
+    model = add_model(window, monkeypatch)
+    drawn = draw(editor_of(window, model))
+
+    qtbot.waitUntil(lambda: saved(path, model) == drawn, timeout=5000)
+
+
+def test_an_autosave_of_a_project_nobody_changed_writes_nothing(window, opened, monkeypatch):
+    """Not even the models that are open."""
+
+    add_model(window, monkeypatch)
+    written = writes_of(monkeypatch)
+    said = reports_of(window, monkeypatch)
+
+    window._autosave()
+
+    assert written == []
+    assert said == []
+
+
+def test_an_autosave_waits_until_a_gesture_is_over(window, opened, monkeypatch):
+    """Halfway through a drag the sheet is not a recorded change."""
+
+    model = add_model(window, monkeypatch)
+    editor = editor_of(window, model)
+    drawn = draw(editor)
+    editor.view._remember_before_a_drag()
+
+    window._autosave()
+
+    assert saved(opened, model) != drawn
+    assert window._autosave_retry.isActive()
+    assert window._autosave_retry.interval() == AUTOSAVE_RETRY_MS
+
+    editor.view._report_a_drag()
+    window._autosave()
+
+    assert saved(opened, model) == drawn
+
+
+def test_an_autosave_waits_while_a_dialog_is_open(window, opened, monkeypatch):
+    """A timer fires inside a dialog's own event loop, which is no place to save."""
+
+    model = add_model(window, monkeypatch)
+    drawn = draw(editor_of(window, model))
+    monkeypatch.setattr(
+        'masafi_simtwin.main_window.QApplication.activeModalWidget', lambda: window
+    )
+
+    window._autosave()
+
+    assert saved(opened, model) != drawn
+    assert window._autosave_retry.isActive()
+
+
+def test_an_autosave_never_asks_and_says_a_refusal_once(window, opened, monkeypatch):
+    """A timer puts up no dialog; the models that can be saved are saved."""
+
+    held = add_model(window, monkeypatch, 'Filling Station')
+    fine = add_model(window, monkeypatch, 'Capping')
+    arc = inhibit(editor_of(window, held))
+    drawn = draw(editor_of(window, fine))
+    asked = []
+    for kind in ('question', 'warning', 'critical'):
+        monkeypatch.setattr(
+            f'masafi_simtwin.main_window.QMessageBox.{kind}',
+            lambda *arguments, **keywords: asked.append(arguments[1]),
+        )
+    said = reports_of(window, monkeypatch)
+
+    window._autosave()
+    window._autosave()
+    editor_of(window, held).view.remove(arc)
+
+    assert asked == []
+    assert len(said) == 1
+    assert 'Filling Station' in said[0]
+    assert saved(opened, fine) == drawn
+
+
+# ----------------------------------------------------------------------
+# What a save leaves of the journal
+# ----------------------------------------------------------------------
+
+
+def test_closing_one_tab_keeps_the_journal_of_the_others(window, opened, monkeypatch):
+    """The other model's work was never saved, and a crash must still find it."""
+
+    first = add_model(window, monkeypatch, 'Filling Station')
+    second = add_model(window, monkeypatch, 'Capping')
+    draw(editor_of(window, first))
+    drawn = draw(editor_of(window, second))
+    area = window.document_area
+
+    area.tabs.tabBar().tabButton(
+        area.tabs.indexOf(area.document(first['uuid'])), QTabBar.ButtonPosition.RightSide
+    ).click()
+
+    assert {entry['model'] for entry in journal_of(opened)} == {second['uuid']}
+
+    reopen(window, opened)
+
+    assert editor_of(window, second).to_document() == drawn
+
+
+def test_a_model_that_cannot_be_saved_keeps_its_journal(window, opened, monkeypatch):
+    """Saving the others does not cost it its recovery."""
+
+    held = add_model(window, monkeypatch, 'Filling Station')
+    fine = add_model(window, monkeypatch, 'Capping')
+    arc = inhibit(editor_of(window, held))
+    draw(editor_of(window, fine))
+    monkeypatch.setattr(
+        'masafi_simtwin.main_window.QMessageBox.warning', lambda *arguments, **keywords: None
+    )
+
+    window.save_project()
+    kept = {entry['model'] for entry in journal_of(opened)}
+    editor_of(window, held).view.remove(arc)
+
+    assert kept == {held['uuid']}
+
+
+def test_discarded_work_is_not_put_back(window, opened, monkeypatch):
+    """The user let it go; a crash afterwards must not bring it back."""
+
+    model = add_model(window, monkeypatch)
+    inhibit(editor_of(window, model))
+    answer(monkeypatch, QMessageBox.StandardButton.Discard)
+
+    window.document_area.tabs.tabBar().tabButton(0, QTabBar.ButtonPosition.RightSide).click()
+
+    assert journal_of(opened) == []

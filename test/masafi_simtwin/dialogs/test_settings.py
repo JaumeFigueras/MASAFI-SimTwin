@@ -9,6 +9,8 @@ from PyQt6.QtWidgets import QDialogButtonBox, QLabel
 from masafi_simtwin import paper
 from masafi_simtwin.dialogs.settings import THEME_VALUES, SettingsDialog
 from masafi_simtwin.preferences import (
+    AUTOSAVE_INTERVALS,
+    AUTOSAVE_KEY,
     DISTANCE_UNITS,
     SURFACE_UNITS,
     SYSTEM_LANGUAGE,
@@ -24,7 +26,11 @@ from masafi_simtwin.translations import LANGUAGE_NAMES, LANGUAGES
 CATEGORIES = {
     'Appearance': ['Language', 'Themes', 'Page'],
     'Default Units': ['Time', 'Space'],
+    'Saving': [],
 }
+
+#: The categories that have children, and so a list of links on their page.
+PARENTS = [name for name, children in CATEGORIES.items() if children]
 
 #: The same tree walked depth first, which is the order of the pages.
 DEPTH_FIRST = [
@@ -154,7 +160,7 @@ def test_the_heading_of_a_page_is_the_name_of_its_category(dialog, name):
     assert page.findChild(QLabel, f'{stem}_heading').text() == name
 
 
-@pytest.mark.parametrize('name', [name for name in CATEGORIES])
+@pytest.mark.parametrize('name', PARENTS)
 def test_a_parent_lists_its_children_as_links(dialog, name):
     """Clicking a root shows a clickable list of what is under it."""
 
@@ -188,7 +194,7 @@ def test_a_link_selects_the_child_it_names(dialog, parent, child):
     assert dialog.page_stack.currentWidget() is dialog.page_of(expected)
 
 
-@pytest.mark.parametrize('name', [name for name in CATEGORIES])
+@pytest.mark.parametrize('name', PARENTS)
 def test_clicking_the_selected_parent_returns_to_its_list(dialog, name):
     """A click moves no selection when the item is already current.
 
@@ -627,3 +633,62 @@ def test_the_page_asks_for_no_restart(qtbot, preferences, monkeypatch):
 
     assert warned == []
     assert not needs_restart(dialog.written)
+
+
+# ----------------------------------------------------------------------
+# Saving
+# ----------------------------------------------------------------------
+
+
+def test_the_autosave_entries_carry_the_minutes_they_stand_for(dialog):
+    """Paired by order with the declared intervals, nought first."""
+
+    combo = dialog.autosave_combo
+    assert [combo.itemData(i) for i in range(combo.count())] == list(AUTOSAVE_INTERVALS)
+    assert combo.itemText(0) == '0 (Off)'
+    assert [combo.itemText(i) for i in range(1, combo.count())] == [
+        str(minutes) for minutes in AUTOSAVE_INTERVALS[1:]
+    ]
+
+
+def test_the_autosave_chooser_is_on_the_saving_page(dialog):
+    """With the note saying what the journal does between saves."""
+
+    page = dialog.page_of(category(dialog, 'Saving'))
+
+    assert dialog.autosave_combo.parent() is page
+    assert 'journal' in dialog.saving_note.text()
+
+
+def test_the_autosave_opens_on_five_minutes(dialog):
+    """Nothing chosen means the default."""
+
+    assert dialog.autosave_combo.currentData() == 5
+
+
+def test_the_autosave_opens_on_the_stored_interval(qtbot, preferences):
+    """A dialog opened after a choice shows that choice."""
+
+    preferences.set_value(AUTOSAVE_KEY, 0)
+    dialog = SettingsDialog(preferences=preferences)
+    qtbot.addWidget(dialog)
+
+    assert dialog.autosave_combo.currentData() == 0
+
+
+def test_choosing_an_interval_is_pending_until_the_dialog_is_accepted(
+    dialog, preferences, silent_warning
+):
+    """And it asks for no restart: the timer starts again at once."""
+
+    combo = dialog.autosave_combo
+    combo.setCurrentIndex(combo.findData(15))
+
+    assert preferences.value(AUTOSAVE_KEY) == 5
+    assert not dialog.edit.needs_restart
+    assert silent_warning == []
+
+    dialog.accept()
+
+    assert preferences.value(AUTOSAVE_KEY) == 15
+    assert dialog.written == (AUTOSAVE_KEY,)
