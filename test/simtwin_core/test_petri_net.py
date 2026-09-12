@@ -10,9 +10,11 @@ from simtwin_core.petri_net import (
     ArcData,
     GuideData,
     InvalidNet,
+    NameProblem,
     NetDocument,
     PlaceData,
     TransitionData,
+    name_problem,
 )
 
 
@@ -327,3 +329,185 @@ def test_a_route_that_is_not_points_is_refused():
 
     with pytest.raises(InvalidNet):
         arc(route=[(1.0,)])
+
+
+# ----------------------------------------------------------------------
+# Tokens and descriptions
+# ----------------------------------------------------------------------
+
+
+def test_a_node_holds_no_tokens_and_no_description_unless_given_some():
+    """A place dropped on the sheet."""
+
+    assert (place().tokens, place().description) == (0, '')
+    assert transition().description == ''
+
+
+def test_a_place_holds_its_tokens_and_both_nodes_their_descriptions():
+    """The initial marking, and a person's words."""
+
+    held = PlaceData('p', 'P1', (20.0, 20.0), 4, 'Bottles waiting')
+    described = TransitionData('t', 'T1', (60.0, 20.0), 'Fill a bottle')
+
+    document = net(places=(held,), transitions=(described,))
+
+    assert document.places[0].tokens == 4
+    assert document.places[0].description == 'Bottles waiting'
+    assert document.transitions[0].description == 'Fill a bottle'
+
+
+@pytest.mark.parametrize('tokens', [-1, 2.0, True, '3'], ids=['negative', 'float', 'bool', 'text'])
+def test_tokens_that_are_not_a_whole_number_of_nought_or_more_are_refused(tokens):
+    """Nought is the fewest a place can hold."""
+
+    with pytest.raises(InvalidNet, match='tokens'):
+        PlaceData('p', 'P1', (20.0, 20.0), tokens)
+
+
+@pytest.mark.parametrize('description', ['two\nlines', 'carriage\rreturn', 7], ids=['newline', 'return', 'not-text'])
+@pytest.mark.parametrize('made', [
+    lambda text: PlaceData('p', 'P1', (0.0, 0.0), 0, text),
+    lambda text: TransitionData('t', 'T1', (0.0, 0.0), text),
+], ids=['place', 'transition'])
+def test_a_description_that_is_not_one_line_of_text_is_refused(made, description):
+    """It is drawn on one line beside its node."""
+
+    with pytest.raises(InvalidNet, match='description'):
+        made(description)
+
+
+# ----------------------------------------------------------------------
+# The one order a document holds everything in
+# ----------------------------------------------------------------------
+
+
+def test_nodes_are_held_by_name_with_numbers_counted_as_numbers():
+    """``P2`` before ``P10``, whatever order they were given in."""
+
+    document = net(
+        places=(place('p10', 'P10'), place('b', 'Buffer'), place('p2', 'P2')),
+        transitions=(transition('t2', 'T2'), transition('t1', 'T1')),
+    )
+
+    assert [node.name for node in document.places] == ['Buffer', 'P2', 'P10']
+    assert [node.name for node in document.transitions] == ['T1', 'T2']
+
+
+def test_arcs_are_held_by_the_names_of_their_ends_then_their_kind():
+    """So a file does not change with the order a scene happens to hold them in."""
+
+    places = (place('p', 'P1'), place('q', 'P2'))
+    back = arc('back', 't', 'p', source_port=1, target_port=2)
+    inhibitor = arc('inhibitor', 'p', 't', kind='inhibitor')
+    normal = arc('normal', 'p', 't')
+    second = arc('second', 'q', 't')
+
+    document = net(back, second, inhibitor, normal, places=places)
+
+    assert [each.uuid for each in document.arcs] == ['inhibitor', 'normal', 'second', 'back']
+
+
+def test_guides_are_held_across_the_sheet_first_then_by_where_they_are():
+    """The order the sheet lists them in."""
+
+    document = net(
+        guides=(
+            GuideData('vertical', 10.0),
+            GuideData('horizontal', 90.0),
+            GuideData('horizontal', 30.0),
+        )
+    )
+
+    assert document.guides == (
+        GuideData('horizontal', 30.0),
+        GuideData('horizontal', 90.0),
+        GuideData('vertical', 10.0),
+    )
+
+
+def test_one_drawing_put_together_in_two_orders_is_one_document():
+    """What a journal replayed onto a file and an editor describing its sheet
+    must agree on, or an untouched model would read as changed."""
+
+    one = net(arc('a'), places=(place('p', 'P1'), place('q', 'P2')))
+    other = net(arc('a'), places=(place('q', 'P2'), place('p', 'P1')))
+
+    assert one == other
+    assert dataclasses.replace(one, places=(place('p', 'Zeta'), place('q', 'P2'))).places[0].name == 'P2'
+
+
+# ----------------------------------------------------------------------
+# What a node may be called
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    'name',
+    ['Buffer', 'Buffer_2', 'Station3', 'P1', '_hidden', 'CamelCase', 'match', 'type', 'random'],
+)
+def test_an_ascii_python_identifier_is_a_name(name):
+    """Soft keywords and the names of standard modules are valid module names."""
+
+    assert name_problem(name) is None
+
+
+@pytest.mark.parametrize(
+    ('name', 'problem'),
+    [
+        ('', NameProblem.EMPTY),
+        ('Estació', NameProblem.NOT_ASCII),
+        ('1st', NameProblem.DIGIT_FIRST),
+        ('2', NameProblem.DIGIT_FIRST),
+        ('Buffer 1', NameProblem.NOT_IDENTIFIER),
+        ('filling-station', NameProblem.NOT_IDENTIFIER),
+        (' Buffer', NameProblem.NOT_IDENTIFIER),
+        ('class', NameProblem.KEYWORD),
+        ('None', NameProblem.KEYWORD),
+        ('lambda', NameProblem.KEYWORD),
+    ],
+)
+def test_a_name_that_is_not_one_says_why(name, problem):
+    """The first rule it breaks, as a code the application puts into words."""
+
+    assert name_problem(name) is problem
+
+
+def test_a_name_another_node_has_is_taken_whatever_its_case():
+    """``Buffer`` and ``buffer`` are one file on Windows and macOS."""
+
+    assert name_problem('buffer', ['P1', 'Buffer']) is NameProblem.TAKEN
+    assert name_problem('BUFFER', ('buffer',)) is NameProblem.TAKEN
+    assert name_problem('Buffer', ['P1', 'T1']) is None
+
+
+def test_a_node_may_keep_its_name_or_change_its_case():
+    """What is taken is the other nodes' names, not its own."""
+
+    assert name_problem('p1', taken=['T1']) is None
+
+
+def test_every_name_allowed_is_one_the_library_accepts():
+    """The document must map onto MASAFI-sim-petri, which runs it: the library
+    refuses only a blank name, and a name the rule allows is never blank."""
+
+    from masafi_sim_petri import Place, Transition
+
+    for name in ['Buffer', 'Buffer_2', '_hidden', 'match']:
+        assert name_problem(name) is None
+        assert Place(name).name == name
+        assert Transition(name).name == name
+
+
+@pytest.mark.parametrize('name', ['Buffer 1', '1st', 'class', 'Estació', ''])
+def test_a_document_holding_a_name_that_is_not_one_is_refused(name):
+    """A file that breaks the rule is refused when it is read."""
+
+    with pytest.raises(InvalidNet, match='not a name a node may have'):
+        net(places=(place('p', name),))
+
+
+def test_two_nodes_whose_names_differ_only_in_case_are_refused():
+    """A place and a transition included."""
+
+    with pytest.raises(InvalidNet, match='share the name'):
+        net(places=(place('p', 'Buffer'),), transitions=(transition('t', 'buffer'),))

@@ -410,3 +410,17 @@ def test_closing_a_document_is_reported_with_its_key(area, qtbot):
     with qtbot.waitSignal(area.document_closed, timeout=1000) as blocker:
         close_button(area).click()
     assert blocker.args == ['']
+
+
+def test_the_first_document_is_known_by_its_key_when_it_becomes_current(area):
+    """The first tab of an empty area is made current as it is added, and whoever
+    hears that asks which document it is."""
+
+    heard = []
+    area.current_document_changed.connect(
+        lambda title: heard.append(area.key_of(area.current_document))
+    )
+
+    area.add_document(QWidget(), 'Filling', key='u1')
+
+    assert heard == ['u1']

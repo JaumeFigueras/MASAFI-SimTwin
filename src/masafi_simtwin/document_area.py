@@ -183,13 +183,16 @@ class DocumentArea(QWidget):
             self.close_document_for(key)
 
         self._titles[widget] = title
+        # Known by its key before it is a tab: the first tab added to an empty
+        # area is made current by addTab itself, and whoever hears that asks
+        # which document it is.
+        if key is not None:
+            self._documents[key] = widget
         index = self._tabs.addTab(widget, title)
         self._tabs.setTabToolTip(index, tool_tip or title)
         self._tabs.tabBar().setTabButton(
             index, QTabBar.ButtonPosition.RightSide, self._build_close_button(widget)
         )
-        if key is not None:
-            self._documents[key] = widget
         self._tabs.setCurrentIndex(index)
         self._update_visible_page()
         return index

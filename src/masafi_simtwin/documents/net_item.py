@@ -197,6 +197,9 @@ class NetItem(QGraphicsItem):
         What the net calls it, unique in its net: the name MASAFI-sim-petri
         knows it by.  Empty until the editor gives it one — see
         :meth:`~masafi_simtwin.documents.petri_net.PetriNetEditor.next_name`.
+    description : str
+        What it is for, in a person's words, on one line.  Empty until one is
+        given, and never seen by a backend.
     NAME_PREFIX : str
         What a name invented for one begins with.  A subclass says it, and two
         kinds of item with different prefixes cannot be given the same name.
@@ -232,6 +235,7 @@ class NetItem(QGraphicsItem):
         self._arcs: list = []
         self.uuid = str(uuid4())
         self.name = ''
+        self.description = ''
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)

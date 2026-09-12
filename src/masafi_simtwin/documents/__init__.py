@@ -22,7 +22,7 @@ from PyQt6.QtWidgets import QWidget
 
 from masafi_simtwin.documents.arc import Arc
 from masafi_simtwin.documents.canvas import Canvas
-from masafi_simtwin.documents.petri_net import PetriNetEditor
+from masafi_simtwin.documents.petri_net import PetriNetEditor, Selection
 from masafi_simtwin.documents.place import Place
 from masafi_simtwin.documents.transition import Transition
 from masafi_simtwin.project import ModelKind
@@ -73,6 +73,7 @@ __all__ = [
     'PetriNetEditor',
     'Place',
     'Transition',
+    'Selection',
     'busy',
     'editor_for',
     'file_of',
@@ -83,6 +84,7 @@ __all__ = [
     'new_model_file',
     'recorded_change',
     'replay',
+    'selection_of',
     'undo_stack_of',
 ]
 
@@ -196,6 +198,26 @@ def mark_unsaved(document: QWidget) -> None:
     stack = undo_stack_of(document)
     if stack is not None:
         stack.resetClean()
+
+
+def selection_of(document: QWidget) -> Selection | None:
+    """Describe what is selected in a document.
+
+    Parameters
+    ----------
+    document : PyQt6.QtWidgets.QWidget
+        The document.
+
+    Returns
+    -------
+    masafi_simtwin.documents.petri_net.Selection, optional
+        What is selected, and ``None`` for a document that has nothing to select
+        with properties to show.
+    """
+
+    if isinstance(document, PetriNetEditor):
+        return document.selection()
+    return None
 
 
 def busy(document: QWidget) -> bool:

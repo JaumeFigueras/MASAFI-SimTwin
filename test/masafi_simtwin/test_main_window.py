@@ -19,6 +19,7 @@ from masafi_simtwin.document_area import MODIFIED_MARK
 from masafi_simtwin.documents import PetriNetEditor
 from masafi_simtwin.documents.arc import ArcKind
 from masafi_simtwin.library_tree import LibraryTree
+from masafi_simtwin.panes import PropertiesPane
 from masafi_simtwin import preferences
 from masafi_simtwin.main_window import (
     AUTOSAVE_RETRY_MS,
@@ -274,12 +275,14 @@ def test_history_is_capped(window, make_project):
 
 LEFT = Qt.DockWidgetArea.LeftDockWidgetArea
 BOTTOM = Qt.DockWidgetArea.BottomDockWidgetArea
+RIGHT = Qt.DockWidgetArea.RightDockWidgetArea
 
 PANES = [
     ('project', 'Project', LEFT),
     ('libraries', 'Libraries', LEFT),
     ('python', 'Python Console', BOTTOM),
     ('problems', 'Problems', BOTTOM),
+    ('properties', 'Properties', RIGHT),
 ]
 
 GROUPS = [('project', 'libraries'), ('python', 'problems')]
@@ -314,14 +317,14 @@ def test_panes_start_closed(shown_window):
 
     for key, _title, _area in PANES:
         assert not shown_window.tool_pane(key).isVisible()
-        assert not shown_window.side_bar.pane_action(key).isChecked()
+        assert not shown_window.pane_action(key).isChecked()
 
 
 @pytest.mark.parametrize(('key', 'title', 'area'), PANES)
 def test_a_button_opens_its_pane(shown_window, key, title, area):
     """Pressing a stripe button opens the pane it stands for, under its title."""
 
-    shown_window.side_bar.pane_action(key).setChecked(True)
+    shown_window.pane_action(key).setChecked(True)
     pane = shown_window.tool_pane(key)
 
     assert pane.isVisible()
@@ -333,7 +336,7 @@ def test_a_button_opens_its_pane(shown_window, key, title, area):
 def test_pressing_the_button_again_closes_the_pane(shown_window, key):
     """The button of the pane already open closes it and leaves nothing pressed."""
 
-    action = shown_window.side_bar.pane_action(key)
+    action = shown_window.pane_action(key)
     action.setChecked(True)
     action.trigger()
 
@@ -345,20 +348,20 @@ def test_pressing_the_button_again_closes_the_pane(shown_window, key):
 def test_the_panes_of_a_group_replace_each_other(shown_window, opened, other):
     """Opening one pane closes the other of its group, in either direction."""
 
-    shown_window.side_bar.pane_action(opened).setChecked(True)
-    shown_window.side_bar.pane_action(other).setChecked(True)
+    shown_window.pane_action(opened).setChecked(True)
+    shown_window.pane_action(other).setChecked(True)
 
     assert shown_window.tool_pane(other).isVisible()
     assert not shown_window.tool_pane(opened).isVisible()
-    assert shown_window.side_bar.pane_action(other).isChecked()
-    assert not shown_window.side_bar.pane_action(opened).isChecked()
+    assert shown_window.pane_action(other).isChecked()
+    assert not shown_window.pane_action(opened).isChecked()
 
 
 def test_the_two_groups_open_together(shown_window):
     """A pane at the side and one at the bottom are open at the same time."""
 
-    shown_window.side_bar.pane_action('project').setChecked(True)
-    shown_window.side_bar.pane_action('problems').setChecked(True)
+    shown_window.pane_action('project').setChecked(True)
+    shown_window.pane_action('problems').setChecked(True)
 
     assert shown_window.tool_pane('project').isVisible()
     assert shown_window.tool_pane('problems').isVisible()
@@ -367,11 +370,11 @@ def test_the_two_groups_open_together(shown_window):
 def test_the_bottom_pane_runs_under_the_side_pane(shown_window):
     """The bottom pane takes the whole width and shortens the pane at the side."""
 
-    shown_window.side_bar.pane_action('project').setChecked(True)
+    shown_window.pane_action('project').setChecked(True)
     project = shown_window.tool_pane('project')
     tall = project.height()
 
-    shown_window.side_bar.pane_action('python').setChecked(True)
+    shown_window.pane_action('python').setChecked(True)
     python = shown_window.tool_pane('python')
 
     assert python.x() <= project.x()
@@ -391,10 +394,10 @@ def test_the_bottom_corners_belong_to_the_bottom_area(window, corner):
 def test_closing_a_pane_releases_its_button(shown_window, key):
     """A pane closed from its own header lets the stripe button go."""
 
-    shown_window.side_bar.pane_action(key).setChecked(True)
+    shown_window.pane_action(key).setChecked(True)
     shown_window.tool_pane(key).close()
 
-    assert not shown_window.side_bar.pane_action(key).isChecked()
+    assert not shown_window.pane_action(key).isChecked()
 
 
 @pytest.mark.parametrize('key', [key for key, _title, _area in PANES])
@@ -3143,3 +3146,199 @@ def test_deleting_a_model_says_it_cannot_be_undone(window, opened, monkeypatch):
     assert texts[0].startswith('Filling Station and everything in it')
     assert 'cannot be undone' in texts[0]
     assert 'gone forever' in texts[0]
+
+
+# ----------------------------------------------------------------------
+# The Properties pane
+# ----------------------------------------------------------------------
+
+
+def test_the_right_stripe_holds_the_properties_pane(window):
+    """A stripe down the right edge, and the pane in the right dock area."""
+
+    pane = window.tool_pane('properties')
+
+    assert window.toolBarArea(window.right_side_bar) == Qt.ToolBarArea.RightToolBarArea
+    assert not window.right_side_bar.isMovable()
+    assert window.pane_action('properties') is window.right_side_bar.pane_action('properties')
+    assert window.side_bar.pane_action('properties') is None
+    assert pane.findChild(PropertiesPane) is window.properties_pane
+    assert window.dockWidgetArea(pane) == RIGHT
+
+
+def test_the_properties_pane_shows_nothing_until_a_model_is_open(window, opened):
+    """A project with no model open has nothing to say about one."""
+
+    assert window.properties_pane.page is window.properties_pane.nothing_page
+
+
+def test_an_open_model_with_nothing_selected_is_shown(window, opened, monkeypatch):
+    """Its name, its kind and its units, read-only."""
+
+    add_model(window, monkeypatch)
+    pane = window.properties_pane
+
+    assert pane.page is pane.model_page
+    assert pane.model_name_value.text() == 'Filling Station'
+    assert pane.model_kind_value.text() == 'Petri Net'
+    assert pane.model_time_value.text() == 's'
+
+
+def test_what_is_selected_is_shown_and_putting_it_down_shows_the_model(
+    window, opened, monkeypatch
+):
+    """The editor says the selection changed; the window asks and tells the pane."""
+
+    model = add_model(window, monkeypatch)
+    editor = editor_of(window, model)
+    draw(editor)
+    pane = window.properties_pane
+
+    editor.places[0].setSelected(True)
+    editor.arcs[0].setSelected(True)
+
+    assert pane.page is pane.selection_page
+    assert (pane.places_value.text(), pane.transitions_value.text(), pane.arcs_value.text()) == (
+        '1',
+        '0',
+        '1',
+    )
+
+    editor.scene().clearSelection()
+
+    assert pane.page is pane.model_page
+
+
+def test_the_properties_pane_follows_the_tab_being_looked_at(window, opened, monkeypatch):
+    """Each tab has a selection of its own."""
+
+    first = add_model(window, monkeypatch, 'Filling Station')
+    second = add_model(window, monkeypatch, 'Capping')
+    draw(editor_of(window, first))
+    editor_of(window, first).places[0].setSelected(True)
+    pane = window.properties_pane
+
+    window.document_area.show_document(second['uuid'])
+    assert pane.page is pane.model_page
+    assert pane.model_name_value.text() == 'Capping'
+
+    window.document_area.show_document(first['uuid'])
+    assert pane.page is pane.selection_page
+
+
+def test_a_selection_in_a_tab_not_looked_at_changes_nothing(window, opened, monkeypatch):
+    """Only the current sheet speaks to the pane."""
+
+    first = add_model(window, monkeypatch, 'Filling Station')
+    add_model(window, monkeypatch, 'Capping')
+    draw(editor_of(window, first))
+    pane = window.properties_pane
+
+    editor_of(window, first).places[0].setSelected(True)
+
+    assert pane.page is pane.model_page
+    assert pane.model_name_value.text() == 'Capping'
+
+
+def test_a_renamed_model_is_shown_under_its_new_name(window, opened, monkeypatch):
+    """The pane reads the manifest as it now stands."""
+
+    add_model(window, monkeypatch)
+    window._project_tree.setCurrentItem(window._project_tree.model_items()[0])
+
+    stub_model_dialog(monkeypatch, QDialog.DialogCode.Accepted, name='Filling')
+    window.model_properties_action.trigger()
+
+    assert window.properties_pane.model_name_value.text() == 'Filling'
+
+
+def test_closing_the_project_leaves_nothing_in_the_properties_pane(window, opened, monkeypatch):
+    """Its documents go with it."""
+
+    add_model(window, monkeypatch)
+
+    window.close_project()
+
+    assert window.properties_pane.page is window.properties_pane.nothing_page
+
+
+def test_selecting_does_not_open_the_properties_pane(shown_window, make_project, monkeypatch):
+    """Only its stripe button does, so the sheet never shrinks under the hand."""
+
+    shown_window.open_project_path(make_project('Bottling Line'))
+    model = add_model(shown_window, monkeypatch)
+    editor = editor_of(shown_window, model)
+    draw(editor)
+
+    editor.places[0].setSelected(True)
+
+    assert not shown_window.tool_pane('properties').isVisible()
+    assert not shown_window.pane_action('properties').isChecked()
+
+
+SELECTION_TEARDOWN_SESSION = """
+import gc, sys
+from PyQt6.QtCore import QEventLoop, QPointF, QSettings, QTimer
+from PyQt6.QtWidgets import QApplication
+
+QSettings.setDefaultFormat(QSettings.Format.IniFormat)
+
+from masafi_simtwin import documents, project
+from masafi_simtwin.main_window import MainWindow
+
+def session(path):
+    application = QApplication(sys.argv[:1])
+    window = MainWindow()
+    window.show()
+    model = project.add_model(
+        path,
+        'Filling Station',
+        project.ModelKind.PETRI_NET,
+        {'time': 's'},
+        document=lambda identifier: documents.new_model_file(
+            project.ModelKind.PETRI_NET, identifier
+        ),
+    )
+    window.open_project_path(path)
+    window.open_model(model['uuid'])
+    window.show_pane('properties')
+    editor = window.document_area.document(model['uuid'])
+    place = editor.add_element('pt-petri-net', 'place', QPointF(20.0, 20.0))
+    place.setSelected(True)
+    loop = QEventLoop()
+    QTimer.singleShot(50, loop.quit)
+    loop.exec()
+    window.document_area.close_document_for(model['uuid'])
+    loop = QEventLoop()
+    QTimer.singleShot(50, loop.quit)
+    loop.exec()
+    window._end_session()
+    del editor, place
+
+session(sys.argv[1])
+gc.collect()
+print('survived')
+"""
+
+
+def test_a_window_holding_a_selection_is_torn_down_without_a_crash(tmp_path):
+    """A closing tab puts its selection down as it goes, and the editor says so
+    to the window.  Asking that editor anything then would be touching a widget on
+    its way out, which kills the interpreter rather than raising — so the test
+    watches from outside."""
+
+    path = str(project.create(project.path_for(tmp_path, 'Bottling Line'), 'Bottling Line'))
+    environment = dict(os.environ)
+    environment['QT_QPA_PLATFORM'] = 'offscreen'
+    environment['XDG_CONFIG_HOME'] = str(tmp_path / 'config')
+
+    finished = subprocess.run(
+        [sys.executable, '-c', SELECTION_TEARDOWN_SESSION, path],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env=environment,
+    )
+
+    assert finished.returncode == 0, finished.stderr
+    assert 'survived' in finished.stdout

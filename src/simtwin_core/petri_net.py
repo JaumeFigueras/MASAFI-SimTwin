@@ -19,13 +19,25 @@ is made a tuple.
 **A document is a net that can be drawn, or it is not made.**  A
 :class:`NetDocument` refuses, with :class:`InvalidNet`, to hold
 
-* two things with the same UUID, or two nodes with the same name — a place and a
-  transition included, since a backend knows a node by its name;
+* two things with the same UUID, or two nodes with the same name ignoring case — a
+  place and a transition included, since a backend knows a node by its name;
+* a node whose name is not an ASCII Python identifier, or is a keyword —
+  :func:`name_problem` is the rule;
 * an arc with an end that is not one of its nodes, or that joins a node to one of
   its own kind — a Petri net is bipartite;
 * an arc of a kind running the wrong way — an inhibitor arc runs from a place to
   a transition, :data:`DIRECTIONS`;
 * two arcs of one kind running the same way between the same two nodes.
+
+Nor does a node hold tokens that are not a whole number of nought or more, or a
+description of more than one line.  A place's **tokens** are its initial
+marking, which a backend runs from; a node's **description** is a person's words
+about it, which no backend ever sees.
+
+**A document holds everything in one order**, whatever order it is given in:
+nodes by name with numbers counted as numbers (:func:`reading_order`), arcs by
+the names of their ends and their kind, guides by the way they lie and where.  So
+two documents of one drawing are equal however each was put together.
 
 These are the rules the editor keeps as a net is drawn.  Holding them here as
 well means a file that breaks one is refused when it is read, rather than turned
@@ -49,7 +61,11 @@ nothing of the chord frame, which is every other PNML tool.
 
 from __future__ import annotations
 
+import keyword
+import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
+from enum import Enum
 
 #: A position on the sheet, or a place in an arc's chord frame.
 Point = tuple[float, float]
@@ -72,6 +88,99 @@ DIRECTIONS: dict[str, tuple[str, str]] = {
 
 class InvalidNet(ValueError):
     """Raised when a document does not describe a net that can be drawn."""
+
+
+class NameProblem(Enum):
+    """Why a name cannot be given to a place or a transition.
+
+    A code rather than a sentence: the words belong to the application, which
+    has the translations.  The value is what the code is called in a message
+    that is not translated, such as the one :class:`InvalidNet` carries.
+    """
+
+    #: No name at all.
+    EMPTY = 'empty'
+    #: A letter outside ASCII — ``Estació`` — which file systems and tools
+    #: handle unevenly.
+    NOT_ASCII = 'not-ascii'
+    #: A digit first — ``1st`` — which no Python name may begin with.
+    DIGIT_FIRST = 'digit-first'
+    #: Anything else that is not a Python identifier — a space, a hyphen.
+    NOT_IDENTIFIER = 'not-identifier'
+    #: A Python keyword — ``class``, ``None`` — which looks like a name and
+    #: cannot be one.
+    KEYWORD = 'keyword'
+    #: Another node's name, ignoring case.
+    TAKEN = 'taken'
+
+
+def name_problem(name: str, taken: Iterable[str] = ()) -> NameProblem | None:
+    """Say why a name cannot be given to a place or a transition, if it cannot.
+
+    The one place the rule for a node's name is written.  A name is an **ASCII
+    Python identifier that is not a keyword**, because a net is to become Python
+    — a name that already is one needs no mangling to be a module, a class or an
+    attribute — and it is **unique in its net ignoring case**, because
+    ``Buffer`` and ``buffer`` are one file on Windows and macOS.  Soft keywords
+    such as ``match`` and the names of standard modules such as ``random`` are
+    allowed: both are valid names for a module.
+
+    Every name this allows is one MASAFI-sim-petri accepts, which asks only that
+    a name is not blank and that no two places, or two transitions, share one.
+
+    Parameters
+    ----------
+    name : str
+        The name.
+    taken : collections.abc.Iterable of str, optional
+        The names of the **other** nodes of the net — not of the node being
+        named, which may keep its own name or change its case.
+
+    Returns
+    -------
+    NameProblem, optional
+        The first rule the name breaks, in the order of :class:`NameProblem`, or
+        ``None`` when it breaks none.
+    """
+
+    if not name:
+        return NameProblem.EMPTY
+    if not name.isascii():
+        return NameProblem.NOT_ASCII
+    if name[0].isdigit():
+        return NameProblem.DIGIT_FIRST
+    if not name.isidentifier():
+        return NameProblem.NOT_IDENTIFIER
+    if keyword.iskeyword(name):
+        return NameProblem.KEYWORD
+    folded = name.casefold()
+    if any(other.casefold() == folded for other in taken):
+        return NameProblem.TAKEN
+    return None
+
+
+def reading_order(name: str) -> list:
+    """Give the key a name sorts by, numbers counted as numbers.
+
+    ``P2`` comes before ``P10``, which is the order a person reads a net in, and
+    the order a document holds its nodes in — so a file written twice from the
+    same net comes out the same, and a change to a net is a small change to its
+    file.
+
+    Parameters
+    ----------
+    name : str
+        The name.
+
+    Returns
+    -------
+    list
+        Its runs of letters and of digits, the digits as integers.  Splitting on
+        the digits always alternates text and number, starting with text, so two
+        keys compare element by element without mixing the two.
+    """
+
+    return [int(part) if part.isdigit() else part for part in re.split(r'(\d+)', name)]
 
 
 def _point(value, what: str) -> Point:
@@ -100,6 +209,62 @@ def _point(value, what: str) -> Point:
         return float(x), float(y)
     except (TypeError, ValueError) as error:
         raise InvalidNet(f'{what} is not a pair of numbers: {value!r}') from error
+
+
+def _tokens(value, what: str) -> int:
+    """Check how many tokens a place holds.
+
+    Parameters
+    ----------
+    value : int
+        The tokens.
+    what : str
+        What holds them, for the message when they are not tokens.
+
+    Returns
+    -------
+    int
+        The tokens, as given.
+
+    Raises
+    ------
+    InvalidNet
+        When they are not a whole number of nought or more.  A ``bool`` is not a
+        number of tokens, though Python counts it as an ``int``.
+    """
+
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise InvalidNet(f'{what} holds tokens that are not a whole number of nought or more: {value!r}')
+    return value
+
+
+def _description(value, what: str) -> str:
+    """Check what a node is described as.
+
+    Parameters
+    ----------
+    value : str
+        The description.
+    what : str
+        What it describes, for the message when it is not a description.
+
+    Returns
+    -------
+    str
+        The description, as given.
+
+    Raises
+    ------
+    InvalidNet
+        When it is not text, or is more than one line — a description is drawn
+        on the sheet beside its node, on one line.
+    """
+
+    if not isinstance(value, str):
+        raise InvalidNet(f'the description of {what} is not text: {value!r}')
+    if '\n' in value or '\r' in value:
+        raise InvalidNet(f'the description of {what} is more than one line')
+    return value
 
 
 def _points(values, what: str) -> tuple[Point, ...]:
@@ -133,14 +298,31 @@ class PlaceData:
         What the net calls it.
     position : tuple of float
         Its centre, in millimetres on the sheet.
+    tokens : int
+        How many tokens it holds before the net is run — its initial marking.
+        Nought or more.
+    description : str
+        What it is for, in a person's words, on one line.  Not part of the net:
+        a backend never sees it.
+
+    Raises
+    ------
+    InvalidNet
+        When the tokens are not a whole number of nought or more, or the
+        description is not one line of text.
     """
 
     uuid: str
     name: str
     position: Point
+    tokens: int = 0
+    description: str = ''
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, 'position', _point(self.position, f'place {self.name!r}'))
+        what = f'place {self.name!r}'
+        object.__setattr__(self, 'position', _point(self.position, what))
+        object.__setattr__(self, 'tokens', _tokens(self.tokens, what))
+        object.__setattr__(self, 'description', _description(self.description, what))
 
 
 @dataclass(frozen=True)
@@ -155,16 +337,24 @@ class TransitionData:
         What the net calls it.
     position : tuple of float
         Its centre, in millimetres on the sheet.
+    description : str
+        What it is for, in a person's words, on one line.  Not part of the net.
+
+    Raises
+    ------
+    InvalidNet
+        When the description is not one line of text.
     """
 
     uuid: str
     name: str
     position: Point
+    description: str = ''
 
     def __post_init__(self) -> None:
-        object.__setattr__(
-            self, 'position', _point(self.position, f'transition {self.name!r}')
-        )
+        what = f'transition {self.name!r}'
+        object.__setattr__(self, 'position', _point(self.position, what))
+        object.__setattr__(self, 'description', _description(self.description, what))
 
 
 @dataclass(frozen=True)
@@ -280,14 +470,15 @@ class NetDocument:
     model_uuid : str
         The UUID of the model the net is, which is its identity in the project.
     places : tuple of PlaceData
-        The places, in the order they are to be read.
+        The places, by name in :func:`reading_order` whatever order they were
+        given in.
     transitions : tuple of TransitionData
         The transitions, likewise.
     arcs : tuple of ArcData
-        The arcs, likewise.
+        The arcs, by the names of their source and their target, then by kind.
     guides : tuple of GuideData
-        The guides across the sheet.  Not part of the net, but part of the
-        drawing of it.
+        The guides across the sheet, those lying across it first and then by
+        where they are.  Not part of the net, but part of the drawing of it.
 
     Raises
     ------
@@ -306,6 +497,40 @@ class NetDocument:
         for field in ('places', 'transitions', 'arcs', 'guides'):
             object.__setattr__(self, field, tuple(getattr(self, field)))
         self._check()
+        self._order()
+
+    def _order(self) -> None:
+        """Hold everything in the one order a net is read in.
+
+        A document is then the same value however it was put together — by an
+        editor reading its scene in stacking order, by an operation leaving a
+        renamed node where it was, by a journal replayed onto a file — and a net
+        written twice is the same file, which is what tells a model that has not
+        changed from one that has.  Called after the rules are checked, so every
+        arc's ends are known to be there and no two names are equal.
+        """
+
+        places = tuple(sorted(self.places, key=lambda node: reading_order(node.name)))
+        transitions = tuple(sorted(self.transitions, key=lambda node: reading_order(node.name)))
+        names = {node.uuid: node.name for node in (*places, *transitions)}
+        arcs = tuple(
+            sorted(
+                self.arcs,
+                key=lambda arc: (
+                    reading_order(names[arc.source]),
+                    reading_order(names[arc.target]),
+                    arc.kind,
+                ),
+            )
+        )
+        guides = tuple(sorted(self.guides, key=lambda guide: (guide.orientation, guide.position)))
+        for field, ordered in (
+            ('places', places),
+            ('transitions', transitions),
+            ('arcs', arcs),
+            ('guides', guides),
+        ):
+            object.__setattr__(self, field, ordered)
 
     def node(self, uuid: str) -> PlaceData | TransitionData | None:
         """Find a place or a transition by its UUID.
@@ -348,10 +573,14 @@ class NetDocument:
                     raise InvalidNet(f'two nodes share the UUID {node.uuid!r}')
                 nodes[node.uuid] = group
 
-        names = self.names
-        repeated = sorted({name for name in names if names.count(name) > 1})
+        for name in self.names:
+            problem = name_problem(name)
+            if problem is not None:
+                raise InvalidNet(f'{name!r} is not a name a node may have: {problem.value}')
+        folded = [name.casefold() for name in self.names]
+        repeated = sorted({name for name in self.names if folded.count(name.casefold()) > 1})
         if repeated:
-            raise InvalidNet(f'two nodes share the name {repeated[0]!r}')
+            raise InvalidNet(f'two nodes share the name {repeated[0]!r}, ignoring case')
 
         seen_uuids = set(nodes)
         seen_arcs: set[tuple[str, str, str]] = set()

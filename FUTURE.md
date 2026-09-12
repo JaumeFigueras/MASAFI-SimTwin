@@ -618,22 +618,20 @@ until it does. `element_for()` matches an arc on its two ends alone and has the 
 
 ## Names are unique
 
-**Now.** Places and transitions have no names of their own in SimTwin; the editor invents them, unique by
-construction, until there is somewhere to type one. Two models of a project may share a name — the
-second file is given `_2`. MASAFI-sim-petri identifies a place or a transition by its name, and accepts a
-place and a transition of **the same** name, writing both with one PNML `id`, so the file holds a
-duplicate identifier.
+**Now.** The names of a net's places and transitions are unique **ignoring case**, every node against
+every other, a place and a transition included — `name_problem()` in `simtwin_core/petri_net.py` is the
+rule, and a `NetDocument` breaking it is refused. `Line` and `line` are two names to Python but one file on
+Windows and macOS, and these names are meant to become modules. Two models of a project may still share a
+name — the second file is given `_2`.
 
-**Decided.** Equal names are forbidden.
+**Decided.** Equal names are forbidden, ignoring case, across all the nodes of a net.
 
-**Open, to settle when names become editable.**
+**Still open.**
 
-- The scope: every place and transition of a net against every other — required, since both become
-  PNML ids — and the models of a project against each other, which retires the `_2` suffix.
-- Whether the comparison ignores case. `Line` and `line` are two names to Python but one file on Windows
-  and macOS, and the names below are meant to become modules.
-- The library should refuse a place and a transition sharing a name, rather than write a file with a
-  duplicate `id`.
+- The models of a project against each other, which would retire the `_2` suffix.
+- MASAFI-sim-petri accepts a place and a transition of **the same** name, writing both with one PNML `id`,
+  so the file holds a duplicate identifier. SimTwin never gives it such a net; the library should still
+  refuse one.
 
 ---
 
@@ -653,13 +651,20 @@ valid PNML id.
 A digit anywhere else is allowed — `Buffer_2`, `Station3` — which is exactly Python's own rule for an
 identifier, so the names the editor invents meanwhile, `P1` and `T1`, already keep it.
 
-**Open, to settle when the rule is enforced.**
+**Enforced for places and transitions**, as decided with Jaume: `name_problem()` refuses a name that is
+empty, holds a letter outside ASCII (`Estació`), starts with a digit, is otherwise not an identifier, or is
+a Python keyword (`class`, `None`). Soft keywords (`match`, `type`) and the names of standard modules
+(`random`, `time`) are allowed — both are valid module names, and shadowing a module is the generated
+code's to avoid. Every name allowed is one MASAFI-sim-petri accepts; the library asks only that a name is
+not blank.
 
-- Python's keywords (`class`, `if`, `lambda`) look like identifiers and cannot be module names; the names
-  of the standard library's modules (`random`, `time`) can be, and shadow them. Both need a list to refuse.
-- Letters outside ASCII: Python accepts `Estació`, but file systems and tools handle them unevenly.
-- Where it is enforced: the New Project and Model dialogs now, the properties of places and transitions
-  when they exist. Projects made before the rule are development versions and are not converted.
+**A PNML file from another tool whose names break the rule is not opened** — `buffer 1` makes it
+`UnreadableNet`, though the library reads it. Chosen because the rule is the net's, not the editor's.
+Options, when such files turn up: rename on import (`buffer_1`, with a clash made unique) and say which
+names were changed; or open read-only until every name is fixed.
+
+**Still open.** The New Project and Model dialogs do not enforce the rule yet, so a project and its models
+may still be called anything. Projects made before the rule are development versions and are not converted.
 
 ---
 

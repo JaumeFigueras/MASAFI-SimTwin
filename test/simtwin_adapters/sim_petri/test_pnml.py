@@ -23,10 +23,10 @@ from simtwin_core.petri_net import (
 DRAWN = NetDocument(
     model_uuid='7f3f9c6a-model',
     places=(
-        PlaceData('p1', 'P1', (20.0, 20.0)),
+        PlaceData('p1', 'P1', (20.0, 20.0), 3, 'Bottles waiting'),
         PlaceData('p2', 'P2', (20.5, 80.0)),
     ),
-    transitions=(TransitionData('t1', 'T1', (70.0, 20.0)),),
+    transitions=(TransitionData('t1', 'T1', (70.0, 20.0), 'Fill a bottle & cap it'),),
     arcs=(
         ArcData('a1', 'p1', 't1', 0, 10, 3, 'normal', 'straight', ((1 / 3, 0.12), (2 / 3, 0.12)), ()),
         ArcData(
@@ -110,8 +110,8 @@ def test_the_library_alone_reads_the_file_as_the_net():
     assert [transition.name for transition in net.transitions] == ['T1']
     assert [(arc.source.name, arc.target.name, arc.weight) for arc in net.arcs] == [
         ('P1', 'T1', 3),
-        ('T1', 'P1', 1),
         ('P2', 'T1', 2),
+        ('T1', 'P1', 1),
     ]
 
 
@@ -326,3 +326,61 @@ def test_a_net_drawn_on_the_sheet_survives_a_file(qtbot):
     again.load_document(pnml.from_pnml(pnml.to_pnml(document)))
 
     assert again.to_document() == document
+
+
+# ----------------------------------------------------------------------
+# Tokens and descriptions
+# ----------------------------------------------------------------------
+
+
+def test_the_tokens_are_the_initial_marking_the_library_writes():
+    """PNML's own ``initialMarking``, which every PNML tool reads."""
+
+    data = pnml.to_pnml(DRAWN)
+    net = library_reads(data.decode('utf-8'))
+
+    assert [place.initial_marking for place in net.places] == [3, 0]
+    marking = element_for(tree_of(data), 'P1').find(qname('initialMarking'))
+    assert marking is not None
+    assert element_for(tree_of(data), 'P2').find(qname('initialMarking')) is None
+
+
+def test_a_description_rides_in_the_tools_own_data():
+    """No backend sees it, and a node without one writes nothing for it."""
+
+    root = tree_of(pnml.to_pnml(DRAWN))
+    namespace = f'{{{pnml.TOOL_NAMESPACE}}}'
+
+    def node_of(name):
+        tool = element_for(root, name).find(qname('toolspecific'))
+        return tool.find(f'{namespace}node')
+
+    assert node_of('T1').get('description') == 'Fill a bottle & cap it'
+    assert node_of('P1').get('description') == 'Bottles waiting'
+    assert 'description' not in node_of('P2').attrib
+
+
+def test_a_marking_another_tool_writes_is_read_as_tokens():
+    """And its nodes have no description."""
+
+    written = FROM_ANOTHER_TOOL.replace(
+        b'<place id="p"><name><text>buffer</text></name></place>',
+        b'<place id="p"><name><text>buffer</text></name>'
+        b'<initialMarking><text>4</text></initialMarking></place>',
+    )
+
+    document = pnml.from_pnml(written)
+
+    assert {place.name: place.tokens for place in document.places} == {'buffer': 4, 'done': 0}
+    assert all(node.description == '' for node in (*document.places, *document.transitions))
+
+
+
+def test_a_file_whose_names_are_not_names_is_refused():
+    """The library reads it; SimTwin does not draw a net it could not have made."""
+
+    written = FROM_ANOTHER_TOOL.replace(b'<text>buffer</text>', b'<text>buffer 1</text>')
+
+    assert [place.name for place in library_reads(written.decode('utf-8')).places][0] == 'buffer 1'
+    with pytest.raises(pnml.UnreadableNet, match='not a name'):
+        pnml.from_pnml(written)

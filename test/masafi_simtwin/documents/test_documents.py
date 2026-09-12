@@ -19,6 +19,7 @@ from masafi_simtwin.documents import (
     mark_saved,
     mark_unsaved,
     new_model_file,
+    selection_of,
 )
 from simtwin_adapters.sim_petri import pnml
 from simtwin_core.petri_net import NetDocument
@@ -184,3 +185,17 @@ def test_a_document_that_is_not_drawn_is_never_busy(qtbot):
     qtbot.addWidget(widget)
 
     assert not busy(widget)
+
+
+def test_the_selection_of_a_document_is_described(qtbot):
+    """A net's selection, or nothing for a document that has none to show."""
+
+    editor = editor_for({'uuid': 'u', 'name': 'Net', 'kind': 'petri-net'})
+    qtbot.addWidget(editor)
+    place = editor.add_element('pt-petri-net', 'place', QPointF(20.0, 20.0))
+    place.setSelected(True)
+    widget = QWidget()
+    qtbot.addWidget(widget)
+
+    assert [data.uuid for data in selection_of(editor).places] == [place.uuid]
+    assert selection_of(widget) is None

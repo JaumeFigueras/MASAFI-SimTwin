@@ -64,13 +64,13 @@ def test_a_form_carries_no_stylesheet(form):
 def test_the_form_class_names_the_context_of_its_strings(form):
     """The ``<class>`` of a form is the ``tr()`` context of the strings in it.
 
-    Naming it after the dialog is what puts the strings of a dialog on one page
-    in Qt Linguist, together with the ones its class translates in code.
+    Naming it after the dialog — or the pane — is what puts its strings on one
+    page in Qt Linguist, together with the ones its class translates in code.
     """
 
     root = ElementTree.parse(form).getroot()
     name = root.findtext('class')
     assert name, f'{form.name} has no <class>'
-    assert name.endswith('Dialog') or name.endswith('Widget'), (
+    assert name.endswith(('Dialog', 'Pane', 'Widget')), (
         f'{form.name} is called {name!r}; name a form after the class that uses it'
     )

@@ -22,6 +22,9 @@ from simtwin_core.operations import (
     SetArcKind,
     SetArcShape,
     SetArcWeight,
+    SetDescription,
+    SetNodeName,
+    SetTokens,
 )
 from simtwin_core.petri_net import (
     ArcData,
@@ -70,6 +73,9 @@ EVERY_OPERATION = [
     AddNode(OTHER),
     RemoveNode(PLACE),
     MoveNode('t', TRANSITION.position, (90.0, 45.0)),
+    SetNodeName('p', 'P1', 'Buffer'),
+    SetTokens('p', 0, 3),
+    SetDescription('t', '', 'Fill a bottle'),
     AddArc(ArcData('b', 't', 'p', 3, 4)),
     RemoveArc(ARC),
     MoveArcEnd('a', 'source', 'p', 0, 'p', 6),
@@ -338,3 +344,109 @@ def test_a_journal_line_that_cannot_be_read_is_refused(line):
 
     with pytest.raises(ValueError):
         operations.decode(line)
+
+
+# ----------------------------------------------------------------------
+# Names, tokens and descriptions
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ('operation', 'field', 'expected'),
+    [
+        (SetNodeName('p', 'P1', 'Buffer'), 'name', 'Buffer'),
+        (SetTokens('p', 0, 3), 'tokens', 3),
+        (SetDescription('p', '', 'Bottles waiting'), 'description', 'Bottles waiting'),
+    ],
+    ids=['name', 'tokens', 'description'],
+)
+def test_what_a_place_is_can_be_set(operation, field, expected):
+    """One operation each, and nothing else about the place changes."""
+
+    changed = operation.apply(net())
+
+    assert getattr(changed.places[0], field) == expected
+    assert changed.places[0].position == PLACE.position
+    assert changed.transitions == (TRANSITION,)
+
+
+def test_a_transition_is_renamed_and_described():
+    """A transition has a name and a description too."""
+
+    renamed = SetNodeName('t', 'T1', 'Fill').apply(net())
+    described = SetDescription('t', '', 'Fill a bottle').apply(renamed)
+
+    assert (described.transitions[0].name, described.transitions[0].description) == (
+        'Fill',
+        'Fill a bottle',
+    )
+
+
+def test_tokens_set_on_a_transition_leave_it_as_it_is():
+    """A transition holds no tokens."""
+
+    assert SetTokens('t', 0, 3).apply(net()) == net()
+
+
+def test_a_name_another_node_has_is_refused():
+    """A backend knows a node by its name."""
+
+    with pytest.raises(InvalidNet, match='share the name'):
+        SetNodeName('t', 'T1', 'P1').apply(net())
+
+
+@pytest.mark.parametrize('tokens', [-1, 1.5, True], ids=['negative', 'fraction', 'bool'])
+def test_tokens_that_are_not_a_whole_number_of_nought_or_more_are_refused(tokens):
+    """Where the operation is applied, as a damaged journal would ask."""
+
+    with pytest.raises(InvalidNet, match='tokens'):
+        SetTokens('p', 0, tokens).apply(net())
+
+
+def test_a_description_of_more_than_one_line_is_refused():
+    """A description is drawn on one line beside its node."""
+
+    with pytest.raises(InvalidNet, match='one line'):
+        SetDescription('p', '', 'two\nlines').apply(net())
+
+
+def test_a_node_carries_its_tokens_and_description_through_the_journal():
+    """Added and removed whole, so undoing gives back everything it had."""
+
+    full = PlaceData('r', 'P3', (40.0, 40.0), 5, 'Bottles waiting')
+    change = Change('gesture', (AddNode(full), RemoveNode(TransitionData('u', 'T2', (1.0, 1.0), 'Cap'))))
+
+    assert operations.decode(json.loads(json.dumps(operations.encode(change)))) == change
+
+
+def test_a_node_written_before_tokens_existed_reads_as_holding_none():
+    """A journal line from an earlier version still replays."""
+
+    line = {
+        'change': 'add-element',
+        'operations': [
+            {'op': 'add-node', 'node': {'kind': 'place', 'uuid': 'r', 'name': 'P3', 'position': [1, 2]}},
+            {'op': 'add-node', 'node': {'kind': 'transition', 'uuid': 'u', 'name': 'T2', 'position': [3, 4]}},
+        ],
+    }
+
+    place, transition = (operation.node for operation in operations.decode(line).operations)
+
+    assert (place.tokens, place.description) == (0, '')
+    assert transition.description == ''
+
+
+
+def test_a_name_that_is_not_one_is_refused_where_it_is_applied():
+    """As a damaged journal would ask; the pane asks the rule before it makes one."""
+
+    with pytest.raises(InvalidNet, match='not a name'):
+        SetNodeName('p', 'P1', 'Buffer 1').apply(net())
+    with pytest.raises(InvalidNet, match='share the name'):
+        SetNodeName('t', 'T1', 'p1').apply(net())
+
+
+def test_a_node_may_be_renamed_to_its_own_name_in_another_case():
+    """Its own name is not another node's."""
+
+    assert SetNodeName('p', 'P1', 'p1').apply(net()).places[0].name == 'p1'

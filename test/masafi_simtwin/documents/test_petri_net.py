@@ -34,6 +34,9 @@ from simtwin_core.operations import (
     SetArcKind,
     SetArcShape,
     SetArcWeight,
+    SetDescription,
+    SetNodeName,
+    SetTokens,
 )
 from simtwin_core.petri_net import (
     ArcData,
@@ -524,6 +527,9 @@ def operations_for(editor) -> dict:
         AddNode(PlaceData('new-place', 'P9', (100.0, 40.0))),
         RemoveNode(PlaceData(free.uuid, free.name, where)),
         MoveNode(free.uuid, where, (90.0, 90.0)),
+        SetNodeName(free.uuid, free.name, 'Buffer'),
+        SetTokens(place.uuid, 0, 3),
+        SetDescription(transition.uuid, '', 'Fill a bottle'),
         AddArc(
             ArcData(
                 'new-arc',
@@ -1094,3 +1100,124 @@ def test_a_net_read_from_a_file_is_not_modified(editor, qtbot):
     editor.load_document(document)
 
     assert not editor.is_modified
+
+
+
+# ----------------------------------------------------------------------
+# Names, tokens and descriptions on the sheet
+# ----------------------------------------------------------------------
+
+
+def test_a_new_place_holds_no_tokens_and_nothing_has_a_description(editor):
+    """Until it is given some."""
+
+    place, _free, transition, _arc = little_net(editor)
+
+    assert place.tokens == 0
+    assert (place.description, transition.description) == ('', '')
+
+
+def test_the_tokens_and_descriptions_survive_a_document(editor, qtbot):
+    """What is on the sheet is what is described, and what is loaded is drawn."""
+
+    place, _free, transition, _arc = little_net(editor)
+    editor.apply(
+        Change(
+            'gesture',
+            (
+                SetTokens(place.uuid, 0, 4),
+                SetDescription(place.uuid, '', 'Bottles waiting'),
+                SetDescription(transition.uuid, '', 'Fill a bottle'),
+            ),
+        )
+    )
+    document = editor.to_document()
+
+    again = fresh_editor(qtbot)
+    again.load_document(document)
+
+    assert again.to_document() == document
+    assert again.node(place.uuid).tokens == 4
+    assert again.node(transition.uuid).description == 'Fill a bottle'
+
+
+def test_tokens_asked_of_a_transition_are_refused(editor):
+    """The sheet holds no place of that UUID to put them in."""
+
+    _place, _free, transition, _arc = little_net(editor)
+
+    with pytest.raises(ValueError, match='no place'):
+        editor.apply(Change('tokens', (SetTokens(transition.uuid, 0, 2),)))
+
+
+@pytest.mark.parametrize(
+    ('name', 'label'),
+    [('rename-node', 'Rename'), ('set-tokens', 'Change Tokens'), ('set-description', 'Change Description')],
+)
+def test_the_new_changes_are_named_for_undo(editor, name, label):
+    """What *Undo* offers to put back."""
+
+    assert editor.change_label(name) == label
+
+
+
+def test_an_invented_name_counts_numbers_whatever_the_case_of_their_prefix(editor):
+    """Names are unique ignoring case, so beside a ``p7`` the next place is
+    ``P8`` rather than a ``P7`` that would clash with it."""
+
+    place, _free, _transition, _arc = little_net(editor)
+    editor.apply(Change('rename', (SetNodeName(place.uuid, place.name, 'p7'),)))
+
+    assert editor.next_name('P') == 'P8'
+
+
+# ----------------------------------------------------------------------
+# What is selected
+# ----------------------------------------------------------------------
+
+
+def test_nothing_is_selected_on_a_new_sheet(editor):
+    """And an empty selection is false."""
+
+    little_net(editor)
+
+    assert not editor.selection()
+
+
+def test_the_selection_is_described_rather_than_handed_over(editor):
+    """Descriptions, so that whoever shows it never touches the scene; guides,
+    having no properties, are left out."""
+
+    place, _free, transition, arc = little_net(editor)
+    for item in (place, transition, arc, *editor.guides):
+        item.setSelected(True)
+
+    selection = editor.selection()
+
+    assert [data.uuid for data in selection.places] == [place.uuid]
+    assert [data.uuid for data in selection.transitions] == [transition.uuid]
+    assert [data.uuid for data in selection.arcs] == [arc.uuid]
+    assert selection.places[0] == editor.to_document().node(place.uuid)
+
+
+def test_the_selection_is_held_in_the_order_of_names(editor):
+    """Whatever order the scene holds the items in."""
+
+    place, free, _transition, _arc = little_net(editor)
+    free.setSelected(True)
+    place.setSelected(True)
+
+    assert [data.name for data in editor.selection().places] == sorted(
+        [place.name, free.name], key=lambda name: int(name[1:])
+    )
+
+
+def test_a_change_of_selection_is_said_with_the_model(editor, qtbot):
+    """So a window knows which document spoke without a lambda to tell it."""
+
+    place, _free, _transition, _arc = little_net(editor)
+
+    with qtbot.waitSignal(editor.selection_changed, timeout=1000) as blocker:
+        place.setSelected(True)
+
+    assert blocker.args == [MODEL['uuid']]

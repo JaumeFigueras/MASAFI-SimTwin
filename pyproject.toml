@@ -26,7 +26,7 @@ where = ["src"]
 include = ["masafi_simtwin*", "simtwin_core*", "simtwin_adapters*"]
 
 [tool.setuptools.package-data]
-masafi_simtwin = ["resources/*.svg", "translations/*.qm", "dialogs/forms/*.ui"]
+masafi_simtwin = ["resources/*.svg", "translations/*.qm", "dialogs/forms/*.ui", "panes/forms/*.ui"]
 
 [tool.pytest.ini_options]
 testpaths = ["test"]

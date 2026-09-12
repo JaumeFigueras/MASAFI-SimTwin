@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
+from dataclasses import dataclass
 from uuid import uuid4
 
 from PyQt6.QtCore import QPointF, Qt, pyqtSignal
@@ -82,6 +83,9 @@ from simtwin_core.operations import (
     SetArcKind,
     SetArcShape,
     SetArcWeight,
+    SetDescription,
+    SetNodeName,
+    SetTokens,
 )
 from simtwin_core.petri_net import (
     ArcData,
@@ -89,6 +93,7 @@ from simtwin_core.petri_net import (
     NetDocument,
     PlaceData,
     TransitionData,
+    reading_order,
 )
 
 #: What each element of the Libraries pane becomes on this sheet, by the library
@@ -186,6 +191,34 @@ def held_port(index: int | None, item: NetItem) -> int | None:
     return None if index is None else min(index, len(item.ports()) - 1)
 
 
+@dataclass(frozen=True)
+class Selection:
+    """What is selected on a sheet, as descriptions rather than as items.
+
+    What the Properties pane is handed, so that it can show a place without ever
+    touching the scene it is drawn on.  Guides are left out: a guide has no
+    properties to show.
+
+    Attributes
+    ----------
+    places : tuple of simtwin_core.petri_net.PlaceData
+        The places selected, by name.
+    transitions : tuple of simtwin_core.petri_net.TransitionData
+        The transitions selected, by name.
+    arcs : tuple of simtwin_core.petri_net.ArcData
+        The arcs selected, by the names of their ends and their kind.
+    """
+
+    places: tuple = ()
+    transitions: tuple = ()
+    arcs: tuple = ()
+
+    def __bool__(self) -> bool:
+        """Say whether anything with properties is selected."""
+
+        return bool(self.places or self.transitions or self.arcs)
+
+
 def node_data(item: NetItem):
     """Describe a place or a transition as it stands on the sheet.
 
@@ -197,11 +230,14 @@ def node_data(item: NetItem):
     Returns
     -------
     simtwin_core.petri_net.PlaceData or simtwin_core.petri_net.TransitionData
-        What it is: its identity, its name and where its centre is.
+        What it is: its identity, its name, where its centre is, its
+        description, and a place's tokens.
     """
 
-    described = PlaceData if isinstance(item, Place) else TransitionData
-    return described(item.uuid, item.name, (item.pos().x(), item.pos().y()))
+    position = (item.pos().x(), item.pos().y())
+    if isinstance(item, Place):
+        return PlaceData(item.uuid, item.name, position, item.tokens, item.description)
+    return TransitionData(item.uuid, item.name, position, item.description)
 
 
 def guide_data(guide: Guide) -> GuideData:
@@ -308,30 +344,6 @@ class EditCommand(QUndoCommand):
         self._editor.report_change(self._change.inverse())
 
 
-def reading_order(name: str) -> list:
-    """Give the key a name sorts by, numbers counted as numbers.
-
-    ``P2`` comes before ``P10``, which is the order a person reads a net in, and
-    the order a document holds its nodes in — so a file written twice from the
-    same net comes out the same, and a change to a net is a small change to its
-    file.
-
-    Parameters
-    ----------
-    name : str
-        The name.
-
-    Returns
-    -------
-    list
-        Its runs of letters and of digits, the digits as integers.  Splitting on
-        the digits always alternates text and number, starting with text, so two
-        keys compare element by element without mixing the two.
-    """
-
-    return [int(part) if part.isdigit() else part for part in re.split(r'(\d+)', name)]
-
-
 class PetriNetEditor(Canvas):
     """The sheet one Petri net is drawn on.
 
@@ -357,6 +369,10 @@ class PetriNetEditor(Canvas):
         a gesture, a change done again, and — as its **inverse** — a change
         undone.  So what it says is the stream of what the net has actually
         become, which is what a journal writes and replays.
+    selection_changed : PyQt6.QtCore.pyqtSignal
+        Emitted with this model's UUID whenever what is selected on the sheet
+        changes, so that a window can ask for :meth:`selection` without a lambda
+        to tell it which document spoke.
     modified_changed : PyQt6.QtCore.pyqtSignal
         Emitted with this model's UUID, and whether the sheet now differs from
         what was last written, whenever that answer changes — which is what
@@ -367,6 +383,7 @@ class PetriNetEditor(Canvas):
 
     change_recorded = pyqtSignal(str, object)
     modified_changed = pyqtSignal(str, bool)
+    selection_changed = pyqtSignal(str)
 
     def __init__(
         self,
@@ -449,10 +466,12 @@ class PetriNetEditor(Canvas):
         The prefix and the number after the **highest** already in use — ``P1``,
         ``P2`` for places, ``T1``, ``T2`` for transitions — so a name deleted
         from the middle of a net is not quietly handed out again.  Invented only
-        until there is somewhere to type a name, and made to keep the rules
-        names will be held to: unique in the net, and a Python identifier with no
-        digit first.  A place and a transition cannot clash, their prefixes
-        being different.
+        until there is somewhere to type a name, and made to keep the rule
+        names are held to, :func:`~simtwin_core.petri_net.name_problem`.  Names
+        are unique ignoring case, so a number is counted whatever the case of
+        its prefix: beside a ``p7`` the next place is ``P8``, never a ``P7`` that
+        would clash with it.  A place and a transition cannot clash, their
+        prefixes being different.
 
         Parameters
         ----------
@@ -466,7 +485,7 @@ class PetriNetEditor(Canvas):
             The name.
         """
 
-        pattern = re.compile(rf'{re.escape(prefix)}(\d+)')
+        pattern = re.compile(rf'{re.escape(prefix)}(\d+)', re.IGNORECASE)
         numbers = [
             int(found.group(1))
             for name in self.names
@@ -740,9 +759,41 @@ class PetriNetEditor(Canvas):
         self.choose_arc_kind(kind)
 
     def _on_selection_changed(self) -> None:
-        """Show the new selection's arcs on the tool bar."""
+        """Show the new selection's arcs on the tool bar, and say it changed."""
 
         self.show_arc_choice()
+        self.selection_changed.emit(self.model_id)
+
+    def selection(self) -> Selection:
+        """Describe what is selected on the sheet.
+
+        Returns
+        -------
+        Selection
+            The places, transitions and arcs selected, each as the description
+            :meth:`to_document` would give of it, in a fixed order.
+        """
+
+        selected = self.scene().selectedItems()
+        places = [item for item in selected if isinstance(item, Place)]
+        transitions = [item for item in selected if isinstance(item, Transition)]
+        arcs = [item for item in selected if isinstance(item, Arc)]
+        by_name = lambda item: reading_order(item.name)  # noqa: E731
+        return Selection(
+            places=tuple(node_data(item) for item in sorted(places, key=by_name)),
+            transitions=tuple(node_data(item) for item in sorted(transitions, key=by_name)),
+            arcs=tuple(
+                arc_data(arc)
+                for arc in sorted(
+                    arcs,
+                    key=lambda arc: (
+                        reading_order(arc.source.name),
+                        reading_order(arc.target.name),
+                        arc.kind.value,
+                    ),
+                )
+            ),
+        )
 
     def reshape_arcs(self, arcs, shape: ArcShape) -> None:
         """Draw some arcs in a shape, and record it as one change.
@@ -1065,6 +1116,9 @@ class PetriNetEditor(Canvas):
             'shape-arc': self.tr('Shape Arc'),
             'move-arc-end': self.tr('Move Arc End'),
             'delete': self.tr('Delete'),
+            'rename-node': self.tr('Rename'),
+            'set-tokens': self.tr('Change Tokens'),
+            'set-description': self.tr('Change Description'),
         }
         return labels.get(name, name)
 
@@ -1082,11 +1136,10 @@ class PetriNetEditor(Canvas):
         arc's bends are written as they **are**, never as *untouched*, so a
         default that changes later does not reshape a net already drawn.
 
-        The order is fixed: places and transitions by name, numbers counted as
-        numbers (:func:`reading_order`), and arcs by the names of their two ends
-        and then their kind.  The scene holds its items in stacking order, which
-        changes as they are selected, and a file that changed with it would be a
-        different file every time it was written.
+        The order is the document's own: a
+        :class:`~simtwin_core.petri_net.NetDocument` holds everything by name —
+        numbers counted as numbers — however it is given, so the scene's stacking
+        order, which changes as items are selected, never reaches a file.
 
         Returns
         -------
@@ -1094,24 +1147,11 @@ class PetriNetEditor(Canvas):
             The net, its guides, and the model it is.
         """
 
-        def node_order(item: NetItem) -> list:
-            return reading_order(item.name)
-
-        arcs = sorted(
-            self.arcs,
-            key=lambda arc: (
-                reading_order(arc.source.name),
-                reading_order(arc.target.name),
-                arc.kind.value,
-            ),
-        )
         return NetDocument(
             model_uuid=self.model_id,
-            places=tuple(node_data(item) for item in sorted(self.places, key=node_order)),
-            transitions=tuple(
-                node_data(item) for item in sorted(self.transitions, key=node_order)
-            ),
-            arcs=tuple(arc_data(arc) for arc in arcs),
+            places=tuple(node_data(item) for item in self.places),
+            transitions=tuple(node_data(item) for item in self.transitions),
+            arcs=tuple(arc_data(arc) for arc in self.arcs),
             guides=tuple(
                 GuideData(GUIDE_ORIENTATIONS[guide.orientation], guide.position)
                 for guide in self.guides
@@ -1175,6 +1215,9 @@ class PetriNetEditor(Canvas):
         item = NODE_ITEMS[type(data)](self.view.snap, self.view.sceneRect)
         item.uuid = data.uuid
         item.name = data.name
+        item.description = data.description
+        if isinstance(data, PlaceData):
+            item.tokens = data.tokens
         self.scene().addItem(item)
         item.setPos(QPointF(*data.position))
         return item
@@ -1340,6 +1383,15 @@ class PetriNetEditor(Canvas):
             self.view.remove(self.node(operation.node.uuid))
         elif isinstance(operation, MoveNode):
             self.node(operation.node).setPos(QPointF(*operation.after))
+        elif isinstance(operation, SetNodeName):
+            self.node(operation.node).name = operation.after
+        elif isinstance(operation, SetTokens):
+            place = self.node(operation.node)
+            if not isinstance(place, Place):
+                raise ValueError(f'the sheet has no place {operation.node!r} to hold tokens')
+            place.tokens = operation.after
+        elif isinstance(operation, SetDescription):
+            self.node(operation.node).description = operation.after
         elif isinstance(operation, AddArc):
             self.draw_arc(operation.arc)
         elif isinstance(operation, RemoveArc):

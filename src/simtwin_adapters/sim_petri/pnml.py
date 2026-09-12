@@ -12,6 +12,8 @@ is the pattern MASAFI-sim-petri documents for the projects built on it:
 
 **What goes where.**
 
+* PNML's own ``initialMarking``, which the library writes from a place's tokens
+  and reads them back from — the one property of a place a backend runs on.
 * PNML's own ``graphics``, which every PNML tool reads: the centre of every place
   and transition, and — as the ``position`` elements PNML gives an arc for the
   points it bends at — the route of an S or an L on the sheet.  In millimetres,
@@ -19,7 +21,8 @@ is the pattern MASAFI-sim-petri documents for the projects built on it:
   place is drawn is the editor's constant rather than a fact about this net.
 * ``<toolspecific tool="MASAFI-SimTwin" version="1">``, which PNML sets aside
   for exactly this and every other tool passes over: the model's UUID on the
-  ``net``, the guides on the ``page``, each node's UUID, and each arc's UUID,
+  ``net``, the guides on the ``page``, each node's UUID and its description when
+  it has one, and each arc's UUID,
   kind, shape, connecting points, control points and points in its chord frame
   — which is what the editor draws from, and which wins over the route.
 
@@ -42,7 +45,8 @@ given a new one and a node without a position is laid out in a row, an arc
 without the tool's data is a straight normal arc whose connecting points are left
 to the editor, and another tool's ``toolspecific`` is passed over.  A file that is
 not a net that can be drawn — not PNML, an arc to nothing, a place and a transition
-of one name — is refused with :class:`UnreadableNet`.
+of one name, a name that is not a Python identifier — is refused with
+:class:`UnreadableNet`.
 
 The library is built when it is needed, by :func:`to_net`, rather than kept in
 step with the drawing: a second copy of a net to keep correct at every drag buys
@@ -162,7 +166,7 @@ def to_net(document: NetDocument) -> tuple[PetriNet, dict[str, Place | Transitio
     net = PetriNet()
     made: dict[str, Place | Transition | Arc] = {}
     for place in document.places:
-        made[place.uuid] = net.add_place(Place(place.name))
+        made[place.uuid] = net.add_place(Place(place.name, initial_marking=place.tokens))
     for transition in document.transitions:
         made[transition.uuid] = net.add_transition(Transition(transition.name))
     for arc in document.arcs:
@@ -210,7 +214,10 @@ def to_pnml(document: NetDocument) -> bytes:
     for node in (*document.places, *document.transitions):
         element = element_for(root, made[node.uuid])
         set_graphics(element, position=node.position)
-        ElementTree.SubElement(_tool_data(element), _ours('node'), {'uuid': node.uuid})
+        attributes = {'uuid': node.uuid}
+        if node.description:
+            attributes['description'] = node.description
+        ElementTree.SubElement(_tool_data(element), _ours('node'), attributes)
 
     for arc in document.arcs:
         element = element_for(root, made[arc.uuid])
@@ -263,7 +270,15 @@ def from_pnml(data: bytes | str) -> NetDocument:
             element = elements[place]
             uuids[place] = _node_uuid(element)
             laid_out = (LAYOUT_SPACING * (index + 1), LAYOUT_SPACING)
-            places.append(PlaceData(uuids[place], place.name, _position(element) or laid_out))
+            places.append(
+                PlaceData(
+                    uuids[place],
+                    place.name,
+                    _position(element) or laid_out,
+                    place.initial_marking,
+                    _node_description(element),
+                )
+            )
 
         transitions = []
         for index, transition in enumerate(net.transitions):
@@ -271,7 +286,12 @@ def from_pnml(data: bytes | str) -> NetDocument:
             uuids[transition] = _node_uuid(element)
             laid_out = (LAYOUT_SPACING * (index + 1), LAYOUT_SPACING * 2.0)
             transitions.append(
-                TransitionData(uuids[transition], transition.name, _position(element) or laid_out)
+                TransitionData(
+                    uuids[transition],
+                    transition.name,
+                    _position(element) or laid_out,
+                    _node_description(element),
+                )
             )
 
         arcs = [_read_arc(arc, elements[arc], uuids) for arc in net.arcs]
@@ -481,6 +501,25 @@ def _node_uuid(element: ElementTree.Element) -> str:
 
     node = _tool_element(element, 'node')
     return (node.get('uuid') if node is not None else None) or str(uuid4())
+
+
+def _node_description(element: ElementTree.Element) -> str:
+    """Give what a node is described as, out of the tool's data.
+
+    Parameters
+    ----------
+    element : xml.etree.ElementTree.Element
+        The node's element.
+
+    Returns
+    -------
+    str
+        The description, and nothing for a node with none or written by another
+        tool.
+    """
+
+    node = _tool_element(element, 'node')
+    return node.get('description', '') if node is not None else ''
 
 
 def _position(element: ElementTree.Element):

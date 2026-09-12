@@ -68,10 +68,20 @@ class Place(NetItem):
 
     See :class:`~masafi_simtwin.documents.net_item.NetItem` for the parameters
     and for everything a place shares with the rest of a net.
+
+    Attributes
+    ----------
+    tokens : int
+        How many tokens the place holds before the net is run — its initial
+        marking.  Nought until it is given some.
     """
 
     #: What a place counts as when an arc is drawn to it.
     GROUP = 'place'
+
+    def __init__(self, *arguments, **keywords) -> None:
+        super().__init__(*arguments, **keywords)
+        self.tokens = 0
 
     #: What it may be joined to.  A Petri net is bipartite.
     CONNECTS_TO = ('transition',)

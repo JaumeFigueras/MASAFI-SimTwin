@@ -41,6 +41,7 @@ from masafi_simtwin.dialogs import (
 from masafi_simtwin import preferences
 from masafi_simtwin.documents import Canvas
 from masafi_simtwin.menus import clear_menu
+from masafi_simtwin.panes import PropertiesPane
 from masafi_simtwin.preferences import install_id, needs_restart
 from masafi_simtwin.library_tree import LibraryTree
 from masafi_simtwin.project_tree import NodeKind, ProjectTree
@@ -386,6 +387,12 @@ class MainWindow(QMainWindow):
         self._side_bar.pane_toggled.connect(self._on_pane_toggled)
         self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, self._side_bar)
 
+        #: The stripe down the right edge, for the panes about what is selected.
+        self._right_side_bar = SideBar(self)
+        self._right_side_bar.add_top_pane('properties', 'tune', self.tr('Properties'))
+        self._right_side_bar.pane_toggled.connect(self._on_pane_toggled)
+        self.addToolBar(Qt.ToolBarArea.RightToolBarArea, self._right_side_bar)
+
     def _create_tool_panes(self) -> None:
         """Build the panes the tool stripe opens, one dock area per stripe group.
 
@@ -405,12 +412,14 @@ class MainWindow(QMainWindow):
 
         left = Qt.DockWidgetArea.LeftDockWidgetArea
         bottom = Qt.DockWidgetArea.BottomDockWidgetArea
+        right = Qt.DockWidgetArea.RightDockWidgetArea
         groups = [
             [('project', self.tr('Project'), left), ('libraries', self.tr('Libraries'), left)],
             [
                 ('python', self.tr('Python Console'), bottom),
                 ('problems', self.tr('Problems'), bottom),
             ],
+            [('properties', self.tr('Properties'), right)],
         ]
 
         self._project_tree = ProjectTree(
@@ -428,9 +437,11 @@ class MainWindow(QMainWindow):
         )
         self._project_tree.model_activated.connect(self.open_model)
         self._library_tree = LibraryTree(self)
+        self._properties_pane = PropertiesPane(self)
         contents: dict[str, QWidget] = {
             'project': self._project_tree,
             'libraries': self._library_tree,
+            'properties': self._properties_pane,
         }
 
         self._tool_panes: dict[str, ToolPane] = {}
@@ -510,6 +521,35 @@ class MainWindow(QMainWindow):
         """
 
         return self._tool_panes.get(key)
+
+    def pane_action(self, key: str):
+        """Return the stripe button of a pane, on whichever stripe it is.
+
+        Parameters
+        ----------
+        key : str
+            Identifier the stripe button was added with.
+
+        Returns
+        -------
+        PyQt6.QtGui.QAction or None
+            The action, or ``None`` when neither stripe has a button of that key.
+        """
+
+        action = self._side_bar.pane_action(key)
+        return action if action is not None else self._right_side_bar.pane_action(key)
+
+    @property
+    def right_side_bar(self) -> SideBar:
+        """masafi_simtwin.side_bar.SideBar: The right tool stripe."""
+
+        return self._right_side_bar
+
+    @property
+    def properties_pane(self) -> PropertiesPane:
+        """masafi_simtwin.panes.PropertiesPane: What the Properties pane holds."""
+
+        return self._properties_pane
 
     @property
     def document_area(self) -> DocumentArea:
@@ -1071,6 +1111,7 @@ class MainWindow(QMainWindow):
             self._undo_group.addStack(stack)
         editor.change_recorded.connect(self._on_change_recorded)
         editor.modified_changed.connect(self._on_modified_changed)
+        editor.selection_changed.connect(self._on_selection_changed)
 
     # ------------------------------------------------------------------
     # Saving
@@ -1168,6 +1209,7 @@ class MainWindow(QMainWindow):
             What the net has become.
         """
 
+        self._on_selection_changed(model)
         if self._project_path is None:
             return
         try:
@@ -1407,6 +1449,47 @@ class MainWindow(QMainWindow):
             return
         self._report(self.tr('Earlier versions deleted: {0}').format(removed))
 
+    def _on_selection_changed(self, key: str) -> None:
+        """Show what is selected, when it is the sheet being looked at that changed.
+
+        Connected as a bound method, the signal belonging to a document this
+        window outlives.  A document that is not the current one is not asked
+        anything: a tab being closed puts its selection down as it goes, and by
+        then it is no longer current — so this is also what keeps a document on
+        its way out from being touched.
+
+        Parameters
+        ----------
+        key : str
+            The UUID of the model whose sheet changed.
+        """
+
+        current = self._document_area.current_document
+        if current is None or self._document_area.key_of(current) != key:
+            return
+        self._refresh_properties()
+
+    def _refresh_properties(self) -> None:
+        """Put in the Properties pane what the current tab says.
+
+        What is selected on the current sheet, or — with nothing selected — the
+        model the sheet is, or nothing at all when no model is being looked at.
+        The model is read from the project only when it is shown, which is not
+        at every change of a selection.
+        """
+
+        document = self._document_area.current_document
+        key = self._document_area.key_of(document) if document is not None else None
+        selection = documents.selection_of(document) if key else None
+        if selection:
+            self._properties_pane.show_selection(selection)
+            return
+        model = self._model(key)
+        if model is None:
+            self._properties_pane.show_nothing()
+        else:
+            self._properties_pane.show_model(model)
+
     def _on_modified_changed(self, key: str, modified: bool) -> None:
         """Show on its tab, and on the window, that a model has unsaved changes.
 
@@ -1538,6 +1621,7 @@ class MainWindow(QMainWindow):
         self._document_area.set_document_title(
             model.get('uuid', ''), model.get('name', ''), model.get('file', '')
         )
+        self._refresh_properties()
 
     # ------------------------------------------------------------------
     # Dialogs
@@ -1657,7 +1741,7 @@ class MainWindow(QMainWindow):
             Whether the pane should end up open.
         """
 
-        action = self._side_bar.pane_action(key)
+        action = self.pane_action(key)
         if action is not None and action.isChecked() != open_:
             action.setChecked(open_)
 
@@ -1713,7 +1797,7 @@ class MainWindow(QMainWindow):
         if not self.isVisible():
             return
 
-        action = self._side_bar.pane_action(key)
+        action = self.pane_action(key)
         if action is not None and action.isChecked() != visible:
             action.setChecked(visible)
 
@@ -1734,3 +1818,4 @@ class MainWindow(QMainWindow):
         self._undo_group.setActiveStack(
             documents.undo_stack_of(self._document_area.current_document)
         )
+        self._refresh_properties()

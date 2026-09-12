@@ -250,6 +250,152 @@ class MoveNode(Operation):
         return MoveNode(self.node, self.after, self.before)
 
 
+@dataclass(frozen=True)
+class SetNodeName(Operation):
+    """Call a place or a transition something else.
+
+    A name is what a backend knows a node by, so a name another node already has
+    is refused where the operation is applied, as
+    :class:`~simtwin_core.petri_net.NetDocument` refuses two nodes of one name.
+    Whether a name is one a person may give at all is decided before an
+    operation is made, not here.
+
+    Attributes
+    ----------
+    node : str
+        The UUID of the node.
+    before, after : str
+        What it was called and what it is called.
+    """
+
+    NAME = 'set-node-name'
+
+    node: str
+    before: str
+    after: str
+
+    def apply(self, document: NetDocument) -> NetDocument:
+        """Rename the node.
+
+        Parameters
+        ----------
+        document : simtwin_core.petri_net.NetDocument
+            The net.
+
+        Returns
+        -------
+        simtwin_core.petri_net.NetDocument
+            The net with the node renamed.
+        """
+
+        return _changed_node(document, self.node, name=self.after)
+
+    def inverse(self) -> Operation:
+        """Give the name back.
+
+        Returns
+        -------
+        SetNodeName
+            The inverse.
+        """
+
+        return SetNodeName(self.node, self.after, self.before)
+
+
+@dataclass(frozen=True)
+class SetTokens(Operation):
+    """Set how many tokens a place holds before the net is run.
+
+    A transition holds no tokens, so a transition of that UUID is left as it is.
+
+    Attributes
+    ----------
+    node : str
+        The UUID of the place.
+    before, after : int
+        The tokens it held and the tokens it holds.
+    """
+
+    NAME = 'set-tokens'
+
+    node: str
+    before: int
+    after: int
+
+    def apply(self, document: NetDocument) -> NetDocument:
+        """Set the tokens.
+
+        Parameters
+        ----------
+        document : simtwin_core.petri_net.NetDocument
+            The net.
+
+        Returns
+        -------
+        simtwin_core.petri_net.NetDocument
+            The net with the place's tokens set.
+        """
+
+        return _changed_node(document, self.node, tokens=self.after)
+
+    def inverse(self) -> Operation:
+        """Give the tokens back.
+
+        Returns
+        -------
+        SetTokens
+            The inverse.
+        """
+
+        return SetTokens(self.node, self.after, self.before)
+
+
+@dataclass(frozen=True)
+class SetDescription(Operation):
+    """Describe a place or a transition in other words.
+
+    Attributes
+    ----------
+    node : str
+        The UUID of the node.
+    before, after : str
+        The description it had and the one it has.
+    """
+
+    NAME = 'set-node-description'
+
+    node: str
+    before: str
+    after: str
+
+    def apply(self, document: NetDocument) -> NetDocument:
+        """Set the description.
+
+        Parameters
+        ----------
+        document : simtwin_core.petri_net.NetDocument
+            The net.
+
+        Returns
+        -------
+        simtwin_core.petri_net.NetDocument
+            The net with the node described anew.
+        """
+
+        return _changed_node(document, self.node, description=self.after)
+
+    def inverse(self) -> Operation:
+        """Give the description back.
+
+        Returns
+        -------
+        SetDescription
+            The inverse.
+        """
+
+        return SetDescription(self.node, self.after, self.before)
+
+
 # ----------------------------------------------------------------------
 # The arcs
 # ----------------------------------------------------------------------
@@ -826,6 +972,9 @@ OPERATIONS: dict[str, type[Operation]] = {
         AddNode,
         RemoveNode,
         MoveNode,
+        SetNodeName,
+        SetTokens,
+        SetDescription,
         AddArc,
         RemoveArc,
         MoveArcEnd,
@@ -910,6 +1059,8 @@ def _encode_operation(operation: Operation) -> dict:
         data['node'] = _node_data(operation.node)
     elif isinstance(operation, MoveNode):
         data.update(node=operation.node, before=list(operation.before), after=list(operation.after))
+    elif isinstance(operation, (SetNodeName, SetTokens, SetDescription)):
+        data.update(node=operation.node, before=operation.before, after=operation.after)
     elif isinstance(operation, (AddArc, RemoveArc)):
         data['arc'] = _arc_data(operation.arc)
     elif isinstance(operation, MoveArcEnd):
@@ -972,6 +1123,8 @@ def _decode_operation(data: dict) -> Operation:
             return operation(_read_node(data['node']))
         if operation is MoveNode:
             return MoveNode(data['node'], tuple(data['before']), tuple(data['after']))
+        if operation in (SetNodeName, SetTokens, SetDescription):
+            return operation(data['node'], data['before'], data['after'])
         if operation in (AddArc, RemoveArc):
             return operation(_read_arc(data['arc']))
         if operation is MoveArcEnd:
@@ -1014,12 +1167,16 @@ def _node_data(node: Node) -> dict:
         Which kind it is, and what it is.
     """
 
-    return {
+    data = {
         'kind': 'place' if isinstance(node, PlaceData) else 'transition',
         'uuid': node.uuid,
         'name': node.name,
         'position': list(node.position),
     }
+    if isinstance(node, PlaceData):
+        data['tokens'] = node.tokens
+    data['description'] = node.description
+    return data
 
 
 def _read_node(data: dict) -> Node:
@@ -1028,7 +1185,8 @@ def _read_node(data: dict) -> Node:
     Parameters
     ----------
     data : dict
-        What :func:`_node_data` wrote.
+        What :func:`_node_data` wrote.  A line written before nodes had tokens
+        and descriptions has neither, and reads as a node with none.
 
     Returns
     -------
@@ -1036,8 +1194,16 @@ def _read_node(data: dict) -> Node:
         The node.
     """
 
-    made = PlaceData if data['kind'] == 'place' else TransitionData
-    return made(data['uuid'], data['name'], tuple(data['position']))
+    description = data.get('description', '')
+    if data['kind'] == 'place':
+        return PlaceData(
+            data['uuid'],
+            data['name'],
+            tuple(data['position']),
+            data.get('tokens', 0),
+            description,
+        )
+    return TransitionData(data['uuid'], data['name'], tuple(data['position']), description)
 
 
 def _arc_data(arc: ArcData) -> dict:
@@ -1190,6 +1356,40 @@ def _moved(nodes: tuple, uuid: str, position: Point) -> tuple:
 
     return tuple(
         replace(node, position=position) if node.uuid == uuid else node for node in nodes
+    )
+
+
+def _changed_node(document: NetDocument, uuid: str, **fields) -> NetDocument:
+    """Give a description with one node changed.
+
+    Only a node that has every field named is changed, so tokens set on a
+    transition — which has none — leave it as it is.
+
+    Parameters
+    ----------
+    document : simtwin_core.petri_net.NetDocument
+        The net.
+    uuid : str
+        Which node.
+    **fields
+        What to change about it.
+
+    Returns
+    -------
+    simtwin_core.petri_net.NetDocument
+        The net, with the node in the place it was in.
+    """
+
+    def changed(nodes: tuple) -> tuple:
+        return tuple(
+            replace(node, **fields)
+            if node.uuid == uuid and all(hasattr(node, name) for name in fields)
+            else node
+            for node in nodes
+        )
+
+    return replace(
+        document, places=changed(document.places), transitions=changed(document.transitions)
     )
 
 
