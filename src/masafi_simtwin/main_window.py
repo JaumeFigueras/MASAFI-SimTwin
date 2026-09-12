@@ -438,6 +438,9 @@ class MainWindow(QMainWindow):
         self._project_tree.model_activated.connect(self.open_model)
         self._library_tree = LibraryTree(self)
         self._properties_pane = PropertiesPane(self)
+        self._properties_pane.name_asked.connect(self._on_name_asked)
+        self._properties_pane.tokens_asked.connect(self._on_tokens_asked)
+        self._properties_pane.description_asked.connect(self._on_description_asked)
         contents: dict[str, QWidget] = {
             'project': self._project_tree,
             'libraries': self._library_tree,
@@ -1481,6 +1484,9 @@ class MainWindow(QMainWindow):
         document = self._document_area.current_document
         key = self._document_area.key_of(document) if document is not None else None
         selection = documents.selection_of(document) if key else None
+        if selection and not (selection.transitions or selection.arcs):
+            self._properties_pane.show_places(selection.places, selection.names)
+            return
         if selection:
             self._properties_pane.show_selection(selection)
             return
@@ -1489,6 +1495,51 @@ class MainWindow(QMainWindow):
             self._properties_pane.show_nothing()
         else:
             self._properties_pane.show_model(model)
+
+    def _on_name_asked(self, uuid: str, name: str) -> None:
+        """Rename a node of the current document, as the Properties pane asks.
+
+        A rename that is refused changes nothing that would refresh the pane, so
+        the pane is refreshed here instead: it shows what the sheet holds.
+
+        Parameters
+        ----------
+        uuid : str
+            The node's UUID.
+        name : str
+            What it is to be called.
+        """
+
+        if not documents.rename(self._document_area.current_document, uuid, name):
+            self._refresh_properties()
+
+    def _on_tokens_asked(self, uuids, tokens: int) -> None:
+        """Set the tokens of places of the current document, as the pane asks.
+
+        Parameters
+        ----------
+        uuids : tuple of str
+            The places.
+        tokens : int
+            How many each is to hold.
+        """
+
+        if not documents.set_tokens(self._document_area.current_document, uuids, tokens):
+            self._refresh_properties()
+
+    def _on_description_asked(self, uuids, description: str) -> None:
+        """Describe nodes of the current document, as the Properties pane asks.
+
+        Parameters
+        ----------
+        uuids : tuple of str
+            The nodes.
+        description : str
+            What they are to be described as.
+        """
+
+        if not documents.describe(self._document_area.current_document, uuids, description):
+            self._refresh_properties()
 
     def _on_modified_changed(self, key: str, modified: bool) -> None:
         """Show on its tab, and on the window, that a model has unsaved changes.

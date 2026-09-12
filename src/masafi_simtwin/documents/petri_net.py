@@ -93,6 +93,7 @@ from simtwin_core.petri_net import (
     NetDocument,
     PlaceData,
     TransitionData,
+    name_problem,
     reading_order,
 )
 
@@ -207,11 +208,15 @@ class Selection:
         The transitions selected, by name.
     arcs : tuple of simtwin_core.petri_net.ArcData
         The arcs selected, by the names of their ends and their kind.
+    names : tuple of str
+        The names of every place and transition of the net, selected or not —
+        what a new name is checked against, without the scene being asked.
     """
 
     places: tuple = ()
     transitions: tuple = ()
     arcs: tuple = ()
+    names: tuple = ()
 
     def __bool__(self) -> bool:
         """Say whether anything with properties is selected."""
@@ -780,6 +785,7 @@ class PetriNetEditor(Canvas):
         arcs = [item for item in selected if isinstance(item, Arc)]
         by_name = lambda item: reading_order(item.name)  # noqa: E731
         return Selection(
+            names=tuple(self.names),
             places=tuple(node_data(item) for item in sorted(places, key=by_name)),
             transitions=tuple(node_data(item) for item in sorted(transitions, key=by_name)),
             arcs=tuple(
@@ -1427,6 +1433,87 @@ class PetriNetEditor(Canvas):
         for arc in self.arcs:
             self.view.remove(arc)
         self.clear_guides()
+
+    def rename_node(self, uuid: str, name: str) -> bool:
+        """Call a place or a transition something else, as one recorded change.
+
+        Parameters
+        ----------
+        uuid : str
+            The node's UUID.
+        name : str
+            What it is to be called.
+
+        Returns
+        -------
+        bool
+            Whether it was renamed.  It is not when the name is the one it has,
+            or breaks :func:`~simtwin_core.petri_net.name_problem` against the
+            other nodes' names — the Properties pane checks first, and this is
+            the rule held where the change is made.
+        """
+
+        node = self.node(uuid)
+        if name == node.name:
+            return False
+        taken = [other for other in self.names if other != node.name]
+        if name_problem(name, taken) is not None:
+            return False
+        self.push(Change('rename-node', (SetNodeName(uuid, node.name, name),)))
+        return True
+
+    def set_tokens(self, uuids, tokens: int) -> bool:
+        """Give some places the same initial tokens, as one recorded change.
+
+        Parameters
+        ----------
+        uuids : collections.abc.Iterable of str
+            The places.  A transition among them is passed over, holding none.
+        tokens : int
+            How many tokens each is to hold, nought or more.
+
+        Returns
+        -------
+        bool
+            Whether any place changed.
+        """
+
+        if tokens < 0:
+            return False
+        places = [node for node in (self.node(uuid) for uuid in uuids) if isinstance(node, Place)]
+        operations = tuple(
+            SetTokens(place.uuid, place.tokens, tokens) for place in places if place.tokens != tokens
+        )
+        self.push(Change('set-tokens', operations))
+        return bool(operations)
+
+    def describe(self, uuids, description: str) -> bool:
+        """Give some places or transitions the same description, as one change.
+
+        Parameters
+        ----------
+        uuids : collections.abc.Iterable of str
+            The nodes.
+        description : str
+            What they are to be described as, on one line.
+
+        Returns
+        -------
+        bool
+            Whether any node changed.  A description of more than one line is
+            refused, as the document refuses it.
+        """
+
+        if '\n' in description or '\r' in description:
+            return False
+        nodes = [self.node(uuid) for uuid in uuids]
+        operations = tuple(
+            SetDescription(node.uuid, node.description, description)
+            for node in nodes
+            if node.description != description
+        )
+        self.push(Change('set-description', operations))
+        return bool(operations)
 
     def edit_arc(self, arc: Arc) -> bool:
         """Ask what an arc carries, and set it.

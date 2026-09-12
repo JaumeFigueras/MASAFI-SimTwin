@@ -1221,3 +1221,103 @@ def test_a_change_of_selection_is_said_with_the_model(editor, qtbot):
         place.setSelected(True)
 
     assert blocker.args == [MODEL['uuid']]
+
+
+# ----------------------------------------------------------------------
+# What the Properties pane asks of the sheet
+# ----------------------------------------------------------------------
+
+
+def test_a_node_is_renamed_as_one_change_that_undoes(editor):
+    """Named for *Undo*, and put back whole."""
+
+    place, _free, _transition, _arc = little_net(editor)
+    count = editor.undo_stack.count()
+
+    assert editor.rename_node(place.uuid, 'Buffer')
+
+    assert place.name == 'Buffer'
+    assert editor.undo_stack.count() == count + 1
+    assert editor.undo_stack.command(count).text() == 'Rename'
+    editor.undo_stack.undo()
+    assert place.name == 'P1'
+
+
+@pytest.mark.parametrize('name', ['t1', 'class', 'Buffer 1', ''])
+def test_a_name_the_rule_refuses_is_not_given(editor, name):
+    """Held where the change is made, as well as in the pane."""
+
+    place, _free, _transition, _arc = little_net(editor)
+    count = editor.undo_stack.count()
+
+    assert not editor.rename_node(place.uuid, name)
+
+    assert place.name == 'P1'
+    assert editor.undo_stack.count() == count
+
+
+def test_renaming_to_the_same_name_is_not_a_change(editor):
+    """Nothing to undo."""
+
+    place, _free, _transition, _arc = little_net(editor)
+    count = editor.undo_stack.count()
+
+    assert not editor.rename_node(place.uuid, place.name)
+    assert editor.undo_stack.count() == count
+
+
+def test_tokens_are_set_on_every_place_as_one_change(editor):
+    """A transition among them holds none and is passed over."""
+
+    place, free, transition, _arc = little_net(editor)
+    count = editor.undo_stack.count()
+
+    assert editor.set_tokens((place.uuid, free.uuid, transition.uuid), 4)
+
+    assert (place.tokens, free.tokens) == (4, 4)
+    assert editor.undo_stack.count() == count + 1
+    assert editor.undo_stack.command(count).text() == 'Change Tokens'
+    editor.undo_stack.undo()
+    assert (place.tokens, free.tokens) == (0, 0)
+
+
+def test_tokens_already_held_or_below_nought_are_not_a_change(editor):
+    """Nothing to undo."""
+
+    place, _free, _transition, _arc = little_net(editor)
+    count = editor.undo_stack.count()
+
+    assert not editor.set_tokens((place.uuid,), 0)
+    assert not editor.set_tokens((place.uuid,), -1)
+    assert editor.undo_stack.count() == count
+
+
+def test_a_description_is_set_on_every_node_as_one_change(editor):
+    """Places and transitions alike."""
+
+    place, _free, transition, _arc = little_net(editor)
+
+    assert editor.describe((place.uuid, transition.uuid), 'Fill')
+
+    assert (place.description, transition.description) == ('Fill', 'Fill')
+    assert editor.undo_stack.command(editor.undo_stack.count() - 1).text() == 'Change Description'
+    editor.undo_stack.undo()
+    assert (place.description, transition.description) == ('', '')
+
+
+def test_a_description_of_more_than_one_line_is_not_given(editor):
+    """As the document refuses it."""
+
+    place, _free, _transition, _arc = little_net(editor)
+
+    assert not editor.describe((place.uuid,), 'two\nlines')
+    assert place.description == ''
+
+
+def test_the_selection_carries_the_names_of_the_whole_net(editor):
+    """What a new name is checked against, without the scene being asked."""
+
+    place, free, transition, _arc = little_net(editor)
+    place.setSelected(True)
+
+    assert sorted(editor.selection().names) == sorted([place.name, free.name, transition.name])

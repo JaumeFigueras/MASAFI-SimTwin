@@ -137,7 +137,7 @@
         <translation>No document open</translation>
     </message>
     <message>
-        <location filename="../document_area.py" line="223" />
+        <location filename="../document_area.py" line="226" />
         <source>Close</source>
         <translation>Close</translation>
     </message>
@@ -326,7 +326,7 @@
         <translation>Reset the simulation to its initial state</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="487" />
+        <location filename="../main_window.py" line="490" />
         <location filename="../main_window.py" line="209" />
         <source>Idle</source>
         <translation>Idle</translation>
@@ -477,190 +477,190 @@
         <translation>Properties</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1817" />
-        <location filename="../main_window.py" line="486" />
+        <location filename="../main_window.py" line="1868" />
+        <location filename="../main_window.py" line="489" />
         <source>No document</source>
         <translation>No document</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="581" />
+        <location filename="../main_window.py" line="584" />
         <source>The project could not be created</source>
         <translation>The project could not be created</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="592" />
+        <location filename="../main_window.py" line="595" />
         <source>Open Project</source>
         <translation>Open Project</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="594" />
+        <location filename="../main_window.py" line="597" />
         <source>MASAFI-SimTwin projects (*{0})</source>
         <translation>MASAFI-SimTwin projects (*{0})</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="639" />
-        <location filename="../main_window.py" line="619" />
+        <location filename="../main_window.py" line="642" />
+        <location filename="../main_window.py" line="622" />
         <source>The project could not be opened</source>
         <translation>The project could not be opened</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="632" />
+        <location filename="../main_window.py" line="635" />
         <source>The project is already open</source>
         <translation>The project is already open</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="633" />
+        <location filename="../main_window.py" line="636" />
         <source>{0} is open in another window, as {1}.</source>
         <translation>{0} is open in another window, as {1}.</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="634" />
+        <location filename="../main_window.py" line="637" />
         <source>another user</source>
         <translation>another user</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="660" />
+        <location filename="../main_window.py" line="663" />
         <source>Opened {0}</source>
         <translation>Opened {0}</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="704" />
+        <location filename="../main_window.py" line="707" />
         <source>No Project</source>
         <translation>No Project</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="711" />
+        <location filename="../main_window.py" line="714" />
         <source>Project closed</source>
         <translation>Project closed</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="734" />
+        <location filename="../main_window.py" line="737" />
         <source>The list of recent projects was cleared</source>
         <translation>The list of recent projects was cleared</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="810" />
+        <location filename="../main_window.py" line="813" />
         <source>The project history could not be written</source>
         <translation>The project history could not be written</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="880" />
+        <location filename="../main_window.py" line="883" />
         <source>No Recent Projects</source>
         <translation>No Recent Projects</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="916" />
+        <location filename="../main_window.py" line="919" />
         <source>The model could not be added</source>
         <translation>The model could not be added</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="945" />
+        <location filename="../main_window.py" line="948" />
         <source>The model could not be changed</source>
         <translation>The model could not be changed</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="962" />
+        <location filename="../main_window.py" line="965" />
         <source>Delete the model?</source>
         <translation>Delete the model?</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="963" />
+        <location filename="../main_window.py" line="966" />
         <source>{0} and everything in it will be removed from the project. This cannot be undone: the model will be gone forever.</source>
         <translation>{0} and everything in it will be removed from the project. This cannot be undone: the model will be gone forever.</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="976" />
+        <location filename="../main_window.py" line="979" />
         <source>The model could not be removed</source>
         <translation>The model could not be removed</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1090" />
+        <location filename="../main_window.py" line="1093" />
         <source>{0} cannot be opened yet: that kind of model is not built.</source>
         <translation>{0} cannot be opened yet: that kind of model is not built.</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1100" />
+        <location filename="../main_window.py" line="1103" />
         <source>The model could not be opened</source>
         <translation>The model could not be opened</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1132" />
+        <location filename="../main_window.py" line="1135" />
         <source>The project could not be saved</source>
         <translation>The project could not be saved</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1136" />
+        <location filename="../main_window.py" line="1139" />
         <source>The project was saved, but its earlier version could not be kept</source>
         <translation>The project was saved, but its earlier version could not be kept</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1138" />
+        <location filename="../main_window.py" line="1141" />
         <source>The project was saved</source>
         <translation>The project was saved</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1229" />
+        <location filename="../main_window.py" line="1232" />
         <source>The journal could not be written, so work will not be recovered if the application stops</source>
         <translation>The journal could not be written, so work will not be recovered if the application stops</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1318" />
+        <location filename="../main_window.py" line="1321" />
         <source>The project was saved automatically, but its earlier version could not be kept</source>
         <translation>The project was saved automatically, but its earlier version could not be kept</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1324" />
+        <location filename="../main_window.py" line="1327" />
         <source>The project was saved automatically</source>
         <translation>The project was saved automatically</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1327" />
+        <location filename="../main_window.py" line="1330" />
         <source>Autosave: {0}</source>
         <translation>Autosave: {0}</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1388" />
-        <location filename="../main_window.py" line="1348" />
+        <location filename="../main_window.py" line="1391" />
+        <location filename="../main_window.py" line="1351" />
         <source>Some work could not be put back</source>
         <translation>Some work could not be put back</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1366" />
+        <location filename="../main_window.py" line="1369" />
         <source>{0} could not be put back: {1}</source>
         <translation>{0} could not be put back: {1}</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1382" />
+        <location filename="../main_window.py" line="1385" />
         <source>Work that was not saved has been put back: {0}</source>
         <translation>Work that was not saved has been put back: {0}</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1435" />
+        <location filename="../main_window.py" line="1438" />
         <source>Delete old versions?</source>
         <translation>Delete old versions?</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1436" />
+        <location filename="../main_window.py" line="1439" />
         <source>{0} keeps {1} earlier versions of itself. Delete the oldest of them and keep the last {2}?</source>
         <translation>{0} keeps {1} earlier versions of itself. Delete the oldest of them and keep the last {2}?</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1448" />
+        <location filename="../main_window.py" line="1451" />
         <source>The old versions could not be deleted</source>
         <translation>The old versions could not be deleted</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1450" />
+        <location filename="../main_window.py" line="1453" />
         <source>Earlier versions deleted: {0}</source>
         <translation>Earlier versions deleted: {0}</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1554" />
+        <location filename="../main_window.py" line="1605" />
         <source>{0} could not be saved: {1}</source>
         <translation>{0} could not be saved: {1}</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1582" />
+        <location filename="../main_window.py" line="1633" />
         <source>Close without saving?</source>
         <translation>Close without saving?</translation>
     </message>
@@ -881,87 +881,87 @@
 </context><context>
     <name>PetriNetEditor</name>
     <message>
-        <location filename="../documents/petri_net.py" line="397" />
+        <location filename="../documents/petri_net.py" line="402" />
         <source>Drag an element out of the Libraries pane</source>
         <translation>Drag an element out of the Libraries pane</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1106" />
+        <location filename="../documents/petri_net.py" line="1112" />
         <source>Add Element</source>
         <translation>Add Element</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1107" />
+        <location filename="../documents/petri_net.py" line="1113" />
         <source>Draw Arc</source>
         <translation>Draw Arc</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1108" />
+        <location filename="../documents/petri_net.py" line="1114" />
         <source>Change Weight</source>
         <translation>Change Weight</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1109" />
+        <location filename="../documents/petri_net.py" line="1115" />
         <source>Change Arc Shape</source>
         <translation>Change Arc Shape</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1110" />
+        <location filename="../documents/petri_net.py" line="1116" />
         <source>Change Arc Type</source>
         <translation>Change Arc Type</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1111" />
+        <location filename="../documents/petri_net.py" line="1117" />
         <source>Add Point</source>
         <translation>Add Point</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1112" />
+        <location filename="../documents/petri_net.py" line="1118" />
         <source>Delete Point</source>
         <translation>Delete Point</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1113" />
+        <location filename="../documents/petri_net.py" line="1119" />
         <source>Move</source>
         <translation>Move</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1114" />
+        <location filename="../documents/petri_net.py" line="1120" />
         <source>Move Guide</source>
         <translation>Move Guide</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1115" />
+        <location filename="../documents/petri_net.py" line="1121" />
         <source>Add Guide</source>
         <translation>Add Guide</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1116" />
+        <location filename="../documents/petri_net.py" line="1122" />
         <source>Shape Arc</source>
         <translation>Shape Arc</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1117" />
+        <location filename="../documents/petri_net.py" line="1123" />
         <source>Move Arc End</source>
         <translation>Move Arc End</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1118" />
+        <location filename="../documents/petri_net.py" line="1124" />
         <source>Delete</source>
         <translation>Delete</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1119" />
+        <location filename="../documents/petri_net.py" line="1125" />
         <source>Rename</source>
         <translation>Rename</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1120" />
+        <location filename="../documents/petri_net.py" line="1126" />
         <source>Change Tokens</source>
         <translation>Change Tokens</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1121" />
+        <location filename="../documents/petri_net.py" line="1127" />
         <source>Change Description</source>
         <translation>Change Description</translation>
     </message>
@@ -985,24 +985,74 @@
 </context><context>
     <name>PropertiesPane</name>
     <message>
-        <location filename="../panes/properties.py" line="124" />
+        <location filename="../panes/properties.py" line="181" />
+        <source>Place</source>
+        <translation>Place</translation>
+    </message>
+    <message>
+        <location filename="../panes/properties.py" line="187" />
+        <source>Places: {0}</source>
+        <translation>Places: {0}</translation>
+    </message>
+    <message>
+        <location filename="../panes/properties.py" line="190" />
+        <source>Several places</source>
+        <translation>Several places</translation>
+    </message>
+    <message>
+        <location filename="../panes/properties.py" line="209" />
+        <source>Several descriptions</source>
+        <translation>Several descriptions</translation>
+    </message>
+    <message>
+        <location filename="../panes/properties.py" line="231" />
         <source>Petri Net</source>
         <translation>Petri Net</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="125" />
+        <location filename="../panes/properties.py" line="232" />
         <source>Process Flow</source>
         <translation>Process Flow</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="126" />
+        <location filename="../panes/properties.py" line="233" />
         <source>2D Process</source>
         <translation>2D Process</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="127" />
+        <location filename="../panes/properties.py" line="234" />
         <source>3D Process</source>
         <translation>3D Process</translation>
+    </message>
+    <message>
+        <location filename="../panes/properties.py" line="253" />
+        <source>A name cannot be empty.</source>
+        <translation>A name cannot be empty.</translation>
+    </message>
+    <message>
+        <location filename="../panes/properties.py" line="254" />
+        <source>A name can only use letters without accents, digits and underscores.</source>
+        <translation>A name can only use letters without accents, digits and underscores.</translation>
+    </message>
+    <message>
+        <location filename="../panes/properties.py" line="257" />
+        <source>A name cannot start with a digit.</source>
+        <translation>A name cannot start with a digit.</translation>
+    </message>
+    <message>
+        <location filename="../panes/properties.py" line="258" />
+        <source>A name can only use letters, digits and underscores, with no spaces.</source>
+        <translation>A name can only use letters, digits and underscores, with no spaces.</translation>
+    </message>
+    <message>
+        <location filename="../panes/properties.py" line="261" />
+        <source>A Python keyword cannot be a name.</source>
+        <translation>A Python keyword cannot be a name.</translation>
+    </message>
+    <message>
+        <location filename="../panes/properties.py" line="262" />
+        <source>Another place or transition already has this name, ignoring case.</source>
+        <translation>Another place or transition already has this name, ignoring case.</translation>
     </message>
     <message>
         <location filename="../panes/forms/properties.ui" line="0" />
@@ -1017,6 +1067,7 @@
         <translation>Model</translation>
     </message>
     <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
         <location filename="../panes/forms/properties.ui" line="0" />
         <source>Name:</source>
         <translation>Name:</translation>
@@ -1066,6 +1117,17 @@
         <source>Arcs:</source>
         <extracomment>how many arcs are selected</extracomment>
         <translation>Arcs:</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Initial tokens:</source>
+        <extracomment>how many tokens a place holds before the net is run</extracomment>
+        <translation>Initial tokens:</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Description:</source>
+        <translation>Description:</translation>
     </message>
 </context><context>
     <name>RestartMessages</name>

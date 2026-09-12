@@ -75,6 +75,7 @@ __all__ = [
     'Transition',
     'Selection',
     'busy',
+    'describe',
     'editor_for',
     'file_of',
     'is_modified',
@@ -83,8 +84,10 @@ __all__ = [
     'load_file',
     'new_model_file',
     'recorded_change',
+    'rename',
     'replay',
     'selection_of',
+    'set_tokens',
     'undo_stack_of',
 ]
 
@@ -218,6 +221,69 @@ def selection_of(document: QWidget) -> Selection | None:
     if isinstance(document, PetriNetEditor):
         return document.selection()
     return None
+
+
+def rename(document: QWidget, uuid: str, name: str) -> bool:
+    """Rename a node of a document, as one recorded change.
+
+    Parameters
+    ----------
+    document : PyQt6.QtWidgets.QWidget
+        The document.
+    uuid : str
+        The node's UUID.
+    name : str
+        What it is to be called.
+
+    Returns
+    -------
+    bool
+        Whether it was renamed; never, for a document that has no nodes.
+    """
+
+    return isinstance(document, PetriNetEditor) and document.rename_node(uuid, name)
+
+
+def set_tokens(document: QWidget, uuids, tokens: int) -> bool:
+    """Give some places of a document the same initial tokens, as one change.
+
+    Parameters
+    ----------
+    document : PyQt6.QtWidgets.QWidget
+        The document.
+    uuids : collections.abc.Iterable of str
+        The places.
+    tokens : int
+        How many tokens each is to hold.
+
+    Returns
+    -------
+    bool
+        Whether any place changed.
+    """
+
+    return isinstance(document, PetriNetEditor) and document.set_tokens(uuids, tokens)
+
+
+def describe(document: QWidget, uuids, description: str) -> bool:
+    """Give some nodes of a document the same description, as one change.
+
+    Parameters
+    ----------
+    document : PyQt6.QtWidgets.QWidget
+        The document.
+    uuids : collections.abc.Iterable of str
+        The nodes.
+    description : str
+        What they are to be described as.
+
+    Returns
+    -------
+    bool
+        Whether any node changed.
+    """
+
+    return isinstance(document, PetriNetEditor) and document.describe(uuids, description)
 
 
 def busy(document: QWidget) -> bool:
