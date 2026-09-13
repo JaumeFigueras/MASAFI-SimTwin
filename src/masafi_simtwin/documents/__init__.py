@@ -20,6 +20,7 @@ from collections.abc import Callable
 
 from PyQt6.QtWidgets import QWidget
 
+from masafi_simtwin.documents import clipboard
 from masafi_simtwin.documents.arc import Arc
 from masafi_simtwin.documents.canvas import Canvas
 from masafi_simtwin.documents.petri_net import PetriNetEditor, Selection
@@ -306,6 +307,89 @@ def set_weight(document: QWidget, uuids, weight: int) -> bool:
     """
 
     return isinstance(document, PetriNetEditor) and document.set_weight(uuids, weight)
+
+
+def can_copy(document: QWidget) -> bool:
+    """Say whether there is anything in a document to copy or to cut.
+
+    Parameters
+    ----------
+    document : PyQt6.QtWidgets.QWidget
+        The document.
+
+    Returns
+    -------
+    bool
+        Whether a node is selected on it.  An arc on its own is not something
+        that can be pasted anywhere, and a guide is not copied at all.
+    """
+
+    return isinstance(document, PetriNetEditor) and document.copy_selection() is not None
+
+
+def copy(document: QWidget) -> bool:
+    """Put what is selected in a document on the clipboard.
+
+    Parameters
+    ----------
+    document : PyQt6.QtWidgets.QWidget
+        The document.
+
+    Returns
+    -------
+    bool
+        Whether anything was copied.
+    """
+
+    if not isinstance(document, PetriNetEditor):
+        return False
+    fragment = document.copy_selection()
+    if fragment is None:
+        return False
+    clipboard.put(fragment)
+    return True
+
+
+def cut(document: QWidget) -> bool:
+    """Put what is selected in a document on the clipboard and take it off the
+    sheet, as one recorded change.
+
+    Parameters
+    ----------
+    document : PyQt6.QtWidgets.QWidget
+        The document.
+
+    Returns
+    -------
+    bool
+        Whether anything was cut.  Nothing is taken off the sheet when nothing
+        could be copied.
+    """
+
+    if not isinstance(document, PetriNetEditor):
+        return False
+    fragment = document.cut_selection()
+    if fragment is None:
+        return False
+    clipboard.put(fragment)
+    return True
+
+
+def paste(document: QWidget) -> bool:
+    """Draw what the clipboard holds on a document, as one recorded change.
+
+    Parameters
+    ----------
+    document : PyQt6.QtWidgets.QWidget
+        The document.
+
+    Returns
+    -------
+    bool
+        Whether anything was pasted.
+    """
+
+    return isinstance(document, PetriNetEditor) and document.paste(clipboard.taken())
 
 
 def busy(document: QWidget) -> bool:

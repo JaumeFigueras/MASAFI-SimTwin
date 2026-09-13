@@ -39,7 +39,7 @@ from masafi_simtwin.dialogs import (
     ask_to_restart,
 )
 from masafi_simtwin import preferences
-from masafi_simtwin.documents import Canvas
+from masafi_simtwin.documents import Canvas, clipboard
 from masafi_simtwin.menus import clear_menu
 from masafi_simtwin.panes import PropertiesPane
 from masafi_simtwin.preferences import install_id, needs_restart
@@ -148,6 +148,30 @@ class MainWindow(QMainWindow):
         self.redo_action = self._undo_group.createRedoAction(self, self.tr('Redo'))
         self.redo_action.setShortcut(QKeySequence('Ctrl+Shift+Z'))
         self.addAction(self.redo_action)
+
+        self.cut_action = QAction(self.tr('Cut'), self)
+        self.cut_action.setShortcut(QKeySequence.StandardKey.Cut)
+        self.cut_action.setEnabled(False)
+        self.cut_action.triggered.connect(self.cut)
+        #: Cut, Copy and Paste are held by the window as well as by *Edit*, for
+        #: the reason *Save* is: the menu bar is folded away behind the hamburger
+        #: button most of the time, and always while a net is being drawn.  A
+        #: text field that has the focus keeps its own copy and paste — Qt asks
+        #: the focused widget before it fires a window's shortcut, and a line
+        #: edit says that those keys are its.
+        self.addAction(self.cut_action)
+
+        self.copy_action = QAction(self.tr('Copy'), self)
+        self.copy_action.setShortcut(QKeySequence.StandardKey.Copy)
+        self.copy_action.setEnabled(False)
+        self.copy_action.triggered.connect(self.copy)
+        self.addAction(self.copy_action)
+
+        self.paste_action = QAction(self.tr('Paste'), self)
+        self.paste_action.setShortcut(QKeySequence.StandardKey.Paste)
+        self.paste_action.setEnabled(False)
+        self.paste_action.triggered.connect(self.paste)
+        self.addAction(self.paste_action)
 
         self.save_action = QAction(self.tr('Save'), self)
         self.save_action.setShortcut(QKeySequence.StandardKey.Save)
@@ -262,14 +286,9 @@ class MainWindow(QMainWindow):
         edit_menu.addAction(self.undo_action)
         edit_menu.addAction(self.redo_action)
         edit_menu.addSeparator()
-        self._add_placeholder_actions(
-            edit_menu,
-            [
-                self.tr('Cut'),
-                self.tr('Copy'),
-                self.tr('Paste'),
-            ],
-        )
+        edit_menu.addAction(self.cut_action)
+        edit_menu.addAction(self.copy_action)
+        edit_menu.addAction(self.paste_action)
 
         view_menu = menu_bar.addMenu(self.tr('&View'))
         self._add_placeholder_actions(
@@ -475,6 +494,13 @@ class MainWindow(QMainWindow):
         self._document_area.current_document_changed.connect(self._on_document_changed)
         self._document_area.document_closed.connect(self._on_document_closed)
         self.setCentralWidget(self._document_area)
+
+        #: The clipboard is filled by other applications as well as by this one,
+        #: so *Paste* is told rather than asked at the moments this window
+        #: happens to look.  Connected as a bound method, never as a lambda: the
+        #: clipboard outlives the window, and a connection made with a lambda
+        #: belongs to the sender alone — see *Signals and teardown*.
+        QApplication.clipboard().dataChanged.connect(self._show_edit_actions)
 
     def _create_status_bar(self) -> None:
         """Build the status bar, with the transient message on the left.
@@ -1454,6 +1480,37 @@ class MainWindow(QMainWindow):
             return
         self._report(self.tr('Earlier versions deleted: {0}').format(removed))
 
+    def cut(self) -> None:
+        """Put what is selected on the clipboard and take it off the sheet."""
+
+        if documents.cut(self._document_area.current_document):
+            self._report(self.tr('Cut to the clipboard'))
+
+    def copy(self) -> None:
+        """Put what is selected on the clipboard."""
+
+        if documents.copy(self._document_area.current_document):
+            self._report(self.tr('Copied to the clipboard'))
+
+    def paste(self) -> None:
+        """Draw what the clipboard holds on the current sheet."""
+
+        if documents.paste(self._document_area.current_document):
+            self._report(self.tr('Pasted from the clipboard'))
+
+    def _show_edit_actions(self) -> None:
+        """Offer *Cut*, *Copy* and *Paste* only where they would do something.
+
+        *Cut* and *Copy* want a node selected on the sheet being looked at;
+        *Paste* wants a piece of net on the clipboard and a sheet to put it on.
+        """
+
+        document = self._document_area.current_document
+        copyable = documents.can_copy(document)
+        self.cut_action.setEnabled(copyable)
+        self.copy_action.setEnabled(copyable)
+        self.paste_action.setEnabled(document is not None and clipboard.holds_a_net())
+
     def _on_selection_changed(self, key: str) -> None:
         """Show what is selected, when it is the sheet being looked at that changed.
 
@@ -1486,6 +1543,7 @@ class MainWindow(QMainWindow):
         document = self._document_area.current_document
         key = self._document_area.key_of(document) if document is not None else None
         selection = documents.selection_of(document) if key else None
+        self._show_edit_actions()
         if selection and selection.arcs and not (selection.places or selection.transitions):
             self._properties_pane.show_arcs(selection.arcs, selection.node_names)
             return

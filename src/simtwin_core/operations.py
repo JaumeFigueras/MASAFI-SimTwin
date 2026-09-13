@@ -30,6 +30,14 @@ net is not what it was.
 An arc's ``route`` is not carried: it is derived from the arc's points, the
 editor is the only thing that can work it out, and it takes no part in comparing
 two descriptions.
+
+**A whole net is written as the same plain data** — :func:`encode_net` and
+:func:`decode_net` — because it is the same nodes and the same arcs written by
+the same helpers, and because what a piece of a net *is* has one answer here
+rather than one for the journal and another for whatever else carries one.  The
+clipboard is the other thing that carries one: what is copied off a sheet is a
+:class:`~simtwin_core.petri_net.NetDocument` of a few nodes and the arcs between
+them, and it is read back by whichever sheet it is pasted onto.
 """
 
 from __future__ import annotations
@@ -1085,6 +1093,68 @@ def decode(data: dict) -> Change:
         str(data.get('change', '')),
         tuple(_decode_operation(operation) for operation in data['operations']),
     )
+
+
+def encode_net(document: NetDocument) -> dict:
+    """Write a net, or a piece of one, as the plain data JSON holds.
+
+    Parameters
+    ----------
+    document : simtwin_core.petri_net.NetDocument
+        The net.
+
+    Returns
+    -------
+    dict
+        Its model, its nodes, its arcs and its guides.  An arc's ``route`` is
+        left out, as it is everywhere else here: whatever draws the net works
+        it out from the arc's points.
+    """
+
+    return {
+        'model': document.model_uuid,
+        'places': [_node_data(place) for place in document.places],
+        'transitions': [_node_data(transition) for transition in document.transitions],
+        'arcs': [_arc_data(arc) for arc in document.arcs],
+        'guides': [_guide_data(guide) for guide in document.guides],
+    }
+
+
+def decode_net(data: dict) -> NetDocument:
+    """Read a net back from what :func:`encode_net` wrote.
+
+    Parameters
+    ----------
+    data : dict
+        The plain data.
+
+    Returns
+    -------
+    simtwin_core.petri_net.NetDocument
+        The net.
+
+    Raises
+    ------
+    ValueError
+        When it is not a net written this way.  A
+        :class:`~simtwin_core.petri_net.InvalidNet` is one of these, a document
+        being checked as it is made: something that is not a net that could be
+        drawn is refused here rather than reaching a sheet.
+    """
+
+    if not isinstance(data, dict):
+        raise ValueError(f'not a net: {data!r}')
+    try:
+        nodes = [_read_node(node) for node in (*data['places'], *data['transitions'])]
+        return NetDocument(
+            model_uuid=str(data.get('model', '')),
+            places=tuple(node for node in nodes if isinstance(node, PlaceData)),
+            transitions=tuple(node for node in nodes if isinstance(node, TransitionData)),
+            arcs=tuple(_read_arc(arc) for arc in data['arcs']),
+            guides=tuple(_read_guide(guide) for guide in data.get('guides', ())),
+        )
+    except (KeyError, TypeError) as error:
+        raise ValueError(f'a net is not written as it should be: {error}') from error
 
 
 def _encode_operation(operation: Operation) -> dict:

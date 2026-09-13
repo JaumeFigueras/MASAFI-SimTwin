@@ -11,13 +11,20 @@ import pytest
 from PyQt6 import sip
 from PyQt6.QtCore import QPointF, QSizeF, Qt
 from PyQt6.QtGui import QKeySequence
-from PyQt6.QtWidgets import QDialog, QDockWidget, QMessageBox, QTabBar
+from PyQt6.QtWidgets import (
+    QApplication,
+    QDialog,
+    QDockWidget,
+    QMessageBox,
+    QTabBar,
+)
 
 from masafi_simtwin import APPLICATION_NAME, paper, project
 from masafi_simtwin import documents
 from masafi_simtwin.document_area import MODIFIED_MARK
 from masafi_simtwin.documents import PetriNetEditor
 from masafi_simtwin.documents.arc import ArcKind
+from masafi_simtwin.documents.net_item import NetItem
 from masafi_simtwin.library_tree import LibraryTree
 from masafi_simtwin.panes import PropertiesPane
 from masafi_simtwin import preferences
@@ -2184,6 +2191,109 @@ def test_the_edit_menu_leads_with_undo_and_redo(window):
     assert window.redo_action.shortcut() == QKeySequence('Ctrl+Shift+Z')
     assert window.undo_action in window.actions()
     assert window.redo_action in window.actions()
+
+
+def test_the_edit_menu_offers_cut_copy_and_paste(window):
+    """Real entries, after undo and redo, and held by the window as well so that
+    the keys work while the menu bar is folded away."""
+
+    edit_menu = window.top_bar._menu_bar.actions()[1].menu()
+    entries = [action for action in edit_menu.actions() if not action.isSeparator()]
+
+    assert entries[2:] == [window.cut_action, window.copy_action, window.paste_action]
+    assert window.cut_action.shortcut() == QKeySequence(QKeySequence.StandardKey.Cut)
+    assert window.copy_action.shortcut() == QKeySequence(QKeySequence.StandardKey.Copy)
+    assert window.paste_action.shortcut() == QKeySequence(QKeySequence.StandardKey.Paste)
+    for action in (window.cut_action, window.copy_action, window.paste_action):
+        assert action in window.actions()
+
+
+def test_there_is_nothing_to_cut_copy_or_paste_to_begin_with(window):
+    """No document, nothing selected and an empty clipboard."""
+
+    QApplication.clipboard().clear()
+
+    assert not window.cut_action.isEnabled()
+    assert not window.copy_action.isEnabled()
+    assert not window.paste_action.isEnabled()
+
+
+def test_cut_and_copy_are_offered_once_a_node_is_selected(window, opened, monkeypatch):
+    """And taken away again when the selection is put down."""
+
+    model = add_model(window, monkeypatch)
+    editor = editor_of(window, model)
+    draw(editor)
+    assert not window.copy_action.isEnabled()
+
+    editor.places[0].setSelected(True)
+
+    assert window.copy_action.isEnabled()
+    assert window.cut_action.isEnabled()
+
+    editor.scene().clearSelection()
+
+    assert not window.copy_action.isEnabled()
+
+
+def test_paste_is_offered_once_something_has_been_copied(window, opened, monkeypatch):
+    """The clipboard is asked, and it says what it holds."""
+
+    QApplication.clipboard().clear()
+    model = add_model(window, monkeypatch)
+    editor = editor_of(window, model)
+    draw(editor)
+    assert not window.paste_action.isEnabled()
+
+    editor.places[0].setSelected(True)
+    window.copy_action.trigger()
+
+    assert window.paste_action.isEnabled()
+    QApplication.clipboard().clear()
+
+
+def test_a_piece_of_net_is_copied_from_one_model_and_pasted_into_another(
+    window, opened, monkeypatch
+):
+    """Which is what the clipboard is for: the two models are two tabs, and
+    could as well be two projects."""
+
+    QApplication.clipboard().clear()
+    first = add_model(window, monkeypatch, 'Filling Station')
+    second = add_model(window, monkeypatch, 'Capping')
+    draw(editor_of(window, first))
+    window.document_area.show_document(first['uuid'])
+    for item in editor_of(window, first).items_of(NetItem):
+        item.setSelected(True)
+    window.copy_action.trigger()
+
+    window.document_area.show_document(second['uuid'])
+    window.paste_action.trigger()
+
+    pasted = editor_of(window, second)
+    assert sorted(item.name for item in pasted.items_of(NetItem)) == ['P1', 'T1']
+    assert len(pasted.arcs) == 1
+    assert len(editor_of(window, first).items_of(NetItem)) == 2
+    QApplication.clipboard().clear()
+
+
+def test_a_cut_takes_the_net_off_the_sheet_and_can_be_undone(window, opened, monkeypatch):
+    """One recorded change, like everything else that changes a net."""
+
+    QApplication.clipboard().clear()
+    model = add_model(window, monkeypatch)
+    editor = editor_of(window, model)
+    drawn = draw(editor)
+    for item in editor.items_of(NetItem):
+        item.setSelected(True)
+
+    window.cut_action.trigger()
+    assert editor.items_of(NetItem) == []
+
+    window.undo_action.trigger()
+
+    assert editor.to_document() == drawn
+    QApplication.clipboard().clear()
 
 
 def test_there_is_nothing_to_undo_until_something_is_drawn(window, opened, monkeypatch):

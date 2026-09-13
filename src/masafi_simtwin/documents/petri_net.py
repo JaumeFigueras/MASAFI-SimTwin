@@ -45,7 +45,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from uuid import uuid4
 
 from PyQt6.QtCore import QPointF, Qt, pyqtSignal
@@ -106,6 +106,10 @@ ELEMENTS: dict[tuple[str, str], Callable[..., QGraphicsItem]] = {
     ('pt-petri-net', 'place'): Place,
     ('pt-petri-net', 'transition'): Transition,
 }
+
+#: How far down and to the right of the original a paste lands, in millimetres,
+#: when the pointer is not over the sheet to say where it should go instead.
+PASTE_OFFSET = 10.0
 
 #: What each kind of node of a document is drawn as.
 NODE_ITEMS: dict[type, type[NetItem]] = {
@@ -499,13 +503,35 @@ class PetriNetEditor(Canvas):
             The name.
         """
 
+        return self.next_names(prefix, 1)[0]
+
+    def next_names(self, prefix: str, count: int) -> list[str]:
+        """Invent as many names as are wanted, all of them free.
+
+        One at a time would give the same name twice: :meth:`next_name` reads
+        the sheet, and a paste has not put its nodes on it yet.
+
+        Parameters
+        ----------
+        prefix : str
+            What the names begin with.
+        count : int
+            How many.
+
+        Returns
+        -------
+        list of str
+            The names, running on from the highest number in use.
+        """
+
         pattern = re.compile(rf'{re.escape(prefix)}(\d+)', re.IGNORECASE)
         numbers = [
             int(found.group(1))
             for name in self.names
             if (found := pattern.fullmatch(name)) is not None
         ]
-        return f'{prefix}{max(numbers, default=0) + 1}'
+        highest = max(numbers, default=0)
+        return [f'{prefix}{highest + number}' for number in range(1, count + 1)]
 
     @property
     def places(self) -> list[Place]:
@@ -970,6 +996,17 @@ class PetriNetEditor(Canvas):
     def _on_deletion_asked(self, items) -> None:
         """Delete what a person asked to be rid of, and record it as one change.
 
+        Parameters
+        ----------
+        items : list
+            The items, arcs and guides asked about, in no particular order.
+        """
+
+        self.delete_items(items)
+
+    def delete_items(self, items, name: str = 'delete') -> None:
+        """Take some things off the sheet, and record it as one change.
+
         An item takes its arcs with it, and they are taken out **before** it, so
         that undoing puts the item back before the arcs that hang on it.  The
         change is not made yet, so it is pushed to be done.
@@ -977,7 +1014,10 @@ class PetriNetEditor(Canvas):
         Parameters
         ----------
         items : list
-            The items, arcs and guides asked about, in no particular order.
+            The items, arcs and guides, in no particular order.
+        name : str, optional
+            What the change is called, which is what *Undo* offers to put back:
+            a cut is a deletion that says it was a cut.
         """
 
         arcs: list[Arc] = []
@@ -1000,7 +1040,7 @@ class PetriNetEditor(Canvas):
         operations = [RemoveArc(arc_data(arc)) for arc in taken]
         operations += [RemoveNode(node_data(item)) for item in nodes]
         operations += [RemoveGuide(guide_data(guide)) for guide in guides]
-        self.push(Change('delete', tuple(operations)))
+        self.push(Change(name, tuple(operations)))
 
     def _on_arc_shape_asked(self, arc: Arc, shape: ArcShape) -> None:
         """Draw an arc in the shape its context menu chose.
@@ -1147,6 +1187,8 @@ class PetriNetEditor(Canvas):
             'set-tokens': self.tr('Change Tokens'),
             'set-description': self.tr('Change Description'),
             'rotate': self.tr('Rotate'),
+            'cut': self.tr('Cut'),
+            'paste': self.tr('Paste'),
         }
         return labels.get(name, name)
 
@@ -1586,6 +1628,200 @@ class PetriNetEditor(Canvas):
             )
         self.record(Change('rotate', tuple(operations)))
         return bool(operations)
+
+    # ------------------------------------------------------------------
+    # What is copied and pasted
+    # ------------------------------------------------------------------
+
+    def copy_selection(self) -> NetDocument | None:
+        """Give what a copy of the selection is: a small net of its own.
+
+        The **nodes selected**, and **every arc whose two ends are both among
+        them** — whether or not the arc itself was selected, since a place, a
+        transition and nothing between them is not what anybody meant to copy,
+        and an arc to a node that was left behind is an arc to nothing.  The
+        guides are left out, as they are everywhere a selection is described:
+        a guide is what a drawing is lined up against rather than part of it.
+
+        Returns
+        -------
+        simtwin_core.petri_net.NetDocument, optional
+            The piece of net, or ``None`` when no node is selected — an arc on
+            its own is not something that can be pasted anywhere.
+        """
+
+        nodes = [item for item in self.scene().selectedItems() if isinstance(item, NetItem)]
+        if not nodes:
+            return None
+        taken = {node.uuid for node in nodes}
+        return NetDocument(
+            model_uuid=self.model_id,
+            places=tuple(node_data(node) for node in nodes if isinstance(node, Place)),
+            transitions=tuple(
+                node_data(node) for node in nodes if isinstance(node, Transition)
+            ),
+            arcs=tuple(
+                arc_data(arc)
+                for arc in self.arcs
+                if arc.source.uuid in taken and arc.target.uuid in taken
+            ),
+        )
+
+    def cut_selection(self) -> NetDocument | None:
+        """Copy the selection and take it off the sheet, as one recorded change.
+
+        What is cut is what was copied: the selected nodes and the selected
+        arcs.  An arc hanging off a node that is going has to go with it —
+        there is nothing left for it to be attached to — even though it was not
+        copied, which is what deleting the node would have done anyway.  A
+        selected **guide** is left where it is, since it is not copied either.
+
+        Returns
+        -------
+        simtwin_core.petri_net.NetDocument, optional
+            What was copied, or ``None`` when there was nothing to cut, in which
+            case nothing was taken off the sheet.
+        """
+
+        fragment = self.copy_selection()
+        if fragment is None:
+            return None
+        going = [
+            item
+            for item in self.scene().selectedItems()
+            if isinstance(item, (NetItem, Arc))
+        ]
+        self.delete_items(going, 'cut')
+        return fragment
+
+    def paste(self, fragment: NetDocument | None, at: QPointF | None = None) -> bool:
+        """Draw a piece of net on this sheet, as one recorded change.
+
+        **Everything pasted is new.**  Each node is given a new UUID and a newly
+        invented name, so a piece pasted onto the sheet it was copied from is a
+        second net beside the first rather than the same one twice; each arc is
+        given a new UUID and is drawn between the new nodes, keeping the
+        connecting points it was attached to and the way it bends.
+
+        **Where it lands**: under the pointer when the pointer is over the sheet
+        — the piece keeps its shape and its middle goes where the pointer is —
+        and otherwise :data:`PASTE_OFFSET` down and to the right of where it was
+        copied from, so that a pasted piece is beside the original rather than
+        exactly on top of it.  Every node is snapped as it lands, as everything
+        on the sheet is.
+
+        What lands is **left selected**, and nothing else with it: a paste is
+        followed by dragging it where it belongs.
+
+        Parameters
+        ----------
+        fragment : simtwin_core.petri_net.NetDocument, optional
+            The piece of net, or ``None`` — which is what an empty clipboard
+            gives, and which pastes nothing.
+        at : PyQt6.QtCore.QPointF, optional
+            Where to put its middle, in scene millimetres.  Worked out from the
+            pointer when it is not given.
+
+        Returns
+        -------
+        bool
+            Whether anything was pasted.
+        """
+
+        if fragment is None:
+            return False
+        nodes = (*fragment.places, *fragment.transitions)
+        if not nodes:
+            return False
+
+        where = at if at is not None else self.view.pointer_on_the_sheet()
+        offset = self._paste_offset(nodes, where)
+        names = {
+            kind: iter(
+                self.next_names(
+                    NODE_ITEMS[kind].NAME_PREFIX,
+                    sum(1 for node in nodes if type(node) is kind),
+                )
+            )
+            for kind in NODE_ITEMS
+        }
+
+        identities = {node.uuid: str(uuid4()) for node in nodes}
+        operations: list[Operation] = [
+            AddNode(
+                replace(
+                    node,
+                    uuid=identities[node.uuid],
+                    name=next(names[type(node)]),
+                    position=(
+                        self.view.snap(node.position[0] + offset.x()),
+                        self.view.snap(node.position[1] + offset.y()),
+                    ),
+                )
+            )
+            for node in nodes
+        ]
+        operations += [
+            AddArc(
+                replace(
+                    arc,
+                    uuid=str(uuid4()),
+                    source=identities[arc.source],
+                    target=identities[arc.target],
+                    route=(),
+                )
+            )
+            for arc in fragment.arcs
+        ]
+
+        self.push(Change('paste', tuple(operations)))
+        self.work_on_nodes(
+            operation.node.uuid for operation in operations if isinstance(operation, AddNode)
+        )
+        return True
+
+    def _paste_offset(self, nodes, where: QPointF | None) -> QPointF:
+        """Say how far a piece of net moves as it is pasted.
+
+        Parameters
+        ----------
+        nodes : tuple
+            The nodes of the piece, as they were copied.
+        where : PyQt6.QtCore.QPointF, optional
+            Where its middle is to go, or ``None`` for beside the original.
+
+        Returns
+        -------
+        PyQt6.QtCore.QPointF
+            What to add to every position.
+        """
+
+        if where is None:
+            return QPointF(PASTE_OFFSET, PASTE_OFFSET)
+        across = [node.position[0] for node in nodes]
+        down = [node.position[1] for node in nodes]
+        middle = QPointF(
+            (min(across) + max(across)) / 2.0, (min(down) + max(down)) / 2.0
+        )
+        return where - middle
+
+    def work_on_nodes(self, uuids) -> None:
+        """Leave some nodes selected, and nothing else.
+
+        The sheet's own :meth:`~masafi_simtwin.documents.canvas.CanvasView.work_on`
+        for one arc, and for the same reason: what was just pasted is what a
+        person is about to drag somewhere, and it can only be dragged while it
+        is in hand.
+
+        Parameters
+        ----------
+        uuids : collections.abc.Iterable of str
+            The nodes.
+        """
+
+        self.scene().clearSelection()
+        for uuid in uuids:
+            self.node(uuid).setSelected(True)
 
     def set_weight(self, uuids, weight: int) -> bool:
         """Give some arcs the same weight, as one recorded change.

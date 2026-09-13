@@ -388,34 +388,70 @@ answer for every model.
 
 ---
 
-## Undo dies with the session, and there is no Cut, Copy or Paste
+## Undo dies with the session
 
 **Now.** Every change to a net can be undone and done again — one history per open document, *Undo*
 and *Redo* in the *Edit* menu on `Ctrl+Z` and `Ctrl+Shift+Z`, acting on the tab being looked at. The
 history lives **in memory only**: closing a tab, closing the project or quitting throws it away, so a
-mistake made before the last save cannot be reached the next morning. *Edit* still holds nothing else:
-no *Cut*, no *Copy*, no *Paste*, and no *Delete* entry — deleting is the key and the context menus.
+mistake made before the last save cannot be reached the next morning.
 
 **Why it was done this way.** Persisting undo is a great deal of machinery for almost none: what a
 person needs after a crash is their work back, not the ability to undo past it, and that is the
-journal's job (see *Saving happens at boundaries and on a timer*). Cut, Copy and Paste were left until there is
-somewhere to put what is copied — a net's items carry identities, and pasting one has to decide
-whether it is the same place or a new one, which is a decision nobody has needed yet.
+journal's job (see *Saving happens at boundaries and on a timer*).
 
-**When it will not be enough.** Copying a subnet between two models, which is the first thing anybody
-does with a library of nets; and the day somebody wants yesterday's state back rather than the last
+**When it will not be enough.** The day somebody wants yesterday's state back rather than the last
 saved one.
 
 **Options.**
 
-- *Cut*, *Copy* and *Paste* over the same operations undo is built on: a copy is a `Change` of
-  `AddNode` and `AddArc` operations with new UUIDs, which is a small thing now that operations exist.
-  Pasting into another model is then the same change applied to another document.
 - Keep the undo stack across a session of the project rather than of a tab, so that closing a tab and
   opening it again does not forget. Cheap, and it makes *Undo* reach into a document nobody is
   looking at, which is why it was not done.
 - Write the undo history into the journal and read it back on open. Rejected above, and recorded so
   that it is a decision rather than an oversight.
+
+---
+
+## What the clipboard carries, and what it does not
+
+**Now.** *Cut*, *Copy* and *Paste* carry the **nodes selected and the arcs between them**, as a
+`NetDocument` under a MIME type of the application's own, and everything pasted is new: new UUIDs and
+newly invented names. What that leaves out:
+
+- **Guides are not copied**, nor cut when they are selected among what is.
+- **An arc alone cannot be copied**, so there is no way to carry the shape and weight of an arc from one
+  pair of nodes to another.
+- **A paste always invents names.** Pasting into an empty model gives `P1` and `T1` there, but pasting a
+  `Filler` into a model that has no `Filler` still gives `P3`: the name a person chose is lost even
+  where it was free.
+- **Two pastes with the pointer off the sheet land on top of one another**, both ten millimetres down
+  and to the right of the original. What is pasted is left selected, so the second one can be dragged
+  off the first, but nothing cascades.
+- **Nothing else can read what is copied.** The clipboard carries one flavour, SimTwin's own — no PNML
+  for another Petri net tool, no image for a document, no text for a mail.
+
+**Why it was done this way.** Each of them is a decision that can be made once there is a reason to
+prefer one answer, and each would be wrong to guess at. A guide is not part of the drawing anywhere
+else in the application, so copying one would be the odd case rather than the rule. A name is a net's
+identity and re-using one is how two nets come to disagree about what a name means; inventing every
+time is the rule that cannot surprise. And a second flavour on the clipboard is a second thing to keep
+in step with the first.
+
+**When it will not be enough.** A person laying out the same subnet a dozen times, who will want the
+paste to walk down the sheet; a person moving a whole model into another and finding every name
+changed; and the first time somebody wants a net in a document or a mail.
+
+**Options.**
+
+- **Cascade a repeated paste**, remembering the last place a fragment landed and adding the offset
+  again while the clipboard has not changed.
+- **Keep a name when it is free**, inventing only for the clash. It is the friendlier rule and the
+  harder one to explain, since whether a paste renames then depends on what is already there.
+- **Copy the guides that cross what is copied**, or the selected ones, if a person ever says which they
+  meant.
+- **A second flavour**: PNML for another tool, `image/png` for a document, plain text for a mail. PNML
+  is nearly free — the adapter already writes it — but it would refuse a piece holding an inhibitor
+  arc, which the application's own flavour carries happily.
 
 ---
 
@@ -714,6 +750,44 @@ person to see it knows it was noticed.
 - Draw nothing when the two ends are closer together than the arrowhead is long, so the picture goes
   quiet instead of going wrong.
 - Leave it, and let the person move the item.
+
+---
+
+## A label sits where its item puts it, and an arc may cross it
+
+**Now.** A node's name and description are written in one box, `Name: Description`, wrapped to
+`LABEL_WIDTH` and put in a fixed place: under a place, centred; across a transition, which is under a bar
+lying across the sheet and beside one standing up. Nowhere else. A label cannot be dragged, has no offset
+of its own, is not written to the file, and is drawn straight onto the sheet with nothing behind it — so
+an arc leaving a **place** downwards is drawn across the words under it, and two nodes a few millimetres
+apart have two boxes that overlap.
+
+**Why it was done this way.** A fixed place is what makes a label free: nothing to store, nothing to
+undo, nothing new in the file, and no third thing on the sheet that can be selected, moved or lost.
+Every label the editor draws is worked out from the `name` and the `description` the document already
+carries, so drawing them cost the document nothing at all. The fixed places were chosen for where each
+shape's arcs are: a transition is met at its ends, so its box goes across it, and a place is met from
+every side, so its box goes where a drawn net has always put a name — under it.
+
+Backing each box with the colour of the paper was considered and left: it would hide the arcs that run
+under it, and a net where the lines disappear behind captions is worse than one where a line crosses a
+word.
+
+**When it will not be enough.** A dense net, where boxes collide with each other and with the arcs; a
+long description, which is a wide box under a small circle; and a file from another tool, which PNML
+lets carry a `graphics`/`offset` for a node's name that is dropped on reading and invented on writing.
+
+**Options.**
+
+- **A draggable label**, its offset from the item kept in the chord-frame idiom the arcs already use and
+  written to the file — as PNML's own name `offset`, which is exactly this. It is the answer PNML
+  expects, and it makes the label a fourth thing that can be taken hold of: `shape()` would have to
+  hold it, and dragging it must not drag the item.
+- **A choice of side** — above, below, left, right — one enumerated value per node rather than a
+  position. Much less to store and to explain than an offset, and it covers most of what a person
+  dragging a label is trying to do.
+- **Laying them out**, moving each box off whatever it collides with. Nothing to store at all, and no
+  two people would agree about where a box should have gone.
 
 ---
 

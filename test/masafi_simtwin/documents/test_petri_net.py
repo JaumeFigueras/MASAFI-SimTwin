@@ -15,7 +15,8 @@ from masafi_simtwin.documents.arc import (
 )
 from masafi_simtwin.documents.canvas import Canvas
 from masafi_simtwin.documents.place import Place
-from masafi_simtwin.documents.petri_net import PetriNetEditor
+from masafi_simtwin.documents.net_item import NetItem
+from masafi_simtwin.documents.petri_net import PASTE_OFFSET, PetriNetEditor
 from masafi_simtwin.documents.ruler import MILLIMETRES
 from simtwin_core.operations import (
     OPERATIONS,
@@ -1146,6 +1147,35 @@ def test_the_tokens_and_descriptions_survive_a_document(editor, qtbot):
     assert again.node(transition.uuid).description == 'Fill a bottle'
 
 
+def test_a_node_is_labelled_with_what_it_is_called_and_what_it_is_for(editor):
+    """One box on the sheet, reading ``Name: Description``, written again
+    whenever either half changes — through the pane, an undo or a file."""
+
+    place, _free, _transition, _arc = little_net(editor)
+    assert place.label_text() == 'P1'
+
+    editor.describe((place.uuid,), 'Bottles waiting')
+    assert place.label_text() == 'P1: Bottles waiting'
+
+    editor.rename_node(place.uuid, 'Buffer')
+    assert place.label_text() == 'Buffer: Bottles waiting'
+
+    editor.undo_stack.undo()
+    assert place.label_text() == 'P1: Bottles waiting'
+
+
+def test_a_label_grows_the_room_the_item_is_painted_in(editor):
+    """So the box is repainted rather than left half drawn on the sheet."""
+
+    place, _free, _transition, _arc = little_net(editor)
+    was = place.boundingRect()
+
+    editor.describe((place.uuid,), 'Bottles waiting to be filled and capped')
+
+    assert place.boundingRect().height() > was.height()
+    assert place.item_rect() == place.boundingRect().intersected(place.item_rect())
+
+
 def test_tokens_asked_of_a_transition_are_refused(editor):
     """The sheet holds no place of that UUID to put them in."""
 
@@ -1496,3 +1526,234 @@ def test_the_menu_over_a_transition_is_the_item_menu(editor, monkeypatch):
     )
 
     assert shown == [['Rotate']]
+
+
+# ----------------------------------------------------------------------
+# Cut, copy and paste
+# ----------------------------------------------------------------------
+
+
+def test_a_copy_is_the_nodes_selected_and_the_arcs_between_them(editor):
+    """A place, a transition and nothing between them is not what anybody meant
+    to copy, so an arc comes along whether or not it was selected itself."""
+
+    place, _free, transition, arc = little_net(editor)
+    place.setSelected(True)
+    transition.setSelected(True)
+
+    fragment = editor.copy_selection()
+
+    assert [data.name for data in fragment.places] == [place.name]
+    assert [data.name for data in fragment.transitions] == [transition.name]
+    assert [data.uuid for data in fragment.arcs] == [arc.uuid]
+    assert fragment.model_uuid == MODEL['uuid']
+
+
+def test_an_arc_with_one_end_left_behind_is_not_copied(editor):
+    """It would be an arc to nothing."""
+
+    place, _free, _transition, _arc = little_net(editor)
+    place.setSelected(True)
+
+    fragment = editor.copy_selection()
+
+    assert [data.name for data in fragment.places] == [place.name]
+    assert fragment.arcs == ()
+
+
+def test_a_copy_leaves_the_guides_where_they_are(editor):
+    """A guide is what a drawing is lined up against rather than part of it."""
+
+    place, _free, _transition, _arc = little_net(editor)
+    place.setSelected(True)
+    for guide in editor.guides:
+        guide.setSelected(True)
+
+    assert editor.copy_selection().guides == ()
+
+
+def test_an_arc_or_a_guide_on_its_own_is_not_something_to_copy(editor):
+    """There is nowhere to paste an arc with no ends."""
+
+    _place, _free, _transition, arc = little_net(editor)
+    arc.setSelected(True)
+
+    assert editor.copy_selection() is None
+
+
+def test_nothing_selected_is_nothing_to_copy(editor):
+    """Which is what greys *Copy* out."""
+
+    little_net(editor)
+
+    assert editor.copy_selection() is None
+
+
+def test_a_cut_copies_and_then_takes_it_off_the_sheet(editor):
+    """One recorded change, named for *Undo*."""
+
+    place, _free, transition, _arc = little_net(editor)
+    before = editor.to_document()
+    place.setSelected(True)
+    transition.setSelected(True)
+
+    fragment = editor.cut_selection()
+
+    assert [data.name for data in fragment.places] == ['P1']
+    assert editor.places == [_free]
+    assert editor.transitions == []
+    assert editor.arcs == []
+    assert editor.undo_stack.command(editor.undo_stack.count() - 1).text() == 'Cut'
+
+    editor.undo_stack.undo()
+
+    assert editor.to_document() == before
+
+
+def test_a_cut_leaves_a_selected_guide_where_it_is(editor):
+    """It was not copied, so losing it would be losing it for good."""
+
+    place, _free, _transition, _arc = little_net(editor)
+    place.setSelected(True)
+    for guide in editor.guides:
+        guide.setSelected(True)
+
+    editor.cut_selection()
+
+    assert len(editor.guides) == 1
+
+
+def test_a_cut_of_nothing_takes_nothing(editor):
+    """Nothing was copied, so nothing may be lost."""
+
+    little_net(editor)
+    count = editor.undo_stack.count()
+
+    assert editor.cut_selection() is None
+    assert editor.undo_stack.count() == count
+
+
+def test_a_paste_is_new_nodes_with_new_names(editor):
+    """A piece pasted onto the sheet it was copied from is a second net beside
+    the first, never the same one twice."""
+
+    place, _free, transition, _arc = little_net(editor)
+    place.setSelected(True)
+    transition.setSelected(True)
+    fragment = editor.copy_selection()
+
+    assert editor.paste(fragment)
+
+    names = sorted(item.name for item in editor.items_of(NetItem))
+    assert names == ['P1', 'P2', 'P3', 'T1', 'T2']
+    assert len({item.uuid for item in editor.items_of(NetItem)}) == 5
+    assert len(editor.arcs) == 2
+
+
+def test_a_pasted_arc_joins_the_new_nodes_and_not_the_old_ones(editor):
+    """Otherwise the copy would hang off the original."""
+
+    place, _free, transition, arc = little_net(editor)
+    place.setSelected(True)
+    transition.setSelected(True)
+
+    editor.paste(editor.copy_selection())
+    pasted = [one for one in editor.arcs if one is not arc][0]
+
+    assert pasted.uuid != arc.uuid
+    assert pasted.source is not place
+    assert pasted.target is not transition
+    assert (pasted.source_port, pasted.target_port) == (arc.source_port, arc.target_port)
+
+
+def test_a_paste_lands_beside_what_it_was_copied_from(editor):
+    """Ten millimetres down and to the right, so it is not exactly on top of
+    the original — which is where it goes when the pointer is not over the
+    sheet to say otherwise."""
+
+    place, _free, _transition, _arc = little_net(editor)
+    place.setSelected(True)
+    where = place.pos()
+
+    editor.paste(editor.copy_selection())
+    pasted = [item for item in editor.places if item is not place and item is not _free][0]
+
+    assert pasted.pos() == where + QPointF(PASTE_OFFSET, PASTE_OFFSET)
+
+
+def test_a_paste_under_the_pointer_puts_its_middle_there(editor):
+    """The piece keeps its shape and lands where it was aimed."""
+
+    place, _free, transition, _arc = little_net(editor)
+    place.setSelected(True)
+    transition.setSelected(True)
+    fragment = editor.copy_selection()
+    spread = place.pos() - transition.pos()
+
+    editor.paste(fragment, at=QPointF(150.0, 150.0))
+    pasted = [item for item in editor.places if item is not place and item is not _free][0]
+    other = [item for item in editor.transitions if item is not transition][0]
+
+    assert (pasted.pos() + other.pos()) / 2.0 == QPointF(150.0, 150.0)
+    assert pasted.pos() - other.pos() == spread
+
+
+def test_what_is_pasted_is_left_in_hand(editor):
+    """A paste is followed by dragging it where it belongs."""
+
+    place, _free, transition, _arc = little_net(editor)
+    place.setSelected(True)
+    transition.setSelected(True)
+
+    editor.paste(editor.copy_selection())
+
+    selected = editor.scene().selectedItems()
+    assert place not in selected
+    assert transition not in selected
+    assert sorted(item.name for item in selected if isinstance(item, NetItem)) == ['P3', 'T2']
+
+
+def test_a_paste_is_one_change_that_undoes(editor):
+    """However many nodes and arcs it put on the sheet."""
+
+    place, _free, transition, _arc = little_net(editor)
+    place.setSelected(True)
+    transition.setSelected(True)
+    fragment = editor.copy_selection()
+    before = editor.to_document()
+
+    editor.paste(fragment)
+    assert editor.undo_stack.command(editor.undo_stack.count() - 1).text() == 'Paste'
+
+    editor.undo_stack.undo()
+
+    assert editor.to_document() == before
+
+
+def test_a_paste_of_nothing_does_nothing(editor):
+    """Which is what an empty clipboard gives."""
+
+    little_net(editor)
+    count = editor.undo_stack.count()
+
+    assert not editor.paste(None)
+    assert not editor.paste(NetDocument())
+    assert editor.undo_stack.count() == count
+
+
+def test_a_piece_copied_from_another_sheet_can_be_pasted_onto_this_one(editor, qtbot):
+    """Which is the whole reason the clipboard carries a net rather than the
+    items themselves."""
+
+    place, _free, transition, _arc = little_net(editor)
+    place.setSelected(True)
+    transition.setSelected(True)
+    fragment = editor.copy_selection()
+
+    other = fresh_editor(qtbot)
+    other.add_element('pt-petri-net', 'place', QPointF(30.0, 30.0))
+
+    assert other.paste(fragment)
+
+    assert sorted(item.name for item in other.items_of(NetItem)) == ['P1', 'P2', 'T1']
+    assert len(other.arcs) == 1

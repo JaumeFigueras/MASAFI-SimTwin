@@ -5,13 +5,17 @@ from __future__ import annotations
 from masafi_simtwin import project
 import pytest
 from PyQt6.QtCore import QPointF
-from PyQt6.QtWidgets import QWidget
+from PyQt6.QtWidgets import QApplication, QWidget
 
 from masafi_simtwin.documents import (
     EDITORS,
     NEW_MODEL_FILES,
     PetriNetEditor,
     busy,
+    can_copy,
+    copy,
+    cut,
+    paste,
     editor_for,
     file_of,
     is_modified,
@@ -199,3 +203,63 @@ def test_the_selection_of_a_document_is_described(qtbot):
 
     assert [data.uuid for data in selection_of(editor).places] == [place.uuid]
     assert selection_of(widget) is None
+
+
+def test_a_document_says_whether_there_is_anything_to_copy(qtbot):
+    """A node selected on it; never, for a document with nothing to select."""
+
+    editor = editor_for({'uuid': 'u', 'name': 'Net', 'kind': 'petri-net'})
+    qtbot.addWidget(editor)
+    place = editor.add_element('pt-petri-net', 'place', QPointF(20.0, 20.0))
+    widget = QWidget()
+    qtbot.addWidget(widget)
+
+    assert not can_copy(editor)
+    place.setSelected(True)
+    assert can_copy(editor)
+    assert not can_copy(widget)
+    assert not can_copy(None)
+
+
+def test_a_selection_goes_through_the_clipboard_from_one_document_to_another(qtbot):
+    """Which is what a copy is for."""
+
+    QApplication.clipboard().clear()
+    first = editor_for({'uuid': 'u', 'name': 'Net', 'kind': 'petri-net'})
+    second = editor_for({'uuid': 'v', 'name': 'Other', 'kind': 'petri-net'})
+    for editor in (first, second):
+        qtbot.addWidget(editor)
+    first.add_element('pt-petri-net', 'place', QPointF(20.0, 20.0)).setSelected(True)
+
+    assert copy(first)
+    assert paste(second)
+
+    assert [item.name for item in second.places] == ['P1']
+    QApplication.clipboard().clear()
+
+
+def test_a_cut_takes_it_off_the_sheet_and_a_paste_puts_it_back(qtbot):
+    """The two halves of moving a piece of net from one model to another."""
+
+    QApplication.clipboard().clear()
+    editor = editor_for({'uuid': 'u', 'name': 'Net', 'kind': 'petri-net'})
+    qtbot.addWidget(editor)
+    editor.add_element('pt-petri-net', 'place', QPointF(20.0, 20.0)).setSelected(True)
+
+    assert cut(editor)
+    assert editor.places == []
+
+    assert paste(editor)
+    assert [item.name for item in editor.places] == ['P1']
+    QApplication.clipboard().clear()
+
+
+def test_a_document_that_is_not_a_net_copies_and_pastes_nothing(qtbot):
+    """Every dispatcher answers for a document that cannot do the thing."""
+
+    widget = QWidget()
+    qtbot.addWidget(widget)
+
+    assert not copy(widget)
+    assert not cut(widget)
+    assert not paste(widget)

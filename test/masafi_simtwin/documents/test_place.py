@@ -12,7 +12,7 @@ import pytest
 from PyQt6.QtCore import QPointF
 from PyQt6.QtGui import QColor
 
-from masafi_simtwin.documents.net_item import PORT_RADIUS
+from masafi_simtwin.documents.net_item import LABEL_GAP, PORT_RADIUS
 from masafi_simtwin.documents.place import (
     MAX_TOKEN_DOTS,
     PLACE_DIAMETER,
@@ -270,3 +270,17 @@ def test_a_number_of_tokens_is_drawn_in_the_ink(place, ink, colors):
 
     assert ink.holds(ink.window(image, 0.0, 0.0, TOKEN_NUMBER_HEIGHT / 2.0), QColor(colors.text))
     assert ink.at(image, across=PLACE_RADIUS - 1.0) == QColor(colors.editor)
+
+
+# ----------------------------------------------------------------------
+# What is written beside it
+# ----------------------------------------------------------------------
+
+
+def test_a_places_label_is_under_it_and_centred(place):
+    """Which is where the name of a place goes on a drawn net."""
+
+    box = place.label_rect()
+
+    assert box.center().x() == pytest.approx(0.0)
+    assert box.top() == pytest.approx(place.item_rect().bottom() + LABEL_GAP)

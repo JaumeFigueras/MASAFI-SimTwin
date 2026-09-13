@@ -11,7 +11,7 @@ import pytest
 from PyQt6.QtCore import QPointF
 from PyQt6.QtGui import QColor
 
-from masafi_simtwin.documents.net_item import ITEM_PEN, PORT_RADIUS
+from masafi_simtwin.documents.net_item import ITEM_PEN, LABEL_GAP, PORT_RADIUS
 from masafi_simtwin.documents.transition import (
     PORT_COUNT,
     PORT_SPACING,
@@ -267,6 +267,32 @@ def test_a_bar_stood_up_at_the_edge_of_the_sheet_is_brought_back_onto_it(editor)
 
     assert edge.pos().y() >= TRANSITION_HALF_LENGTH
     assert editor.view.sceneRect().contains(edge.bar().translated(edge.pos()))
+
+
+# ----------------------------------------------------------------------
+# What is written beside it
+# ----------------------------------------------------------------------
+
+
+def test_a_bar_lying_across_the_sheet_is_labelled_under_it(transition):
+    """Its arcs meet it at its ends, so under it is where they are not."""
+
+    box = transition.label_rect()
+
+    assert box.center().x() == pytest.approx(0.0)
+    assert box.top() == pytest.approx(transition.item_rect().bottom() + LABEL_GAP)
+
+
+def test_a_bar_standing_up_is_labelled_beside_it(transition):
+    """The box goes across the bar and never off its end, so it turns with it —
+    a net drawn top to bottom stands its bars up and joins one end to the next,
+    and a box under one of them would be a box across an arc."""
+
+    transition.vertical = True
+    box = transition.label_rect()
+
+    assert box.center().y() == pytest.approx(0.0)
+    assert box.left() == pytest.approx(TRANSITION_HALF_HEIGHT + PORT_RADIUS + LABEL_GAP)
 
 
 # ----------------------------------------------------------------------

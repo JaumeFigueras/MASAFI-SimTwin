@@ -63,12 +63,13 @@ There is no angle between the two, and nothing turns by any other amount; see
 
 from __future__ import annotations
 
-from PyQt6.QtCore import QPointF, QRectF
+from PyQt6.QtCore import QPointF, QRectF, QSizeF
 from PyQt6.QtGui import QPainterPath
 
 from masafi_simtwin.documents.net_item import (
     ITEM_PEN,
     ITEM_PEN_SELECTED,
+    LABEL_GAP,
     PORT_RADIUS,
     NetItem,
 )
@@ -241,8 +242,37 @@ class Transition(NetItem):
         across, down = self.half_sizes()
         return QRectF(-across, -down, across * 2.0, down * 2.0)
 
-    def boundingRect(self) -> QRectF:  # noqa: N802  (Qt naming)
-        """Give what the transition is drawn inside.
+    def label_centre(self, size: QSizeF) -> QPointF:
+        """Say where the box of the transition's name goes.
+
+        **Across the bar and never off its end**: under it while it lies across
+        the sheet, which is the base's answer, and beside it once it stands up.
+        A transition is met by its arcs at its **ends** — a net drawn left to
+        right joins one end to the next, and a net drawn top to bottom stands
+        its bars up and does the same — so the box is put where the arcs are
+        not, and it turns with the bar rather than staying where it was.
+
+        Parameters
+        ----------
+        size : PyQt6.QtCore.QSizeF
+            How big the box is, in millimetres.
+
+        Returns
+        -------
+        PyQt6.QtCore.QPointF
+            Where its centre goes, in the item's own coordinates.
+        """
+
+        if not self._vertical:
+            return super().label_centre(size)
+        room = self.item_rect()
+        return QPointF(room.right() + LABEL_GAP + size.width() / 2.0, room.center().y())
+
+    def item_rect(self) -> QRectF:
+        """Give what the bar itself is drawn inside.
+
+        What is written beside a transition is not in it; the bounding rectangle
+        is the base's, and holds both.
 
         Returns
         -------

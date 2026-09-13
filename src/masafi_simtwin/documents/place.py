@@ -212,8 +212,11 @@ class Place(NetItem):
 
         return [self.port_offset(angle) for angle in self.port_angles()]
 
-    def boundingRect(self) -> QRectF:  # noqa: N802  (Qt naming)
-        """Give what the place is drawn inside.
+    def item_rect(self) -> QRectF:
+        """Give what the circle itself is drawn inside.
+
+        What is written beside a place is not in it; the bounding rectangle is
+        the base's, and holds both.
 
         Returns
         -------

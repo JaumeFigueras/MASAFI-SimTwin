@@ -45,7 +45,7 @@ from __future__ import annotations
 import math
 
 from PyQt6.QtCore import QLineF, QPointF, QRectF, QSizeF, Qt, pyqtSignal
-from PyQt6.QtGui import QActionGroup, QColor, QPainter, QPalette, QPen
+from PyQt6.QtGui import QActionGroup, QColor, QCursor, QPainter, QPalette, QPen
 from PyQt6.QtWidgets import (
     QApplication,
     QGraphicsScene,
@@ -422,6 +422,28 @@ class CanvasView(QGraphicsView):
         """
 
         return round(value / SNAP_STEP) * SNAP_STEP
+
+    def pointer_on_the_sheet(self) -> QPointF | None:
+        """Give where the pointer is on the sheet, if it is over it at all.
+
+        Asked when it is wanted rather than followed and kept: a position noted
+        at the last move is a position that was true then, and what a paste
+        wants to know is where the pointer is **now** — which may be over
+        another window, or over the menu the paste was chosen from.
+
+        Returns
+        -------
+        PyQt6.QtCore.QPointF, optional
+            The pointer's place in scene millimetres, or ``None`` when it is not
+            over the sheet.
+        """
+
+        if not self.viewport().underMouse():
+            return None
+        where = self.viewport().mapFromGlobal(QCursor.pos())
+        if not self.viewport().rect().contains(where):
+            return None
+        return self.mapToScene(where)
 
     # ------------------------------------------------------------------
     # Guides

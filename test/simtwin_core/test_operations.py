@@ -475,3 +475,50 @@ def test_a_node_may_be_renamed_to_its_own_name_in_another_case():
     """Its own name is not another node's."""
 
     assert SetNodeName('p', 'P1', 'p1').apply(net()).places[0].name == 'p1'
+
+
+# ----------------------------------------------------------------------
+# A net, or a piece of one, as plain data
+# ----------------------------------------------------------------------
+
+
+def test_a_net_survives_being_written_and_read_back():
+    """Which is what the clipboard carries between two sheets."""
+
+    document = net(
+        places=(PlaceData('p', 'P1', (20.0, 20.0), 4, 'Bottles waiting'), OTHER),
+        transitions=(TransitionData('t', 'T1', (60.0, 20.0), 'Fill', True),),
+        guides=(GUIDE,),
+    )
+
+    written = json.loads(json.dumps(operations.encode_net(document)))
+
+    assert operations.decode_net(written) == document
+
+
+def test_a_piece_of_a_net_is_a_net_like_any_other():
+    """Two nodes and the arc between them, which is what a copy is."""
+
+    piece = NetDocument(places=(PLACE,), transitions=(TRANSITION,), arcs=(ARC,))
+
+    assert operations.decode_net(operations.encode_net(piece)) == piece
+
+
+def test_a_net_that_is_not_written_as_one_is_refused():
+    """A clipboard is anybody's to write into."""
+
+    with pytest.raises(ValueError, match='not a net'):
+        operations.decode_net('a net, honestly')
+    with pytest.raises(ValueError, match='not written as it should be'):
+        operations.decode_net({'places': [], 'transitions': []})
+
+
+def test_a_net_whose_pieces_do_not_make_a_net_is_refused_as_it_is_read():
+    """A document is checked as it is made, so nothing that could not be drawn
+    reaches a sheet."""
+
+    written = operations.encode_net(net())
+    written['arcs'][0]['target'] = 'gone'
+
+    with pytest.raises(InvalidNet):
+        operations.decode_net(written)

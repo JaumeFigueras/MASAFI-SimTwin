@@ -20,10 +20,27 @@ import pytest
 from PyQt6.QtCore import QMimeData, QPointF, QSizeF, Qt
 from PyQt6.QtGui import QDragMoveEvent, QDropEvent
 
-from masafi_simtwin.documents.net_item import PORT_GRAB, PORT_RADIUS, NetItem
+from PyQt6.QtGui import QColor
+
+from masafi_simtwin.documents.net_item import (
+    LABEL_GAP,
+    LABEL_LINE_HEIGHT,
+    LABEL_WIDTH,
+    PORT_GRAB,
+    PORT_RADIUS,
+    NetItem,
+    text_block,
+)
 from masafi_simtwin.documents.place import Place
 from masafi_simtwin.documents.transition import Transition
 from masafi_simtwin.library_tree import element_mime_data
+from masafi_simtwin.theme import DARK_COLORS, LIGHT_COLORS
+
+#: The two schemes every pixel test is run against.
+SCHEMES = [LIGHT_COLORS, DARK_COLORS]
+
+#: What each is called, so a failure names the scheme it happened in.
+SCHEME_NAMES = ['light', 'dark']
 
 #: The elements of the P/T library this editor can draw, and what each becomes.
 ELEMENTS = [('place', Place), ('transition', Transition)]
@@ -234,10 +251,12 @@ def test_pointing_at_an_item_shows_its_connecting_points(item):
 
 
 def test_an_item_is_positioned_by_its_centre(item):
-    """Which is what the connecting points are measured from."""
+    """Which is what the connecting points are measured from.  It is the shape's
+    own room that is centred on it; the bounding rectangle holds the label as
+    well, which hangs to one side."""
 
     assert item.pos() == QPointF(100.0, 80.0)
-    assert item.boundingRect().center() == QPointF(0.0, 0.0)
+    assert item.item_rect().center() == QPointF(0.0, 0.0)
 
 
 # ----------------------------------------------------------------------
@@ -285,7 +304,7 @@ def test_an_item_cannot_be_dragged_off_the_sheet(editor, item):
     """The whole of it stays on the paper, not merely its centre."""
 
     sheet = editor.scene().sceneRect()
-    reach = item.boundingRect()
+    reach = item.item_rect()
 
     item.setPos(QPointF(-500.0, -500.0))
     assert item.pos() == QPointF(-reach.left(), -reach.top())
@@ -444,9 +463,9 @@ def test_each_shape_says_where_its_own_connecting_points_go(place, transition):
 def test_the_two_shapes_are_not_the_same_size(place, transition):
     """A place is round and a transition is long, so their reaches differ."""
 
-    assert place.boundingRect() != transition.boundingRect()
-    assert math.isclose(place.boundingRect().width(), place.boundingRect().height())
-    assert transition.boundingRect().width() > transition.boundingRect().height()
+    assert place.item_rect() != transition.item_rect()
+    assert math.isclose(place.item_rect().width(), place.item_rect().height())
+    assert transition.item_rect().width() > transition.item_rect().height()
 
 
 # ----------------------------------------------------------------------
@@ -484,3 +503,170 @@ def test_text_that_draws_nothing_is_an_empty_path():
     from masafi_simtwin.documents.net_item import glyph_path
 
     assert glyph_path('', 3.0).isEmpty()
+
+
+# ----------------------------------------------------------------------
+# Laying out a block of text
+# ----------------------------------------------------------------------
+
+
+def test_a_block_of_one_line_is_one_line_high():
+    """The font's own line height, scaled to millimetres, so a block is as many
+    lines tall as it has lines."""
+
+    _glyphs, box = text_block('P1', LABEL_WIDTH)
+
+    assert box.height() == pytest.approx(LABEL_LINE_HEIGHT)
+    assert 0.0 < box.width() <= LABEL_WIDTH
+
+
+def test_a_block_goes_onto_another_line_rather_than_growing_wider():
+    """Which is what makes a label a box rather than a line of text running off
+    across the sheet."""
+
+    _glyphs, box = text_block(
+        'P1: bottles waiting to be filled, capped and taken away', LABEL_WIDTH
+    )
+
+    assert box.width() <= LABEL_WIDTH
+    assert box.height() == pytest.approx(LABEL_LINE_HEIGHT * round(box.height() / LABEL_LINE_HEIGHT))
+    assert box.height() > LABEL_LINE_HEIGHT * 2
+
+
+def test_a_word_wider_than_the_whole_box_is_broken():
+    """Rather than left to hang off the side, where it would run across whatever
+    is drawn beside it."""
+
+    _glyphs, box = text_block('P1: ' + 'x' * 200, LABEL_WIDTH)
+
+    assert box.width() <= LABEL_WIDTH
+    assert box.height() > LABEL_LINE_HEIGHT
+
+
+def test_a_block_is_centred_on_nought_by_its_box_and_not_by_its_ink():
+    """So where a label sits does not depend on which letters happen to be in
+    it: a line with a ``g`` in it hangs below the line, and that must not move
+    the box."""
+
+    plain, box = text_block('nn nn', LABEL_WIDTH)
+    tails, other = text_block('gg gg', LABEL_WIDTH)
+
+    assert box.height() == other.height()
+    assert plain.boundingRect().center().y() < tails.boundingRect().center().y()
+    assert abs(plain.boundingRect().center().y()) < LABEL_LINE_HEIGHT
+
+
+def test_a_block_of_nothing_is_nothing():
+    """An item made outside the editor has no name, and writes nothing."""
+
+    glyphs, box = text_block('', LABEL_WIDTH)
+
+    assert glyphs.isEmpty()
+    assert box.isEmpty()
+
+
+# ----------------------------------------------------------------------
+# What is written beside an item
+# ----------------------------------------------------------------------
+
+
+def test_an_item_is_labelled_with_its_name_and_its_description(item):
+    """One box, reading ``Name: Description``."""
+
+    item.description = 'Fill a bottle'
+
+    assert item.label_text() == f'{item.name}: Fill a bottle'
+
+
+def test_an_item_nobody_described_is_labelled_with_its_name_alone(item):
+    """No stray colon at the end of it."""
+
+    assert item.label_text() == item.name
+    assert item.name
+
+
+def test_an_item_with_no_name_is_labelled_with_nothing(item):
+    """Which is an item made outside the editor; the editor names every item it
+    puts on the sheet."""
+
+    item.name = ''
+
+    assert item.label_text() == ''
+    assert item.label_rect().isEmpty()
+    assert item.boundingRect() == item.item_rect()
+
+
+def test_the_label_is_drawn_inside_the_item_but_is_not_part_of_it(item):
+    """The bounding rectangle holds the box, so it is painted and repainted;
+    the shape does not, so clicking or dragging a caption is not clicking or
+    dragging the thing it captions."""
+
+    item.description = 'Bottles waiting to be filled'
+    box = item.label_rect()
+
+    assert not box.isEmpty()
+    assert item.boundingRect() == item.item_rect().united(box)
+    assert not item.shape().intersects(box)
+
+
+def test_the_label_stands_off_the_item_rather_than_touching_it(item):
+    """A caption against the rim of a place would read as part of it."""
+
+    room = item.item_rect()
+    box = item.label_rect()
+
+    assert not room.intersects(box)
+    assert min(
+        abs(box.top() - room.bottom()), abs(box.left() - room.right())
+    ) == pytest.approx(LABEL_GAP)
+
+
+def test_changing_the_name_or_the_description_writes_the_label_again(item):
+    """The box is as big as what is in it, so it is worked out anew rather than
+    kept from the last time."""
+
+    was = item.label_rect()
+
+    item.description = 'Bottles waiting to be filled, capped and taken away'
+
+    assert item.label_rect() != was
+    assert item.label_rect().height() > was.height()
+
+    item.description = ''
+
+    assert item.label_rect() == was
+
+
+def test_the_label_is_not_held_on_the_sheet_the_way_the_item_is(editor, item):
+    """What must stay on the paper is the shape: how far a node can be dragged
+    cannot depend on how long its description is, or typing one would be a thing
+    that moves nodes."""
+
+    item.description = 'Bottles waiting to be filled, capped and taken away'
+    sheet = editor.scene().sceneRect()
+    room = item.item_rect()
+
+    item.setPos(QPointF(sheet.right() + 500.0, sheet.bottom() + 500.0))
+
+    assert item.pos() == QPointF(sheet.right() - room.right(), sheet.bottom() - room.bottom())
+
+
+@pytest.mark.parametrize('colors', SCHEMES, ids=SCHEME_NAMES)
+def test_the_label_is_written_in_the_items_own_ink(item, ink, colors):
+    """The same ink the item is drawn in, and the accent while it is selected,
+    so that what belongs to one item reads as one thing."""
+
+    box = item.label_rect()
+    reach = min(box.width(), box.height()) / 2.0
+
+    plain = ink.window(
+        ink.painted(item, colors), box.center().x(), box.center().y(), reach
+    )
+    item.setSelected(True)
+    chosen = ink.window(
+        ink.painted(item, colors), box.center().x(), box.center().y(), reach
+    )
+
+    assert ink.holds(plain, QColor(colors.text))
+    assert not ink.holds(plain, QColor(colors.accent))
+    assert ink.holds(chosen, QColor(colors.accent))
