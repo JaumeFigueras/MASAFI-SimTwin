@@ -61,6 +61,7 @@ from masafi_simtwin.documents.arc import (
 from masafi_simtwin.documents.arc_toolbar import ArcToolBar
 from masafi_simtwin.documents.canvas import Canvas
 from masafi_simtwin.documents.guide import Guide
+from masafi_simtwin.documents.label import Label
 from masafi_simtwin.documents.net_item import NetItem
 from masafi_simtwin.documents.place import Place
 from masafi_simtwin.documents.ruler import MILLIMETRES, RulerUnit
@@ -807,6 +808,13 @@ class PetriNetEditor(Canvas):
     def selection(self) -> Selection:
         """Describe what is selected on the sheet.
 
+        **A caption stands for the thing it captions.**  Selecting the box under
+        a place is how a person says *this place* as much as clicking the circle
+        is, and what the Properties pane then shows is the place — the name and
+        the description that are written in the box.  It is only what is
+        *shown*: a caption is not the node, so *Copy* and *Delete*, which act on
+        what is selected, still find nothing.
+
         Returns
         -------
         Selection
@@ -814,7 +822,12 @@ class PetriNetEditor(Canvas):
             :meth:`to_document` would give of it, in a fixed order.
         """
 
-        selected = self.scene().selectedItems()
+        selected = []
+        for item in self.scene().selectedItems():
+            if isinstance(item, Label) and isinstance(item.parentItem(), NetItem):
+                item = item.parentItem()
+            if item not in selected:
+                selected.append(item)
         places = [item for item in selected if isinstance(item, Place)]
         transitions = [item for item in selected if isinstance(item, Transition)]
         arcs = [item for item in selected if isinstance(item, Arc)]

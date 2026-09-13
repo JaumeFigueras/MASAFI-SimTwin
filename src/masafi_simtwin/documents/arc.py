@@ -130,14 +130,12 @@ from PyQt6.QtCore import QCoreApplication, QLineF, QPointF, QRectF, Qt
 from PyQt6.QtGui import QPainterPath, QPainterPathStroker, QPen
 from PyQt6.QtWidgets import QGraphicsItem
 
+from masafi_simtwin.documents.ink import glyph_path, ink_colour, paper_colour
 from masafi_simtwin.documents.net_item import (
     ARC_Z,
     ITEM_PEN,
     ITEM_PEN_SELECTED,
     NetItem,
-    glyph_path,
-    ink_colour,
-    paper_colour,
 )
 
 #: How far from the line, in millimetres, the pointer may be and still take hold

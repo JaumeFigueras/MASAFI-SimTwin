@@ -28,32 +28,32 @@
 </context><context>
     <name>Arc</name>
     <message>
-        <location filename="../documents/arc.py" line="401" />
+        <location filename="../documents/arc.py" line="399" />
         <source>Straight</source>
         <translation>Straight</translation>
     </message>
     <message>
-        <location filename="../documents/arc.py" line="402" />
+        <location filename="../documents/arc.py" line="400" />
         <source>Curved</source>
         <translation>Curved</translation>
     </message>
     <message>
-        <location filename="../documents/arc.py" line="403" />
+        <location filename="../documents/arc.py" line="401" />
         <source>S-Curved</source>
         <translation>S-Curved</translation>
     </message>
     <message>
-        <location filename="../documents/arc.py" line="404" />
+        <location filename="../documents/arc.py" line="402" />
         <source>L-Shaped</source>
         <translation>L-Shaped</translation>
     </message>
     <message>
-        <location filename="../documents/arc.py" line="467" />
+        <location filename="../documents/arc.py" line="465" />
         <source>Normal</source>
         <translation>Normal</translation>
     </message>
     <message>
-        <location filename="../documents/arc.py" line="468" />
+        <location filename="../documents/arc.py" line="466" />
         <source>Inhibitor</source>
         <translation>Inhibitor</translation>
     </message>
@@ -888,97 +888,97 @@
         <translation>Drag an element out of the Libraries pane</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1173" />
+        <location filename="../documents/petri_net.py" line="1186" />
         <source>Add Element</source>
         <translation>Add Element</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1174" />
+        <location filename="../documents/petri_net.py" line="1187" />
         <source>Draw Arc</source>
         <translation>Draw Arc</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1175" />
+        <location filename="../documents/petri_net.py" line="1188" />
         <source>Change Weight</source>
         <translation>Change Weight</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1176" />
+        <location filename="../documents/petri_net.py" line="1189" />
         <source>Change Arc Shape</source>
         <translation>Change Arc Shape</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1177" />
+        <location filename="../documents/petri_net.py" line="1190" />
         <source>Change Arc Type</source>
         <translation>Change Arc Type</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1178" />
+        <location filename="../documents/petri_net.py" line="1191" />
         <source>Add Point</source>
         <translation>Add Point</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1179" />
+        <location filename="../documents/petri_net.py" line="1192" />
         <source>Delete Point</source>
         <translation>Delete Point</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1180" />
+        <location filename="../documents/petri_net.py" line="1193" />
         <source>Move</source>
         <translation>Move</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1181" />
+        <location filename="../documents/petri_net.py" line="1194" />
         <source>Move Guide</source>
         <translation>Move Guide</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1182" />
+        <location filename="../documents/petri_net.py" line="1195" />
         <source>Add Guide</source>
         <translation>Add Guide</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1183" />
+        <location filename="../documents/petri_net.py" line="1196" />
         <source>Shape Arc</source>
         <translation>Shape Arc</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1184" />
+        <location filename="../documents/petri_net.py" line="1197" />
         <source>Move Arc End</source>
         <translation>Move Arc End</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1185" />
+        <location filename="../documents/petri_net.py" line="1198" />
         <source>Delete</source>
         <translation>Delete</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1186" />
+        <location filename="../documents/petri_net.py" line="1199" />
         <source>Rename</source>
         <translation>Rename</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1187" />
+        <location filename="../documents/petri_net.py" line="1200" />
         <source>Change Tokens</source>
         <translation>Change Tokens</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1188" />
+        <location filename="../documents/petri_net.py" line="1201" />
         <source>Change Description</source>
         <translation>Change Description</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1189" />
+        <location filename="../documents/petri_net.py" line="1202" />
         <source>Rotate</source>
         <translation>Rotate</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1190" />
+        <location filename="../documents/petri_net.py" line="1203" />
         <source>Cut</source>
         <translation>Cut</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1191" />
+        <location filename="../documents/petri_net.py" line="1204" />
         <source>Paste</source>
         <translation>Paste</translation>
     </message>

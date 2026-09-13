@@ -12,7 +12,8 @@ import pytest
 from PyQt6.QtCore import QPointF
 from PyQt6.QtGui import QColor
 
-from masafi_simtwin.documents.net_item import LABEL_GAP, PORT_RADIUS
+from masafi_simtwin.documents.label import LABEL_GAP
+from masafi_simtwin.documents.net_item import PORT_RADIUS
 from masafi_simtwin.documents.place import (
     MAX_TOKEN_DOTS,
     PLACE_DIAMETER,
@@ -283,4 +284,4 @@ def test_a_places_label_is_under_it_and_centred(place):
     box = place.label_rect()
 
     assert box.center().x() == pytest.approx(0.0)
-    assert box.top() == pytest.approx(place.item_rect().bottom() + LABEL_GAP)
+    assert box.top() == pytest.approx(place.boundingRect().bottom() + LABEL_GAP)

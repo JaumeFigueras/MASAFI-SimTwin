@@ -66,10 +66,10 @@ from __future__ import annotations
 from PyQt6.QtCore import QPointF, QRectF, QSizeF
 from PyQt6.QtGui import QPainterPath
 
+from masafi_simtwin.documents.label import LABEL_GAP
 from masafi_simtwin.documents.net_item import (
     ITEM_PEN,
     ITEM_PEN_SELECTED,
-    LABEL_GAP,
     PORT_RADIUS,
     NetItem,
 )
@@ -242,8 +242,8 @@ class Transition(NetItem):
         across, down = self.half_sizes()
         return QRectF(-across, -down, across * 2.0, down * 2.0)
 
-    def label_centre(self, size: QSizeF) -> QPointF:
-        """Say where the box of the transition's name goes.
+    def label_anchor(self, size: QSizeF) -> QPointF:
+        """Say where the box of the transition's name belongs.
 
         **Across the bar and never off its end**: under it while it lies across
         the sheet, which is the base's answer, and beside it once it stands up.
@@ -264,15 +264,15 @@ class Transition(NetItem):
         """
 
         if not self._vertical:
-            return super().label_centre(size)
-        room = self.item_rect()
+            return super().label_anchor(size)
+        room = self.boundingRect()
         return QPointF(room.right() + LABEL_GAP + size.width() / 2.0, room.center().y())
 
-    def item_rect(self) -> QRectF:
+    def boundingRect(self) -> QRectF:  # noqa: N802  (Qt naming)
         """Give what the bar itself is drawn inside.
 
-        What is written beside a transition is not in it; the bounding rectangle
-        is the base's, and holds both.
+        What is written beside a transition is a child item with a rectangle of
+        its own and is not in this one.
 
         Returns
         -------

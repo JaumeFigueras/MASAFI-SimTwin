@@ -11,10 +11,8 @@ A subclass says three things and nothing else:
 
 ``ports()``
     Where an arc may be attached, in the item's own coordinates.
-``item_rect()`` and ``shape()``
-    How big the shape itself is, and what can be taken hold of.  The bounding
-    rectangle is the base's: the shape's room and the box its name is written
-    in, together.
+``boundingRect()`` and ``shape()``
+    How big it is, and what can be taken hold of.
 ``paint_item(painter, option)``
     How it is drawn.  The connecting points are drawn over it by
     :meth:`NetItem.paint`, so a subclass never draws them itself.
@@ -84,16 +82,11 @@ from collections.abc import Callable
 from uuid import uuid4
 
 from PyQt6.QtCore import QPointF, QRectF, QSizeF, Qt
-from PyQt6.QtGui import (
-    QColor,
-    QFont,
-    QFontMetricsF,
-    QPainterPath,
-    QPalette,
-    QPen,
-    QTransform,
-)
+from PyQt6.QtGui import QColor, QPainterPath, QPalette, QPen
 from PyQt6.QtWidgets import QGraphicsItem
+
+from masafi_simtwin.documents.ink import ink_colour, paper_colour
+from masafi_simtwin.documents.label import LABEL_GAP, LABEL_SEPARATOR, Label
 
 #: How big a connecting point is drawn, in millimetres of radius.  Small, and
 #: smaller than what it takes to aim at one: a connecting point is not part of
@@ -124,217 +117,6 @@ ITEM_Z = 10.0
 #: rather than across it and an arrowhead meets a boundary cleanly.
 ARC_Z = 5.0
 
-
-#: How tall one line of a label is, in millimetres — the font's whole line
-#: height, ascender to descender and the leading between two lines, so every
-#: line of every label is the same size whatever letters happen to be in it.
-LABEL_LINE_HEIGHT = 2.8
-
-#: How wide a label may grow, in millimetres, before it goes onto another line.
-#: Three places across: wide enough for a few words, narrow enough that a box
-#: belongs to the item under it rather than floating between two.
-LABEL_WIDTH = 30.0
-
-#: How far a label stands off the item it belongs to, in millimetres.
-LABEL_GAP = 1.0
-
-#: What goes between a node's name and its description.
-LABEL_SEPARATOR = ': '
-
-
-def label_lines(text: str, width: float, metrics: QFontMetricsF, scale: float) -> list[str]:
-    """Break a piece of text into the lines a box that wide holds.
-
-    Greedy and by words, which is what a person reading a label expects.  A
-    **word wider than the whole box** is broken where it stops fitting rather
-    than left to hang off the side: the box is measured from the item it belongs
-    to, and one that grows without limit would run across the next item along.
-
-    Parameters
-    ----------
-    text : str
-        The text.  Runs of whitespace part the words and are not kept.
-    width : float
-        How wide the box may be, in millimetres.
-    metrics : PyQt6.QtGui.QFontMetricsF
-        The font it is laid out in.
-    scale : float
-        How many millimetres one unit of that font is.
-
-    Returns
-    -------
-    list of str
-        The lines, none of them empty, and none wider than the box but for a
-        single character that is.
-    """
-
-    room = width / scale
-
-    def fits(line: str) -> bool:
-        return metrics.horizontalAdvance(line) <= room
-
-    lines: list[str] = []
-    for word in text.split():
-        while not fits(word):
-            broken = 1
-            while broken < len(word) and fits(word[: broken + 1]):
-                broken += 1
-            if lines and fits(f'{lines[-1]} {word[:broken]}'):
-                lines[-1] = f'{lines[-1]} {word[:broken]}'
-            else:
-                lines.append(word[:broken])
-            word = word[broken:]
-        if not word:
-            continue
-        if lines and fits(f'{lines[-1]} {word}'):
-            lines[-1] = f'{lines[-1]} {word}'
-        else:
-            lines.append(word)
-    return lines
-
-
-def text_block(text: str, width: float, line_height: float = LABEL_LINE_HEIGHT):
-    """Lay a piece of text out as a path of however many lines it needs.
-
-    A block of text is not :func:`glyph_path`: that scales one piece of text so
-    that **its own ink** is a height, which is what a single number wants and
-    exactly what a block of several lines must not have — a line with a ``g`` in
-    it would come out smaller than a line without one.  Here the font's own line
-    height is what is scaled, once, for the whole block, so every line is the
-    same size and one line below the last.
-
-    The path is centred on the middle of the **box** rather than of the ink, so
-    where a label sits does not depend on which letters are in it.
-
-    Parameters
-    ----------
-    text : str
-        What to write.
-    width : float
-        How wide it may be, in millimetres, before it goes onto another line.
-    line_height : float, optional
-        How tall one line is, in millimetres.
-
-    Returns
-    -------
-    tuple
-        The glyphs as a :class:`~PyQt6.QtGui.QPainterPath` centred on nought,
-        and the size of the box they were laid out in as a
-        :class:`~PyQt6.QtCore.QSizeF`.  Both are empty for text that writes
-        nothing.
-    """
-
-    font = QFont()
-    metrics = QFontMetricsF(font)
-    if metrics.height() <= 0.0:  # pragma: no cover - a font always has a height
-        return QPainterPath(), QSizeF(0.0, 0.0)
-
-    scale = line_height / metrics.height()
-    lines = label_lines(text, width, metrics, scale)
-    if not lines:
-        return QPainterPath(), QSizeF(0.0, 0.0)
-
-    box = QSizeF(
-        max(metrics.horizontalAdvance(line) for line in lines) * scale,
-        len(lines) * line_height,
-    )
-
-    glyphs = QPainterPath()
-    for row, line in enumerate(lines):
-        along = (box.width() / scale - metrics.horizontalAdvance(line)) / 2.0
-        glyphs.addText(along, metrics.ascent() + row * metrics.height(), font, line)
-    glyphs = QTransform().scale(scale, scale).map(glyphs)
-    glyphs.translate(-box.width() / 2.0, -box.height() / 2.0)
-    return glyphs, box
-
-
-def glyph_path(text: str, height: float, width: float | None = None) -> QPainterPath:
-    """Build a piece of text as a path a height in millimetres, centred on nought.
-
-    What is written on the sheet — an arc's weight, a place's tokens — is a
-    **path** rather than text drawn with a font, because the scene is measured in
-    millimetres and a font in points: a path is scaled to a height on the paper,
-    so it is the same size at every zoom and on every machine, and it is filled
-    with the same brush as the thing it belongs to.
-
-    Parameters
-    ----------
-    text : str
-        What to write.
-    height : float
-        How tall it is to be, in millimetres.
-    width : float, optional
-        How wide it may be.  Text that would be wider at that height is
-        narrowed to it instead, keeping its proportions.
-
-    Returns
-    -------
-    PyQt6.QtGui.QPainterPath
-        The glyphs, their bounding box centred on the origin, or an empty path
-        for text that draws nothing.
-    """
-
-    glyphs = QPainterPath()
-    glyphs.addText(0.0, 0.0, QFont(), text)
-    drawn = glyphs.boundingRect()
-    if drawn.isEmpty():
-        return QPainterPath()
-
-    glyphs.translate(-drawn.center().x(), -drawn.center().y())
-    scale = height / drawn.height()
-    if width is not None and drawn.width() * scale > width:
-        scale = width / drawn.width()
-    return QTransform().scale(scale, scale).map(glyphs)
-
-
-def ink_colour(selected: bool, option) -> QColor:
-    """Give the colour a thing of the net is drawn in.
-
-    ``Text`` is the ink of the sheet and ``Link`` is the accent — where
-    :data:`~masafi_simtwin.theme.ThemeColors.accent` is kept, ``Highlight`` being
-    the pale wash behind selected text — so a selected thing is drawn in the
-    accent.  It is one rule for the items and the arcs alike, which is why it is
-    a function here rather than a method of either.
-
-    Parameters
-    ----------
-    selected : bool
-        Whether the thing is selected.
-    option : PyQt6.QtWidgets.QStyleOptionGraphicsItem
-        What the view knows about drawing it, its palette included.  An item has
-        no widget to take a palette from, so this is where the palette comes
-        from.
-
-    Returns
-    -------
-    PyQt6.QtGui.QColor
-        The colour.
-    """
-
-    role = QPalette.ColorRole.Link if selected else QPalette.ColorRole.Text
-    return option.palette.color(role)
-
-
-def paper_colour(option) -> QColor:
-    """Give the colour of the sheet a thing of the net is drawn on.
-
-    ``Base`` is what :meth:`CanvasView.drawBackground` fills the sheet with, so
-    this is what a thing is filled with to read as a hole in whatever it is
-    over — a connecting point on a transition, a handle on a curve — and what a
-    place is filled with to be the colour of the paper it sits on.
-
-    Parameters
-    ----------
-    option : PyQt6.QtWidgets.QStyleOptionGraphicsItem
-        What the view knows about drawing it, its palette included.
-
-    Returns
-    -------
-    PyQt6.QtGui.QColor
-        The colour.
-    """
-
-    return option.palette.color(QPalette.ColorRole.Base)
 
 
 class NetItem(QGraphicsItem):
@@ -417,7 +199,7 @@ class NetItem(QGraphicsItem):
         self.uuid = str(uuid4())
         self._name = ''
         self._description = ''
-        self._label = None
+        self._label = Label(self)
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
@@ -451,11 +233,7 @@ class NetItem(QGraphicsItem):
         self._relabel('_description', str(description))
 
     def _relabel(self, field: str, value: str) -> None:
-        """Set one half of the label, and draw the label again.
-
-        The box is as big as what is in it, so this is a change of geometry and
-        not merely of paint: the view is told before the box changes size, or it
-        repaints the new box and leaves the old one on the sheet.
+        """Set one half of what the label says, and say it.
 
         Parameters
         ----------
@@ -467,10 +245,8 @@ class NetItem(QGraphicsItem):
 
         if value == getattr(self, field):
             return
-        self.prepareGeometryChange()
         setattr(self, field, value)
-        self._label = None
-        self.update()
+        self.show_label()
 
     def label_text(self) -> str:
         """Give what is written in the item's box, on one line before it wraps.
@@ -490,28 +266,34 @@ class NetItem(QGraphicsItem):
             return self._name
         return f'{self._name}{LABEL_SEPARATOR}{self._description}'
 
-    def label(self):
-        """Give the item's box: the glyphs, centred on nought, and its size.
+    @property
+    def label(self) -> Label:
+        """masafi_simtwin.documents.label.Label: The box written beside the item.
 
-        Worked out once and kept until the text changes, since a box is the same
-        box wherever the item is dragged and however the sheet is zoomed.
-
-        Returns
-        -------
-        tuple
-            The path and the :class:`~PyQt6.QtCore.QSizeF` it was laid out in.
+        A child of the item, so it follows it about the sheet of its own accord
+        and goes when it goes.  What it says and where it belongs are set from
+        here; everything a person does to it is the label's own.
         """
 
-        if self._label is None:
-            self._label = text_block(self.label_text(), LABEL_WIDTH)
         return self._label
 
-    def label_centre(self, size: QSizeF) -> QPointF:
-        """Say where a box of this size goes, in the item's own coordinates.
+    def show_label(self) -> None:
+        """Put what the item is called in its box, and the box where it belongs.
+
+        Called whenever either could have changed: the name, the description,
+        and the shape the box is measured from — a transition stood up is
+        captioned somewhere else than one lying across.
+        """
+
+        self._label.text = self.label_text()
+        self._label.setPos(self.label_anchor(self._label.size))
+
+    def label_anchor(self, size: QSizeF) -> QPointF:
+        """Say where a box of this size belongs, in the item's own coordinates.
 
         **Under the item, centred**, which is where the name of a place goes on
         a drawn net.  A transition says otherwise; see
-        :meth:`~masafi_simtwin.documents.transition.Transition.label_centre`.
+        :meth:`~masafi_simtwin.documents.transition.Transition.label_anchor`.
 
         Parameters
         ----------
@@ -524,7 +306,7 @@ class NetItem(QGraphicsItem):
             Where its centre goes.
         """
 
-        room = self.item_rect()
+        room = self.boundingRect()
         return QPointF(
             room.center().x(), room.bottom() + LABEL_GAP + size.height() / 2.0
         )
@@ -539,37 +321,7 @@ class NetItem(QGraphicsItem):
             beside it.
         """
 
-        _glyphs, size = self.label()
-        if size.isEmpty():
-            return QRectF()
-        centre = self.label_centre(size)
-        return QRectF(
-            centre.x() - size.width() / 2.0,
-            centre.y() - size.height() / 2.0,
-            size.width(),
-            size.height(),
-        )
-
-    def paint_label(self, painter, option) -> None:
-        """Write the item's name and description beside it.
-
-        In the item's own ink — the accent while it is selected — as the tokens
-        of a place are, so that what belongs to one item reads as one thing.
-
-        Parameters
-        ----------
-        painter : PyQt6.QtGui.QPainter
-            The painter of the view.
-        option : PyQt6.QtWidgets.QStyleOptionGraphicsItem
-            What the view knows about drawing this item, its palette included.
-        """
-
-        glyphs, size = self.label()
-        if glyphs.isEmpty():
-            return
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(ink_colour(self.isSelected(), option))
-        painter.drawPath(glyphs.translated(self.label_centre(size)))
+        return self._label.box().translated(self._label.pos())
 
     # ------------------------------------------------------------------
     # The connecting points
@@ -876,18 +628,19 @@ class NetItem(QGraphicsItem):
 
         Moving is the scene's own business and goes through :meth:`itemChange`,
         but an item that changes **shape** where it stands moves nothing, so
-        nothing is told: the view holds the rectangle the item used to have, the
-        arcs are still aimed at where its connecting points used to be, and it
-        may now reach off the paper.  This is the three of those put right, and
-        it is called by whatever changed the shape — after the change, since it
-        is the new shape that has to fit.
+        nothing is told: the view holds the rectangle the item used to have, its
+        caption is where the old shape put it, the arcs are still aimed at where
+        its connecting points used to be, and it may now reach off the paper.
+        This is the four of those put right, and it is called by whatever
+        changed the shape — after the change, since it is the new shape that has
+        to fit.
 
         :meth:`~PyQt6.QtWidgets.QGraphicsItem.prepareGeometryChange` is **not**
         called here: it says the geometry is *about to* change, so that the view
         repaints where the item was last drawn, and by now it already has.
         """
 
-        self._label = None
+        self.show_label()
         if self._bounds is not None:
             x, y = self._inside(self.pos().x(), self.pos().y(), self._bounds())
             self.setPos(QPointF(x, y))
@@ -903,10 +656,10 @@ class NetItem(QGraphicsItem):
         too small to hold it at all is left alone rather than pinning the item to
         a corner of a sheet it does not fit on.
 
-        It is :meth:`item_rect` that is measured and not :meth:`boundingRect`:
-        what has to stay on the paper is the **shape**.  Holding the label on as
-        well would make how far a node can be dragged depend on how long its
-        description is, and typing one would then be a thing that moves nodes.
+        What is measured is the item's **own** rectangle.  Its caption is a child
+        with a rectangle of its own and is not held on the paper with it: how far
+        a node can be dragged cannot depend on how long its description is, or
+        typing one would be a thing that moves nodes.
 
         Parameters
         ----------
@@ -923,7 +676,7 @@ class NetItem(QGraphicsItem):
             The centre, held inside the area.
         """
 
-        room = self.item_rect()
+        room = self.boundingRect()
         left = area.left() - room.left()
         right = area.right() - room.right()
         top = area.top() - room.top()
@@ -1038,12 +791,12 @@ class NetItem(QGraphicsItem):
         raise NotImplementedError
 
     def paint(self, painter, option, widget=None) -> None:
-        """Draw the item, what is written beside it, and its connecting points.
+        """Draw the item, and its connecting points when they are shown.
 
-        The label and the points are drawn here rather than by each subclass, so
-        that a name is written the same way on every item of a net and the
-        points are the same rings in the same colour however it is shaped, and
-        so that both are always on top of what they belong to.
+        The points are drawn here rather than by each subclass, so that they are
+        the same rings in the same colour on every item of a net however it is
+        shaped, and so that they are always on top of what they belong to.  What
+        is written beside the item is a child item and paints itself.
 
         A ring is the accent at width nought — Qt's cosmetic hairline, one pixel
         at every zoom — filled with ``Base``, the colour of the paper.  The fill
@@ -1060,7 +813,6 @@ class NetItem(QGraphicsItem):
         """
 
         self.paint_item(painter, option)
-        self.paint_label(painter, option)
         if not self._ports_visible:
             return
 
@@ -1072,10 +824,9 @@ class NetItem(QGraphicsItem):
     def shape(self) -> QPainterPath:
         """Give what can be taken hold of.
 
-        The label is **not** in it, deliberately: what is written beside an item
-        says what the item is, and clicking or dragging a caption is not
-        clicking or dragging the thing it captions.  A scene hit-tests and
-        rubber-bands against the shape, so the box is out of both.
+        The caption beside the item is not part of it and never was: it is a
+        child item with a shape of its own, so clicking a caption is clicking
+        the caption rather than the thing it captions.
 
         Returns
         -------
@@ -1090,12 +841,13 @@ class NetItem(QGraphicsItem):
 
         raise NotImplementedError
 
-    def item_rect(self) -> QRectF:
-        """Give what the shape itself is drawn inside, its connecting points and
-        its thickest outline included.
+    def boundingRect(self) -> QRectF:  # noqa: N802  (Qt naming)
+        """Give what the item is drawn inside, its connecting points included.
 
-        This is the item's **room**: what is held on the paper as it is dragged,
-        and what a label is measured from.
+        This is the item's own room, and the caption beside it is **not** in it:
+        a label is a child with a rectangle of its own.  So this is what is held
+        on the paper as the item is dragged, and what its caption is measured
+        from.
 
         Returns
         -------
@@ -1109,17 +861,3 @@ class NetItem(QGraphicsItem):
         """
 
         raise NotImplementedError
-
-    def boundingRect(self) -> QRectF:  # noqa: N802  (Qt naming)
-        """Give everything the item paints inside.
-
-        The shape's own room and the box its name is written in, which is a
-        rectangle around both and so is not centred on the item.
-
-        Returns
-        -------
-        PyQt6.QtCore.QRectF
-            The rectangle, in the item's own coordinates.
-        """
-
-        return self.item_rect().united(self.label_rect())

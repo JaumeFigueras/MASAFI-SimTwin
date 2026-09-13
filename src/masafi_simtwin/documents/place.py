@@ -51,14 +51,12 @@ import math
 from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QPainterPath
 
+from masafi_simtwin.documents.ink import glyph_path, ink_colour, paper_colour
 from masafi_simtwin.documents.net_item import (
     ITEM_PEN,
     ITEM_PEN_SELECTED,
     PORT_RADIUS,
     NetItem,
-    glyph_path,
-    ink_colour,
-    paper_colour,
 )
 
 #: How far across a place is, in millimetres.  One centimetre.
@@ -212,11 +210,11 @@ class Place(NetItem):
 
         return [self.port_offset(angle) for angle in self.port_angles()]
 
-    def item_rect(self) -> QRectF:
+    def boundingRect(self) -> QRectF:  # noqa: N802  (Qt naming)
         """Give what the circle itself is drawn inside.
 
-        What is written beside a place is not in it; the bounding rectangle is
-        the base's, and holds both.
+        What is written beside a place is a child item with a rectangle of its
+        own and is not in this one.
 
         Returns
         -------

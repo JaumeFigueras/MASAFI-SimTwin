@@ -1,0 +1,286 @@
+"""The box of text that says what something on the sheet is.
+
+A **label** is what is written beside a place, a transition or an arc: one box,
+holding the node's name and description as ``Name: Description``, or an arc's
+weight.  It is a thing of its own rather than something its owner paints,
+because a person is to be able to take hold of it — to select it, to move it and
+to give it another width — and selecting, dragging and picking a thing out from
+under the pointer are the scene's own work.  That is the argument
+:class:`~masafi_simtwin.documents.guide.Guide` is a scene item for, met a second
+time.
+
+**A label is a child of what it belongs to.**  So it follows a node dragged
+about the sheet, and an arc re-routed between two of them, with nothing to keep
+in step: a child is drawn in its parent's coordinates, and Qt moves a parent
+without touching what a child's own position says.  Qt also declines to move a
+selected child of a selected parent twice, which is what makes a caption caught
+in the same selection as its node harmless.
+
+**It is dumb, and its owner is not.**  A label holds a piece of text and draws
+it; *where it belongs* is its owner's to say — under a place, across a
+transition, beside the middle of an arc — and so is what the text says.  The
+owner sets both, and the label reports what a person did to it.
+
+**A label is selected by clicking it, or by something asking outright — and by
+nothing else.**  A rubber band
+drawn over a net is aimed at the net, and a caption is not part of the drawing
+in the way a place is: it says what the place is called.  So a band never picks
+one up — :meth:`Label.itemChange` refuses a selection nobody asked for —
+and a caption is never among what *Delete* or *Cut* act on.  A caption cannot be
+deleted: it goes when the thing it describes goes.
+"""
+
+from __future__ import annotations
+
+from PyQt6.QtCore import QRectF, QSizeF, Qt
+from PyQt6.QtGui import QPainterPath, QPen
+from PyQt6.QtWidgets import QGraphicsItem
+
+from masafi_simtwin.documents.ink import LABEL_WIDTH, ink_colour, text_block
+
+#: How far a label stands off the item it belongs to, in millimetres.
+LABEL_GAP = 1.0
+
+#: What goes between a node's name and its description.
+LABEL_SEPARATOR = ': '
+
+#: How much air there is between the text and the frame drawn round it while it
+#: is selected, in millimetres.  A frame tight on the ink reads as a box that is
+#: too small for what is in it.
+LABEL_PADDING = 0.5
+
+
+class Label(QGraphicsItem):
+    """What is written beside something on the sheet, as a thing of its own.
+
+    Parameters
+    ----------
+    parent : PyQt6.QtWidgets.QGraphicsItem
+        What the label belongs to.  A label is always a child: it is drawn in
+        its owner's coordinates and goes when its owner goes.
+
+    Attributes
+    ----------
+    text : str
+        What is written in it.  Nothing at all for a thing with nothing to say,
+        which draws no box and cannot be selected.
+    """
+
+    def __init__(self, parent: QGraphicsItem) -> None:
+        super().__init__(parent)
+        self._text = ''
+        self._glyphs = QPainterPath()
+        self._size = QSizeF(0.0, 0.0)
+        self._asked = False
+
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
+
+    # ------------------------------------------------------------------
+    # What it says
+    # ------------------------------------------------------------------
+
+    @property
+    def text(self) -> str:
+        """str: What is written in the box.
+
+        Setting it lays the box out again, which is a change of geometry and not
+        merely of paint: the box is as big as what is in it, so the view has to
+        be told before it changes size or it repaints the new box and leaves the
+        old one on the sheet.
+        """
+
+        return self._text
+
+    @text.setter
+    def text(self, text: str) -> None:
+        text = str(text)
+        if text == self._text:
+            return
+        self.prepareGeometryChange()
+        self._text = text
+        self._glyphs, self._size = text_block(text, LABEL_WIDTH)
+        if not self._text:
+            self.setSelected(False)
+        self.update()
+
+    @property
+    def size(self) -> QSizeF:
+        """PyQt6.QtCore.QSizeF: How big the box is, in millimetres.
+
+        Empty for a label with nothing to say.  It is what an owner works out
+        where the box belongs from, so it is asked for rather than guessed at.
+        """
+
+        return QSizeF(self._size)
+
+    def is_empty(self) -> bool:
+        """Say whether there is nothing to draw.
+
+        Returns
+        -------
+        bool
+            Whether the box is empty, which is what a thing with no name comes
+            to — an item made outside the editor.
+        """
+
+        return self._glyphs.isEmpty()
+
+    def box(self) -> QRectF:
+        """Give the box, centred on the label's own position.
+
+        Returns
+        -------
+        PyQt6.QtCore.QRectF
+            The rectangle the text was laid out in, and an empty one for a label
+            with nothing to say.
+        """
+
+        if self.is_empty():
+            return QRectF()
+        return QRectF(
+            -self._size.width() / 2.0,
+            -self._size.height() / 2.0,
+            self._size.width(),
+            self._size.height(),
+        )
+
+    # ------------------------------------------------------------------
+    # Being a thing on the sheet
+    # ------------------------------------------------------------------
+
+    def boundingRect(self) -> QRectF:  # noqa: N802  (Qt naming)
+        """Give what the label paints inside: the box and its frame.
+
+        Returns
+        -------
+        PyQt6.QtCore.QRectF
+            The rectangle.
+        """
+
+        box = self.box()
+        if box.isEmpty():
+            return box
+        reach = LABEL_PADDING * 2.0
+        return box.adjusted(-reach, -reach, reach, reach)
+
+    def shape(self) -> QPainterPath:
+        """Give what can be taken hold of, which is the box and its air.
+
+        Returns
+        -------
+        PyQt6.QtGui.QPainterPath
+            The padded box, and nothing at all for a label with nothing in it —
+            a thing with no name is a thing with nothing to click on.
+        """
+
+        path = QPainterPath()
+        box = self.box()
+        if not box.isEmpty():
+            path.addRect(box.adjusted(-LABEL_PADDING, -LABEL_PADDING, LABEL_PADDING, LABEL_PADDING))
+        return path
+
+    def paint(self, painter, option, widget=None) -> None:
+        """Write the text, and frame it while it is selected.
+
+        The ink is the **owner's**: a caption is drawn in the accent while the
+        thing it describes is selected, so that the two read as one thing, and
+        in the accent while the caption itself is selected, so that taking hold
+        of one can be seen.  The frame is what tells the two apart — a hairline
+        of the accent, dashed, the way a selected guide is dashed.
+
+        Parameters
+        ----------
+        painter : PyQt6.QtGui.QPainter
+            The painter of the view.
+        option : PyQt6.QtWidgets.QStyleOptionGraphicsItem
+            What the view knows about drawing this label, its palette included.
+        widget : PyQt6.QtWidgets.QWidget, optional
+            The widget being painted on.
+        """
+
+        if self.is_empty():
+            return
+
+        owner = self.parentItem()
+        chosen = self.isSelected() or (owner is not None and owner.isSelected())
+        ink = ink_colour(chosen, option)
+
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(ink)
+        painter.drawPath(self._glyphs)
+
+        if not self.isSelected():
+            return
+        painter.setPen(QPen(ink, 0.0, Qt.PenStyle.DashLine))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRect(
+            self.box().adjusted(-LABEL_PADDING, -LABEL_PADDING, LABEL_PADDING, LABEL_PADDING)
+        )
+
+    # ------------------------------------------------------------------
+    # Taking hold of one
+    # ------------------------------------------------------------------
+
+    def select(self) -> None:
+        """Take hold of the label, as a press on it does.
+
+        The other door into a selection, for whatever asks for one outright.  A
+        rubber band asks for nothing: it sets an area, and what falls inside it
+        is selected without anybody having aimed at it, which is exactly what a
+        caption is to be safe from.
+        """
+
+        self._asked = True
+        try:
+            self.setSelected(True)
+        finally:
+            self._asked = False
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802  (Qt naming)
+        """Let the press through, and let it select the label.
+
+        Qt's own handler is what selects an item that is pressed, so the flag
+        that :meth:`itemChange` looks for is raised around it and lowered again
+        afterwards.
+
+        Parameters
+        ----------
+        event : PyQt6.QtWidgets.QGraphicsSceneMouseEvent
+            The press.
+        """
+
+        self._asked = True
+        try:
+            super().mousePressEvent(event)
+        finally:
+            self._asked = False
+
+    def itemChange(self, change, value):  # noqa: N802  (Qt naming)
+        """Refuse a selection nobody asked for.
+
+        A rubber band is drawn over the net to pick up what is drawn; a caption
+        is not that, and a band that swept up half the captions on a sheet would
+        make *Delete* look dangerous when it is not.  A press and :meth:`select`
+        are the two things that do ask.  Putting a selection **down** is never
+        refused, whoever asks.
+
+        Parameters
+        ----------
+        change : PyQt6.QtWidgets.QGraphicsItem.GraphicsItemChange
+            What is being changed.
+        value : object
+            What it is being changed to.
+
+        Returns
+        -------
+        object
+            What it is changed to instead.
+        """
+
+        if (
+            change == QGraphicsItem.GraphicsItemChange.ItemSelectedChange
+            and value
+            and not self._asked
+        ):
+            return False
+        return super().itemChange(change, value)

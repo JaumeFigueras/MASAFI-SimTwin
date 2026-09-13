@@ -1164,16 +1164,17 @@ def test_a_node_is_labelled_with_what_it_is_called_and_what_it_is_for(editor):
     assert place.label_text() == 'P1: Bottles waiting'
 
 
-def test_a_label_grows_the_room_the_item_is_painted_in(editor):
-    """So the box is repainted rather than left half drawn on the sheet."""
+def test_a_label_grows_its_own_box_and_leaves_the_item_alone(editor):
+    """A caption is a child with a rectangle of its own, so writing a longer one
+    grows the box and not the place it belongs to."""
 
     place, _free, _transition, _arc = little_net(editor)
-    was = place.boundingRect()
+    was = place.label.size
 
     editor.describe((place.uuid,), 'Bottles waiting to be filled and capped')
 
-    assert place.boundingRect().height() > was.height()
-    assert place.item_rect() == place.boundingRect().intersected(place.item_rect())
+    assert place.label.size.height() > was.height()
+    assert place.boundingRect() == Place(None, None).boundingRect()
 
 
 def test_tokens_asked_of_a_transition_are_refused(editor):
@@ -1757,3 +1758,59 @@ def test_a_piece_copied_from_another_sheet_can_be_pasted_onto_this_one(editor, q
 
     assert sorted(item.name for item in other.items_of(NetItem)) == ['P1', 'P2', 'T1']
     assert len(other.arcs) == 1
+
+
+# ----------------------------------------------------------------------
+# What a caption is, to everything that acts on a selection
+# ----------------------------------------------------------------------
+
+
+def test_a_selected_caption_stands_for_the_node_it_captions(editor):
+    """Which is what the Properties pane is handed: selecting the box under a
+    place is how a person says *this place*."""
+
+    place, _free, _transition, _arc = little_net(editor)
+
+    place.label.select()
+
+    assert [data.uuid for data in editor.selection().places] == [place.uuid]
+
+
+def test_a_node_and_its_caption_selected_together_are_one_node(editor):
+    """A caption caught in the same selection as its node says nothing new."""
+
+    place, _free, _transition, _arc = little_net(editor)
+
+    place.setSelected(True)
+    place.label.select()
+
+    assert [data.uuid for data in editor.selection().places] == [place.uuid]
+
+
+def test_a_caption_is_not_something_to_delete(editor):
+    """It goes when the thing it describes goes, and not before: *Delete* with a
+    caption in hand does nothing at all."""
+
+    place, _free, _transition, _arc = little_net(editor)
+    before = editor.to_document()
+    count = editor.undo_stack.count()
+
+    place.label.select()
+    editor.view.delete_selection()
+
+    assert editor.to_document() == before
+    assert editor.undo_stack.count() == count
+
+
+def test_a_caption_is_not_something_to_copy_or_cut(editor):
+    """An arc alone cannot be copied and neither can a caption: what would be
+    pasted is a place nobody selected."""
+
+    place, _free, _transition, _arc = little_net(editor)
+    before = editor.to_document()
+
+    place.label.select()
+
+    assert editor.copy_selection() is None
+    assert editor.cut_selection() is None
+    assert editor.to_document() == before

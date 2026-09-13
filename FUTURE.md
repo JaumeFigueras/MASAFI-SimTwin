@@ -329,6 +329,12 @@ guide, guides not being copied, which is a second way the two disagree. It is no
 the answers below rather than leaving it; it stays here because which answer is right is a decision
 about how the editor selects, not about guides.
 
+**A caption answered this for itself**, and the answer is worth reading here: a `Label` refuses a
+selection nobody asked for, so a band never picks one up, while a click still does. That is the third
+option below in miniature — the thing decides rather than the band — and it works because a caption is
+never *wanted* from a band. A guide sometimes is, which is why the same trick is not simply copied
+over.
+
 **Why guides are scene items at all.** Because selecting one, dragging one, drawing one at any zoom
 and picking one out from under the pointer are then the scene's work rather than hit-testing,
 dragging and z-ordering written again by hand over the view. That is worth a great deal more than the
@@ -780,10 +786,15 @@ there, what its rate means, and where the number came from, which is a paragraph
 
 **Now.** A node's name and description are written in one box, `Name: Description`, wrapped to
 `LABEL_WIDTH` and put in a fixed place: under a place, centred; across a transition, which is under a bar
-lying across the sheet and beside one standing up. Nowhere else. A label cannot be dragged, has no offset
-of its own, is not written to the file, and is drawn straight onto the sheet with nothing behind it — so
-an arc leaving a **place** downwards is drawn across the words under it, and two nodes a few millimetres
-apart have two boxes that overlap.
+lying across the sheet and beside one standing up. The box is a thing of its own and can be **selected**,
+which is the first of the three a person will want; it cannot yet be **moved** or **given another
+width**, so it has no offset and no width of its own, nothing about it is written to the file, and it is
+drawn straight onto the sheet with nothing behind it — so an arc leaving a **place** downwards is drawn
+across the words under it, and two nodes a few millimetres apart have two boxes that overlap.
+
+Moving and resizing are the next two steps of the work this entry describes, and the offset will be
+written where PNML keeps one (`<name><graphics><offset>`); what stays open afterwards is everything
+below.
 
 **Why it was done this way.** A fixed place is what makes a label free: nothing to store, nothing to
 undo, nothing new in the file, and no third thing on the sheet that can be selected, moved or lost.
@@ -802,13 +813,10 @@ lets carry a `graphics`/`offset` for a node's name that is dropped on reading an
 
 **Options.**
 
-- **A draggable label**, its offset from the item kept in the chord-frame idiom the arcs already use and
-  written to the file — as PNML's own name `offset`, which is exactly this. It is the answer PNML
-  expects, and it makes the label a fourth thing that can be taken hold of: `shape()` would have to
-  hold it, and dragging it must not drag the item.
 - **A choice of side** — above, below, left, right — one enumerated value per node rather than a
   position. Much less to store and to explain than an offset, and it covers most of what a person
-  dragging a label is trying to do.
+  dragging a label is trying to do. It was passed over in favour of a free offset, which is being
+  built; it is still the smaller answer if the offset turns out to be more freedom than anybody wants.
 - **Laying them out**, moving each box off whatever it collides with. Nothing to store at all, and no
   two people would agree about where a box should have gone.
 

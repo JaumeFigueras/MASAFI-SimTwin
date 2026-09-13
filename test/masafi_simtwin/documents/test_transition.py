@@ -11,7 +11,8 @@ import pytest
 from PyQt6.QtCore import QPointF
 from PyQt6.QtGui import QColor
 
-from masafi_simtwin.documents.net_item import ITEM_PEN, LABEL_GAP, PORT_RADIUS
+from masafi_simtwin.documents.label import LABEL_GAP
+from masafi_simtwin.documents.net_item import ITEM_PEN, PORT_RADIUS
 from masafi_simtwin.documents.transition import (
     PORT_COUNT,
     PORT_SPACING,
@@ -280,7 +281,7 @@ def test_a_bar_lying_across_the_sheet_is_labelled_under_it(transition):
     box = transition.label_rect()
 
     assert box.center().x() == pytest.approx(0.0)
-    assert box.top() == pytest.approx(transition.item_rect().bottom() + LABEL_GAP)
+    assert box.top() == pytest.approx(transition.boundingRect().bottom() + LABEL_GAP)
 
 
 def test_a_bar_standing_up_is_labelled_beside_it(transition):
