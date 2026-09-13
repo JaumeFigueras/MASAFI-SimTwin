@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import replace
 from xml.etree import ElementTree
 
 import pytest
@@ -329,7 +330,7 @@ def test_a_net_drawn_on_the_sheet_survives_a_file(qtbot):
 
 
 # ----------------------------------------------------------------------
-# Tokens and descriptions
+# Tokens, descriptions and which way round a transition is
 # ----------------------------------------------------------------------
 
 
@@ -360,8 +361,27 @@ def test_a_description_rides_in_the_tools_own_data():
     assert 'description' not in node_of('P2').attrib
 
 
+def test_a_transition_standing_up_rides_in_the_tools_own_data():
+    """Written only when it stands up, since lying across is what a transition
+    does unless a file says otherwise — a foreign file included."""
+
+    upright = TransitionData('t2', 'T2', (70.0, 60.0), '', True)
+    document = replace(DRAWN, transitions=(*DRAWN.transitions, upright))
+    written = pnml.to_pnml(document)
+    root = tree_of(written)
+    namespace = f'{{{pnml.TOOL_NAMESPACE}}}'
+
+    def node_of(name):
+        tool = element_for(root, name).find(qname('toolspecific'))
+        return tool.find(f'{namespace}node')
+
+    assert node_of('T2').get('vertical') == 'true'
+    assert 'vertical' not in node_of('T1').attrib
+    assert pnml.from_pnml(written) == document
+
+
 def test_a_marking_another_tool_writes_is_read_as_tokens():
-    """And its nodes have no description."""
+    """And its nodes have no description, and its bars lie across the sheet."""
 
     written = FROM_ANOTHER_TOOL.replace(
         b'<place id="p"><name><text>buffer</text></name></place>',
@@ -373,6 +393,7 @@ def test_a_marking_another_tool_writes_is_read_as_tokens():
 
     assert {place.name: place.tokens for place in document.places} == {'buffer': 4, 'done': 0}
     assert all(node.description == '' for node in (*document.places, *document.transitions))
+    assert all(transition.vertical is False for transition in document.transitions)
 
 
 

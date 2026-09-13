@@ -85,6 +85,7 @@ from simtwin_core.operations import (
     SetDescription,
     SetNodeName,
     SetTokens,
+    SetVertical,
 )
 from simtwin_core.petri_net import (
     ArcData,
@@ -239,13 +240,13 @@ def node_data(item: NetItem):
     -------
     simtwin_core.petri_net.PlaceData or simtwin_core.petri_net.TransitionData
         What it is: its identity, its name, where its centre is, its
-        description, and a place's tokens.
+        description, a place's tokens and which way round a transition is drawn.
     """
 
     position = (item.pos().x(), item.pos().y())
     if isinstance(item, Place):
         return PlaceData(item.uuid, item.name, position, item.tokens, item.description)
-    return TransitionData(item.uuid, item.name, position, item.description)
+    return TransitionData(item.uuid, item.name, position, item.description, item.vertical)
 
 
 def guide_data(guide: Guide) -> GuideData:
@@ -424,6 +425,7 @@ class PetriNetEditor(Canvas):
         self.view.arcs_shaped.connect(self._on_arcs_shaped)
         self.view.arc_point_asked.connect(self._on_arc_point_asked)
         self.view.arc_point_removal_asked.connect(self._on_arc_point_removal_asked)
+        self.view.rotation_asked.connect(self._on_rotation_asked)
         self.arc_tool_bar.shape_chosen.connect(self._on_shape_chosen)
         self.arc_tool_bar.kind_chosen.connect(self._on_kind_chosen)
         self.scene().selectionChanged.connect(self._on_selection_changed)
@@ -1045,6 +1047,17 @@ class PetriNetEditor(Canvas):
         self.take_arc_point_out(arc, index)
         self.view.work_on(arc)
 
+    def _on_rotation_asked(self, items) -> None:
+        """Turn the items a context menu asked to have turned.
+
+        Parameters
+        ----------
+        items : list of masafi_simtwin.documents.net_item.NetItem
+            What was aimed at.
+        """
+
+        self.rotate(item.uuid for item in items)
+
     # ------------------------------------------------------------------
     # What can be undone
     # ------------------------------------------------------------------
@@ -1133,6 +1146,7 @@ class PetriNetEditor(Canvas):
             'rename-node': self.tr('Rename'),
             'set-tokens': self.tr('Change Tokens'),
             'set-description': self.tr('Change Description'),
+            'rotate': self.tr('Rotate'),
         }
         return labels.get(name, name)
 
@@ -1232,6 +1246,8 @@ class PetriNetEditor(Canvas):
         item.description = data.description
         if isinstance(data, PlaceData):
             item.tokens = data.tokens
+        else:
+            item.vertical = data.vertical
         self.scene().addItem(item)
         item.setPos(QPointF(*data.position))
         return item
@@ -1406,6 +1422,11 @@ class PetriNetEditor(Canvas):
             place.tokens = operation.after
         elif isinstance(operation, SetDescription):
             self.node(operation.node).description = operation.after
+        elif isinstance(operation, SetVertical):
+            transition = self.node(operation.node)
+            if not isinstance(transition, Transition):
+                raise ValueError(f'the sheet has no transition {operation.node!r} to turn')
+            transition.vertical = operation.after
         elif isinstance(operation, AddArc):
             self.draw_arc(operation.arc)
         elif isinstance(operation, RemoveArc):
@@ -1521,6 +1542,49 @@ class PetriNetEditor(Canvas):
             if node.description != description
         )
         self.push(Change('set-description', operations))
+        return bool(operations)
+
+    def rotate(self, uuids) -> bool:
+        """Turn some transitions the other way round, as one recorded change.
+
+        Each is turned on its own: one standing up lies down and one lying
+        across stands up, so turning a selection twice gives back exactly the
+        drawing it started as.  A place among them is passed over, being round.
+
+        It is **done and then recorded**, the way a gesture is — see
+        :meth:`record` — because a bar that stands up is taller than it was and
+        one at the very edge of the sheet is brought back onto the paper as it
+        turns.  The move that put it back is part of the change, and it is
+        recorded **before** the turn although it happened after it: the two
+        commute in a description, and in that order neither the change nor its
+        inverse ever asks for an upright bar in a place only a flat one fits, so
+        undoing puts the drawing back as it was rather than most of the way.
+
+        Parameters
+        ----------
+        uuids : collections.abc.Iterable of str
+            The nodes to turn.
+
+        Returns
+        -------
+        bool
+            Whether anything was turned.
+        """
+
+        transitions = [
+            node for node in (self.node(uuid) for uuid in uuids) if isinstance(node, Transition)
+        ]
+        operations: list[Operation] = []
+        for transition in transitions:
+            before = (transition.pos().x(), transition.pos().y())
+            transition.vertical = not transition.vertical
+            after = (transition.pos().x(), transition.pos().y())
+            if after != before:
+                operations.append(MoveNode(transition.uuid, before, after))
+            operations.append(
+                SetVertical(transition.uuid, not transition.vertical, transition.vertical)
+            )
+        self.record(Change('rotate', tuple(operations)))
         return bool(operations)
 
     def set_weight(self, uuids, weight: int) -> bool:

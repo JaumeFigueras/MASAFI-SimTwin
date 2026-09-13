@@ -21,8 +21,8 @@ is the pattern MASAFI-sim-petri documents for the projects built on it:
   place is drawn is the editor's constant rather than a fact about this net.
 * ``<toolspecific tool="MASAFI-SimTwin" version="1">``, which PNML sets aside
   for exactly this and every other tool passes over: the model's UUID on the
-  ``net``, the guides on the ``page``, each node's UUID and its description when
-  it has one, and each arc's UUID,
+  ``net``, the guides on the ``page``, each node's UUID, its description when
+  it has one and a transition's way round when it stands up, and each arc's UUID,
   kind, shape, connecting points, control points and points in its chord frame
   — which is what the editor draws from, and which wins over the route.
 
@@ -217,6 +217,8 @@ def to_pnml(document: NetDocument) -> bytes:
         attributes = {'uuid': node.uuid}
         if node.description:
             attributes['description'] = node.description
+        if isinstance(node, TransitionData) and node.vertical:
+            attributes['vertical'] = 'true'
         ElementTree.SubElement(_tool_data(element), _ours('node'), attributes)
 
     for arc in document.arcs:
@@ -291,6 +293,7 @@ def from_pnml(data: bytes | str) -> NetDocument:
                     transition.name,
                     _position(element) or laid_out,
                     _node_description(element),
+                    _node_vertical(element),
                 )
             )
 
@@ -520,6 +523,27 @@ def _node_description(element: ElementTree.Element) -> str:
 
     node = _tool_element(element, 'node')
     return node.get('description', '') if node is not None else ''
+
+
+def _node_vertical(element: ElementTree.Element) -> bool:
+    """Say which way round a transition is drawn, out of the tool's data.
+
+    It is written only when the bar stands up, so anything else — a bar lying
+    across the sheet, a transition another tool wrote — is read as lying across.
+
+    Parameters
+    ----------
+    element : xml.etree.ElementTree.Element
+        The transition's element.
+
+    Returns
+    -------
+    bool
+        Whether it stands up the sheet.
+    """
+
+    node = _tool_element(element, 'node')
+    return node is not None and node.get('vertical') == 'true'
 
 
 def _position(element: ElementTree.Element):

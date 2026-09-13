@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 from PyQt6.QtCore import QEvent, QLineF, QPointF, Qt
-from PyQt6.QtGui import QMouseEvent
-from PyQt6.QtWidgets import QDialog
+from PyQt6.QtGui import QContextMenuEvent, QMouseEvent
+from PyQt6.QtWidgets import QDialog, QMenu
 
 from masafi_simtwin.documents.arc import (
     DEFAULT_CONTROLS,
@@ -37,6 +37,7 @@ from simtwin_core.operations import (
     SetDescription,
     SetNodeName,
     SetTokens,
+    SetVertical,
 )
 from simtwin_core.petri_net import (
     ArcData,
@@ -530,6 +531,7 @@ def operations_for(editor) -> dict:
         SetNodeName(free.uuid, free.name, 'Buffer'),
         SetTokens(place.uuid, 0, 3),
         SetDescription(transition.uuid, '', 'Fill a bottle'),
+        SetVertical(transition.uuid, False, True),
         AddArc(
             ArcData(
                 'new-arc',
@@ -1155,7 +1157,12 @@ def test_tokens_asked_of_a_transition_are_refused(editor):
 
 @pytest.mark.parametrize(
     ('name', 'label'),
-    [('rename-node', 'Rename'), ('set-tokens', 'Change Tokens'), ('set-description', 'Change Description')],
+    [
+        ('rename-node', 'Rename'),
+        ('set-tokens', 'Change Tokens'),
+        ('set-description', 'Change Description'),
+        ('rotate', 'Rotate'),
+    ],
 )
 def test_the_new_changes_are_named_for_undo(editor, name, label):
     """What *Undo* offers to put back."""
@@ -1324,3 +1331,168 @@ def test_the_selection_carries_the_names_of_the_whole_net(editor):
     place.setSelected(True)
 
     assert sorted(editor.selection().names) == sorted([place.name, free.name, transition.name])
+
+
+# ----------------------------------------------------------------------
+# Turning a transition
+# ----------------------------------------------------------------------
+
+
+def test_a_transition_is_turned_as_one_change_that_undoes(editor):
+    """A gesture like any other: recorded, named for *Undo*, and put back."""
+
+    _place, _free, transition, _arc = little_net(editor)
+    count = editor.undo_stack.count()
+
+    assert editor.rotate((transition.uuid,))
+
+    assert transition.vertical is True
+    assert editor.undo_stack.count() == count + 1
+    assert editor.undo_stack.command(count).text() == 'Rotate'
+    editor.undo_stack.undo()
+    assert transition.vertical is False
+
+
+def test_each_transition_is_turned_the_other_way_round_from_the_way_it_was(editor):
+    """So a selection of both is not made to agree, and turning it twice gives
+    back exactly the drawing it started as."""
+
+    _place, _free, transition, _arc = little_net(editor)
+    upright = editor.add_element('pt-petri-net', 'transition', QPointF(90.0, 60.0))
+    upright.vertical = True
+
+    editor.rotate((transition.uuid, upright.uuid))
+
+    assert (transition.vertical, upright.vertical) == (True, False)
+    editor.undo_stack.undo()
+    assert (transition.vertical, upright.vertical) == (False, True)
+
+
+def test_a_place_asked_to_turn_is_passed_over(editor):
+    """A circle has no way round, so there is nothing to record."""
+
+    place, _free, _transition, _arc = little_net(editor)
+    count = editor.undo_stack.count()
+
+    assert not editor.rotate((place.uuid,))
+    assert editor.undo_stack.count() == count
+
+
+def test_the_way_round_survives_a_document(editor, qtbot):
+    """What is on the sheet is what is described, and what is loaded is drawn."""
+
+    _place, _free, transition, _arc = little_net(editor)
+    editor.rotate((transition.uuid,))
+    document = editor.to_document()
+
+    assert document.node(transition.uuid).vertical is True
+
+    again = fresh_editor(qtbot)
+    again.load_document(document)
+
+    assert again.to_document() == document
+    assert again.node(transition.uuid).vertical is True
+
+
+def test_the_move_a_turn_forced_is_part_of_the_change(editor):
+    """A bar at the very edge of the sheet is brought back onto the paper as it
+    stands up, and undoing puts the drawing back rather than most of it."""
+
+    edge = editor.add_element('pt-petri-net', 'transition', QPointF(100.0, 2.0))
+
+    editor.rotate((edge.uuid,))
+    moved = edge.pos()
+
+    assert moved.y() > 2.0
+    editor.undo_stack.undo()
+    assert (edge.vertical, edge.pos().y()) == (False, 2.0)
+
+
+def test_a_turn_asked_for_on_the_sheet_is_made_by_the_document(editor):
+    """The context menu asks, and the document records — the sheet turns nothing
+    of its own accord."""
+
+    _place, _free, transition, _arc = little_net(editor)
+
+    editor.view.rotate([transition])
+
+    assert transition.vertical is True
+    assert editor.undo_stack.command(editor.undo_stack.count() - 1).text() == 'Rotate'
+
+
+def test_a_transition_stood_up_by_a_document_is_drawn_that_way(editor):
+    """Which is what a journal replayed and a redo both do."""
+
+    _place, _free, transition, _arc = little_net(editor)
+
+    editor.apply(Change('rotate', (SetVertical(transition.uuid, False, True),)))
+
+    assert transition.vertical is True
+    assert transition.bar().height() == pytest.approx(16.0)
+
+
+def test_a_place_the_document_asks_to_turn_is_refused(editor):
+    """The sheet holds no transition of that UUID to turn."""
+
+    place, _free, _transition, _arc = little_net(editor)
+
+    with pytest.raises(ValueError, match='no transition'):
+        editor.apply(Change('rotate', (SetVertical(place.uuid, False, True),)))
+
+
+def test_a_transition_offers_to_be_turned_and_a_place_offers_nothing(editor):
+    """A bar has a way round and a circle has not, which each item says of
+    itself."""
+
+    place, _free, transition, _arc = little_net(editor)
+
+    assert [action.text() for action in editor.view.item_menu(transition).actions()] == ['Rotate']
+    assert editor.view.item_menu(place) is None
+    assert editor.view.item_menu(None) is None
+
+
+def test_turning_a_transition_from_its_menu_is_undone(editor):
+    """The menu asks the document, as everything that changes the net does."""
+
+    _place, _free, transition, _arc = little_net(editor)
+    before = editor.to_document()
+    menu = editor.view.item_menu(transition)
+
+    [action for action in menu.actions() if action.text() == 'Rotate'][0].trigger()
+
+    assert transition.vertical is True
+
+    editor.undo_stack.undo()
+
+    assert editor.to_document() == before
+
+
+def test_the_menu_turns_the_transition_it_was_aimed_at_and_no_other(editor):
+    """A context menu is aimed at a thing, as an arc's is."""
+
+    _place, _free, transition, _arc = little_net(editor)
+    another = editor.add_element('pt-petri-net', 'transition', QPointF(90.0, 60.0))
+    for item in (transition, another):
+        item.setSelected(True)
+
+    editor.view.item_menu(transition).actions()[0].trigger()
+
+    assert (transition.vertical, another.vertical) == (True, False)
+
+
+def test_the_menu_over_a_transition_is_the_item_menu(editor, monkeypatch):
+    """The pointer falls through the arcs to the item and stops there, rather
+    than reaching the guides that run under it."""
+
+    shown = []
+    monkeypatch.setattr(
+        QMenu, 'exec', lambda self, *rest: shown.append([action.text() for action in self.actions()])
+    )
+    _place, _free, transition, _arc = little_net(editor)
+    spot = editor.view.mapFromScene(transition.scenePos())
+
+    editor.view.contextMenuEvent(
+        QContextMenuEvent(QContextMenuEvent.Reason.Mouse, spot, editor.view.mapToGlobal(spot))
+    )
+
+    assert shown == [['Rotate']]

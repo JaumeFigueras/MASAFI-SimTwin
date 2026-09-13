@@ -242,6 +242,10 @@ class CanvasView(QGraphicsView):
     arc_point_removal_asked : PyQt6.QtCore.pyqtSignal
         Emitted with an arc and which of its points its context menu asked to
         have taken out.
+    rotation_asked : PyQt6.QtCore.pyqtSignal
+        Emitted with the items its context menu asked to have turned the other
+        way round.  The sheet does not turn them, for the reason it does not
+        reshape an arc: a change to a net is the document's.
     """
 
     view_changed = pyqtSignal()
@@ -258,6 +262,7 @@ class CanvasView(QGraphicsView):
     arcs_shaped = pyqtSignal(object)
     arc_point_asked = pyqtSignal(object, QPointF)
     arc_point_removal_asked = pyqtSignal(object, int)
+    rotation_asked = pyqtSignal(object)
 
     def __init__(self, page: QSizeF | None = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -572,10 +577,11 @@ class CanvasView(QGraphicsView):
         """Offer what can be done to whatever is under the pointer.
 
         An arc first, because an arc lies over the sheet a guide runs across and
-        is the smaller target of the two; then the guides.  Neither has an entry
-        in the menu bar to be reached from, so this is where they are found, and
-        when the *Edit* menu grows a *Delete* it should come here rather than
-        repeat this.
+        is the smallest target there is; then the item under the pointer, which
+        an arc may end on; then the guides, which run the whole length of the
+        sheet.  None of the three has an entry in the menu bar to be reached
+        from, so this is where they are found, and when the *Edit* menu grows a
+        *Delete* it should come here rather than repeat this.
 
         While an arc is being drawn a right click **gives it up** instead, and
         offers nothing.  A click of the left button on the bare sheet lays a
@@ -594,6 +600,8 @@ class CanvasView(QGraphicsView):
             return
 
         menu = self.arc_menu(self.arc_at(event.pos()), self.mapToScene(event.pos()))
+        if menu is None:
+            menu = self.item_menu(self.item_at(event.pos()))
         if menu is None:
             menu = self.guide_menu(self.guide_at(event.pos()))
         if menu is None:
@@ -784,6 +792,57 @@ class CanvasView(QGraphicsView):
 
         self.scene().clearSelection()
         arc.setSelected(True)
+
+    def item_menu(self, item: NetItem | None) -> QMenu | None:
+        """Build what is offered over an item of a net.
+
+        Kept apart from showing it, the way :meth:`arc_menu` and
+        :meth:`guide_menu` are, so that what is offered can be checked without a
+        menu going up and blocking on its own event loop.
+
+        There is one entry so far and not every item has it: a bar has a way
+        round and can be turned, a circle has not — which the item says of
+        itself through
+        :attr:`~masafi_simtwin.documents.net_item.NetItem.CAN_ROTATE` rather than
+        being asked what class it is.  An item with nothing to offer gives no
+        menu at all, so the pointer falls through to whatever is under it.
+
+        It acts on the item under the pointer and on no other, even when several
+        are selected: a context menu is aimed at a thing, as an arc's is.
+
+        Parameters
+        ----------
+        item : masafi_simtwin.documents.net_item.NetItem, optional
+            The item under the pointer, if there is one.
+
+        Returns
+        -------
+        PyQt6.QtWidgets.QMenu, optional
+            The menu, or ``None`` when there is nothing to offer over it.
+        """
+
+        if item is None or not item.CAN_ROTATE:
+            return None
+
+        menu = QMenu(self)
+        rotate = menu.addAction(self.tr('Rotate'))
+        rotate.triggered.connect(lambda: self.rotate([item]))
+        return menu
+
+    def rotate(self, items) -> None:
+        """Ask for some items to be turned the other way round.
+
+        The sheet does not turn them — see :meth:`set_arc_shape` for why a
+        change to a net is the document's — so this says what was asked for and
+        nothing more.
+
+        Parameters
+        ----------
+        items : list of masafi_simtwin.documents.net_item.NetItem
+            The items.
+        """
+
+        self.rotation_asked.emit(list(items))
 
     def guide_menu(self, guide: Guide | None) -> QMenu | None:
         """Build what is offered over a guide, or over the bare sheet.

@@ -21,6 +21,7 @@ from masafi_simtwin.documents.transition import (
     TRANSITION_HALF_LENGTH,
     TRANSITION_HEIGHT,
     TRANSITION_LENGTH,
+    turned,
 )
 from masafi_simtwin.theme import DARK_COLORS, LIGHT_COLORS
 
@@ -177,6 +178,95 @@ def test_the_walk_starts_at_the_right_hand_end_and_goes_up_and_round(transition)
     assert ports[1].x() > ports[2].x()
     assert ports[PORTS_ALONG_A_SIDE + 1] == QPointF(-TRANSITION_HALF_LENGTH, 0.0)
     assert ports[-1].y() == pytest.approx(TRANSITION_HALF_HEIGHT)
+
+
+# ----------------------------------------------------------------------
+# Standing the bar up
+# ----------------------------------------------------------------------
+
+
+def test_a_transition_lies_across_the_sheet_until_it_is_stood_up(transition):
+    """Which is the way round most nets are drawn."""
+
+    assert transition.vertical is False
+    assert transition.half_sizes() == (TRANSITION_HALF_LENGTH, TRANSITION_HALF_HEIGHT)
+
+
+def test_a_transition_stood_up_swaps_its_two_half_sizes(transition):
+    """That is the whole of what turning one is."""
+
+    transition.vertical = True
+
+    assert transition.half_sizes() == (TRANSITION_HALF_HEIGHT, TRANSITION_HALF_LENGTH)
+    assert transition.bar().width() == TRANSITION_HEIGHT
+    assert transition.bar().height() == TRANSITION_LENGTH
+    assert transition.bar().center() == QPointF(0.0, 0.0)
+
+
+def test_the_connecting_points_turn_with_the_bar(transition):
+    """A quarter turn clockwise, point for point and index for index — so an arc
+    drawn to the end of a bar is still drawn to the end of it once it stands
+    up."""
+
+    lying = transition.ports()
+    transition.vertical = True
+    standing = transition.ports()
+
+    assert len(standing) == PORT_COUNT
+    assert standing == [turned(point) for point in lying]
+    assert standing[0] == QPointF(0.0, TRANSITION_HALF_LENGTH)
+
+
+def test_a_transition_stood_up_is_taken_hold_of_by_its_bar(transition):
+    """The bar turns, and so does what can be pressed on."""
+
+    transition.vertical = True
+    shape = transition.shape()
+
+    assert shape.contains(QPointF(0.0, TRANSITION_HALF_LENGTH - 0.5))
+    assert not shape.contains(QPointF(0.0, TRANSITION_HALF_LENGTH + 0.5))
+    assert not shape.contains(QPointF(TRANSITION_HALF_HEIGHT + 0.5, 0.0))
+
+
+def test_turning_a_transition_twice_gives_back_the_drawing(transition):
+    """So a rotate undone by another rotate leaves nothing behind."""
+
+    lying = transition.ports()
+
+    transition.vertical = True
+    transition.vertical = False
+
+    assert transition.vertical is False
+    assert transition.ports() == lying
+
+
+def test_an_arc_is_led_to_where_its_connecting_point_has_gone(editor, transition):
+    """Nothing moves when a bar is turned, so nothing tells the arcs by itself:
+    turning one leads them again."""
+
+    place = editor.add_element('pt-petri-net', 'place', QPointF(40.0, 20.0))
+    arc = editor.add_arc(place, transition, source_port=0, target_port=0)
+    before = arc.path().currentPosition()
+
+    transition.vertical = True
+
+    assert arc.path().currentPosition() != before
+    assert transition.scene_port(0) == QPointF(
+        transition.pos().x(), transition.pos().y() + TRANSITION_HALF_LENGTH
+    )
+
+
+def test_a_bar_stood_up_at_the_edge_of_the_sheet_is_brought_back_onto_it(editor):
+    """It is eight times taller than it was, so the room it needs is not the
+    room it had."""
+
+    edge = editor.add_element('pt-petri-net', 'transition', QPointF(100.0, 2.0))
+    assert edge.pos().y() == 2.0
+
+    edge.vertical = True
+
+    assert edge.pos().y() >= TRANSITION_HALF_LENGTH
+    assert editor.view.sceneRect().contains(edge.bar().translated(edge.pos()))
 
 
 # ----------------------------------------------------------------------

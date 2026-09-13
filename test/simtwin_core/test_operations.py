@@ -25,6 +25,7 @@ from simtwin_core.operations import (
     SetDescription,
     SetNodeName,
     SetTokens,
+    SetVertical,
 )
 from simtwin_core.petri_net import (
     ArcData,
@@ -76,6 +77,7 @@ EVERY_OPERATION = [
     SetNodeName('p', 'P1', 'Buffer'),
     SetTokens('p', 0, 3),
     SetDescription('t', '', 'Fill a bottle'),
+    SetVertical('t', False, True),
     AddArc(ArcData('b', 't', 'p', 3, 4)),
     RemoveArc(ARC),
     MoveArcEnd('a', 'source', 'p', 0, 'p', 6),
@@ -388,6 +390,28 @@ def test_tokens_set_on_a_transition_leave_it_as_it_is():
     assert SetTokens('t', 0, 3).apply(net()) == net()
 
 
+def test_a_transition_is_stood_up_and_laid_back_across():
+    """How it is drawn and nothing else: it is the same transition either way."""
+
+    upright = SetVertical('t', False, True).apply(net())
+
+    assert upright.transitions[0].vertical is True
+    assert SetVertical('t', True, False).apply(upright) == net()
+
+
+def test_a_place_stood_up_is_left_as_it_is():
+    """A circle has no way round."""
+
+    assert SetVertical('p', False, True).apply(net()) == net()
+
+
+def test_a_way_round_that_is_neither_is_refused():
+    """As a damaged journal would ask.  There is no angle between the two."""
+
+    with pytest.raises(InvalidNet, match='one way round'):
+        SetVertical('t', False, 90).apply(net())
+
+
 def test_a_name_another_node_has_is_refused():
     """A backend knows a node by its name."""
 
@@ -414,7 +438,8 @@ def test_a_node_carries_its_tokens_and_description_through_the_journal():
     """Added and removed whole, so undoing gives back everything it had."""
 
     full = PlaceData('r', 'P3', (40.0, 40.0), 5, 'Bottles waiting')
-    change = Change('gesture', (AddNode(full), RemoveNode(TransitionData('u', 'T2', (1.0, 1.0), 'Cap'))))
+    upright = TransitionData('u', 'T2', (1.0, 1.0), 'Cap', True)
+    change = Change('gesture', (AddNode(full), RemoveNode(upright)))
 
     assert operations.decode(json.loads(json.dumps(operations.encode(change)))) == change
 
@@ -433,7 +458,7 @@ def test_a_node_written_before_tokens_existed_reads_as_holding_none():
     place, transition = (operation.node for operation in operations.decode(line).operations)
 
     assert (place.tokens, place.description) == (0, '')
-    assert transition.description == ''
+    assert (transition.description, transition.vertical) == ('', False)
 
 
 

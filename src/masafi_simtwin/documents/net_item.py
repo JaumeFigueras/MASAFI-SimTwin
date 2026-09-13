@@ -261,6 +261,12 @@ class NetItem(QGraphicsItem):
     #: What a name invented for one begins with.
     NAME_PREFIX: str = ''
 
+    #: Whether the item can be turned the other way round on the sheet.  It is
+    #: declared here rather than asked of the class, the way :attr:`GROUP` and
+    #: :attr:`CONNECTS_TO` are: what a context menu offers over an item is a
+    #: fact about the item, and a round one has nothing to turn.
+    CAN_ROTATE: bool = False
+
     def __init__(
         self,
         snap: Callable[[float], float] | None = None,
@@ -582,6 +588,29 @@ class NetItem(QGraphicsItem):
             for arc in self._arcs:
                 arc.route()
         return super().itemChange(change, value)
+
+    def reshaped(self) -> None:
+        """Take in that the item is drawn differently than it was.
+
+        Moving is the scene's own business and goes through :meth:`itemChange`,
+        but an item that changes **shape** where it stands moves nothing, so
+        nothing is told: the view holds the rectangle the item used to have, the
+        arcs are still aimed at where its connecting points used to be, and it
+        may now reach off the paper.  This is the three of those put right, and
+        it is called by whatever changed the shape — after the change, since it
+        is the new shape that has to fit.
+
+        :meth:`~PyQt6.QtWidgets.QGraphicsItem.prepareGeometryChange` is **not**
+        called here: it says the geometry is *about to* change, so that the view
+        repaints where the item was last drawn, and by now it already has.
+        """
+
+        if self._bounds is not None:
+            x, y = self._inside(self.pos().x(), self.pos().y(), self._bounds())
+            self.setPos(QPointF(x, y))
+        for arc in self._arcs:
+            arc.route()
+        self.update()
 
     def _inside(self, x: float, y: float, area: QRectF) -> tuple[float, float]:
         """Hold a centre far enough inside an area for the whole item to fit.

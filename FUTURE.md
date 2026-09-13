@@ -717,30 +717,41 @@ person to see it knows it was noticed.
 
 ---
 
-## A transition always lies across the sheet
+## A transition stands one of two ways round, and nothing else turns at all
 
-**Now.** A transition is 16 mm by 2 mm and drawn that way round, always. There is no rotation, no
-*stand it up*, and `TRANSITION_LENGTH` and `TRANSITION_HEIGHT` are module constants rather than
-anything the item carries.
+**Now.** A transition lies across the sheet or stands up it — `Transition.vertical`, *Rotate* on its
+context menu, swapping the two half-sizes and giving the connecting points a quarter turn with them.
+There is nothing between the two, no other item turns (a circle has no way round), and nothing turns
+a whole selection from the menu bar: `PetriNetEditor.rotate()` takes as many nodes as it is given, but
+the only thing that calls it is a context menu, which is aimed at one item.
 
-**Why it was done this way.** It is the size and the orientation that were asked for, and rotation is
-not one question but three — what turns (an item, or a selection), by how much (ninety degrees, or
-freely), and what happens to the connecting points and to the snapping when it does. Answering those
-by adding a `rotation` to the item would settle them in passing.
+**Why it was done this way.** It is the case that actually comes up — a net laid out from top to
+bottom, where a horizontal bar between two places stacked above one another is the wrong way round —
+and it settles none of the questions a real rotation asks. Qt's own `setRotation()` would have cost
+nothing to write, but it rotates the snapping with the item, so a turned item no longer lands on the
+millimetre grid the way an unturned one does; a free angle needs a handle to drag and somewhere to show
+the angle, which is an editor feature rather than an item one. Two ways round need neither: the bar is
+an upright rectangle or a flat one, and everything on the sheet goes on snapping to the millimetre.
 
-**When it will not be enough.** As soon as a net is laid out vertically, which is how a great many of
-them are drawn: a horizontal bar between two places stacked above one another is the wrong way round.
+**What follows from it, and was chosen.** An arc keeps the *index* of the connecting point it was drawn
+to, so turning a bar takes the arc round with it: an arc that came into the middle of the top edge comes
+into the middle of the right-hand edge once the bar is upright, rather than being re-aimed at whatever
+now faces it. That is the same rule that makes a net laid out by hand stay laid out — see *Nothing puts an arc's
+ends back on the points that face each other* — and the way to put such an arc where it is wanted is to
+drag its end handle. Re-choosing the points on a turn would be re-drawing arcs nobody asked to have
+re-drawn.
+
+**When it will not be enough.** A model drawn at an angle — a diagonal flow, a shop floor plan the net
+is laid over — or a net where the transitions are labelled along their length. Also the first time a
+person selects a dozen items and wants them all turned at once.
 
 **Options.**
 
-- A `vertical` flag on the transition, swapping the two half-sizes, with *Rotate* on its context menu.
-  Smallest, and it covers the case that actually comes up; the connecting points follow of their own
-  accord, `port_offset()` being computed from the half-sizes.
-- Qt's own `setRotation()` on the item, which rotates the drawing and the connecting points together
-  and costs nothing to implement — but it rotates the snapping with it, so a turned item no longer
-  lands on the millimetre grid the way an unturned one does.
-- A free rotation with a handle, when there is a selection model and a properties pane to show the
-  angle in. That is an editor feature rather than an item feature.
+- *Rotate* in the *Edit* menu, on the whole selection, over the `rotate()` that already takes many.
+  Small, and the recorded change is already one change for as many nodes as are given.
+- A free rotation with a handle, once there is somewhere to show the angle. It brings back the snapping
+  question the two ways round avoid, and every item would then need a rotation rather than one item
+  needing a flag.
 
 ---
 

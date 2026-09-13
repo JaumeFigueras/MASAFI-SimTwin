@@ -48,7 +48,17 @@ take their colours from the palette rather than from constants: a place is the
 paper with ink around it, a transition is the ink, and both follow the theme
 without being told which scheme they are in.
 
-The bar lies **across** the sheet and cannot be stood up; see ``FUTURE.md``.
+**A bar can be stood up.**  :attr:`Transition.vertical` swaps the two
+half-sizes, which is all there is to it: the rectangle turns, and the connecting
+points turn with it, because a vertical transition's points are the horizontal
+one's given a **quarter turn clockwise** — :func:`turned`.  So the point an arc
+is attached to by its index is the same point of the same edge before and after,
+and an arc drawn to the end of a bar is still drawn to the end of it once the
+bar is upright.  A net laid out from top to bottom is drawn that way round; a
+place is round and has no way round at all.
+
+There is no angle between the two, and nothing turns by any other amount; see
+``FUTURE.md``.
 """
 
 from __future__ import annotations
@@ -90,6 +100,27 @@ PORT_SPACING = TRANSITION_LENGTH / (PORTS_ALONG_A_SIDE + 1)
 PORT_COUNT = PORTS_ALONG_A_SIDE * 2 + 2
 
 
+def turned(point: QPointF) -> QPointF:
+    """Give a point of a bar lying across the sheet as a point of one standing up.
+
+    A quarter turn **clockwise**, which on a sheet whose ``y`` counts downwards
+    is ``(x, y) → (-y, x)``.  So the right-hand end of a bar becomes its bottom
+    end, and the top edge becomes the right-hand one.
+
+    Parameters
+    ----------
+    point : PyQt6.QtCore.QPointF
+        The point, in millimetres from the centre.
+
+    Returns
+    -------
+    PyQt6.QtCore.QPointF
+        Where it is once the bar is upright.
+    """
+
+    return QPointF(-point.y(), point.x())
+
+
 class Transition(NetItem):
     """One transition of a Petri net, drawn as a solid bar.
 
@@ -105,6 +136,52 @@ class Transition(NetItem):
 
     #: What an invented name begins with: ``T1``, ``T2`` and so on.
     NAME_PREFIX = 'T'
+
+    #: A bar has a way round, so it can be turned.
+    CAN_ROTATE = True
+
+    def __init__(self, *arguments, **keywords) -> None:
+        super().__init__(*arguments, **keywords)
+        self._vertical = False
+
+    @property
+    def vertical(self) -> bool:
+        """bool: Whether the bar stands up the sheet rather than lying across it.
+
+        Setting it turns the bar where it stands: the rectangle and the
+        connecting points swap their two axes, the arcs joined to it are led to
+        where their points have gone, and a bar that now reaches off the paper
+        is brought back on — :meth:`~masafi_simtwin.documents.net_item.NetItem.reshaped`.
+
+        It is not a gesture and records nothing.  Turning a transition is a
+        change to the net like any other and is recorded by the document that
+        asks for it.
+        """
+
+        return self._vertical
+
+    @vertical.setter
+    def vertical(self, vertical: bool) -> None:
+        vertical = bool(vertical)
+        if vertical == self._vertical:
+            return
+        self.prepareGeometryChange()
+        self._vertical = vertical
+        self.reshaped()
+
+    def half_sizes(self) -> tuple[float, float]:
+        """Give how far the bar reaches from its centre, across and down.
+
+        Returns
+        -------
+        tuple of float
+            Half its width and half its height on the sheet, which are the two
+            half-sizes the way round it is drawn.
+        """
+
+        if self._vertical:
+            return TRANSITION_HALF_HEIGHT, TRANSITION_HALF_LENGTH
+        return TRANSITION_HALF_LENGTH, TRANSITION_HALF_HEIGHT
 
     @staticmethod
     def port_offsets_along_an_edge() -> list[float]:
@@ -131,6 +208,11 @@ class Transition(NetItem):
         along the bottom — so the first of them is due east on both shapes and
         an arc tool reading the list finds them in the order they are drawn in.
 
+        A bar that has been **stood up** carries the same points given a quarter
+        turn, in the same order, so the point at any index is the same point of
+        the same edge whichever way round the bar is and an arc keeps the end of
+        the bar it was drawn to.
+
         Returns
         -------
         list of PyQt6.QtCore.QPointF
@@ -138,12 +220,13 @@ class Transition(NetItem):
         """
 
         along = self.port_offsets_along_an_edge()
-        return [
+        points = [
             QPointF(TRANSITION_HALF_LENGTH, 0.0),
             *(QPointF(offset, -TRANSITION_HALF_HEIGHT) for offset in reversed(along)),
             QPointF(-TRANSITION_HALF_LENGTH, 0.0),
             *(QPointF(offset, TRANSITION_HALF_HEIGHT) for offset in along),
         ]
+        return [turned(point) for point in points] if self._vertical else points
 
     def bar(self) -> QRectF:
         """Give the bar itself, in the item's own coordinates.
@@ -151,15 +234,12 @@ class Transition(NetItem):
         Returns
         -------
         PyQt6.QtCore.QRectF
-            The rectangle, centred on the item's position.
+            The rectangle, centred on the item's position and the way round the
+            bar is drawn.
         """
 
-        return QRectF(
-            -TRANSITION_HALF_LENGTH,
-            -TRANSITION_HALF_HEIGHT,
-            TRANSITION_LENGTH,
-            TRANSITION_HEIGHT,
-        )
+        across, down = self.half_sizes()
+        return QRectF(-across, -down, across * 2.0, down * 2.0)
 
     def boundingRect(self) -> QRectF:  # noqa: N802  (Qt naming)
         """Give what the transition is drawn inside.

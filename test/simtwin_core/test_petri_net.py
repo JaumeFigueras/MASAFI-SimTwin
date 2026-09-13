@@ -332,7 +332,7 @@ def test_a_route_that_is_not_points_is_refused():
 
 
 # ----------------------------------------------------------------------
-# Tokens and descriptions
+# Tokens, descriptions and which way round a transition is
 # ----------------------------------------------------------------------
 
 
@@ -362,6 +362,21 @@ def test_tokens_that_are_not_a_whole_number_of_nought_or_more_are_refused(tokens
 
     with pytest.raises(InvalidNet, match='tokens'):
         PlaceData('p', 'P1', (20.0, 20.0), tokens)
+
+
+def test_a_transition_lies_across_the_sheet_unless_it_is_stood_up():
+    """Which is how it is drawn, and no part of the net a backend is given."""
+
+    assert transition().vertical is False
+    assert TransitionData('t', 'T1', (60.0, 20.0), '', True).vertical is True
+
+
+@pytest.mark.parametrize('vertical', [1, 'true', None], ids=['number', 'text', 'nothing'])
+def test_a_transition_drawn_neither_way_round_is_refused(vertical):
+    """There is no angle between the two, so nothing but an answer will do."""
+
+    with pytest.raises(InvalidNet, match='one way round'):
+        TransitionData('t', 'T1', (60.0, 20.0), '', vertical)
 
 
 @pytest.mark.parametrize('description', ['two\nlines', 'carriage\rreturn', 7], ids=['newline', 'return', 'not-text'])

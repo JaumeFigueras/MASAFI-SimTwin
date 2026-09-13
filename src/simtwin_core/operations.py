@@ -396,6 +396,55 @@ class SetDescription(Operation):
         return SetDescription(self.node, self.after, self.before)
 
 
+@dataclass(frozen=True)
+class SetVertical(Operation):
+    """Stand a transition up the sheet, or lay it back across it.
+
+    A place is round and is the same thing whichever way it is turned, so a
+    place of that UUID is left as it is.
+
+    Attributes
+    ----------
+    node : str
+        The UUID of the transition.
+    before, after : bool
+        Which way round it was drawn and which way round it is drawn.
+    """
+
+    NAME = 'set-vertical'
+
+    node: str
+    before: bool
+    after: bool
+
+    def apply(self, document: NetDocument) -> NetDocument:
+        """Turn the transition.
+
+        Parameters
+        ----------
+        document : simtwin_core.petri_net.NetDocument
+            The net.
+
+        Returns
+        -------
+        simtwin_core.petri_net.NetDocument
+            The net with the transition drawn the other way round.
+        """
+
+        return _changed_node(document, self.node, vertical=self.after)
+
+    def inverse(self) -> Operation:
+        """Turn it back.
+
+        Returns
+        -------
+        SetVertical
+            The inverse.
+        """
+
+        return SetVertical(self.node, self.after, self.before)
+
+
 # ----------------------------------------------------------------------
 # The arcs
 # ----------------------------------------------------------------------
@@ -975,6 +1024,7 @@ OPERATIONS: dict[str, type[Operation]] = {
         SetNodeName,
         SetTokens,
         SetDescription,
+        SetVertical,
         AddArc,
         RemoveArc,
         MoveArcEnd,
@@ -1059,7 +1109,7 @@ def _encode_operation(operation: Operation) -> dict:
         data['node'] = _node_data(operation.node)
     elif isinstance(operation, MoveNode):
         data.update(node=operation.node, before=list(operation.before), after=list(operation.after))
-    elif isinstance(operation, (SetNodeName, SetTokens, SetDescription)):
+    elif isinstance(operation, (SetNodeName, SetTokens, SetDescription, SetVertical)):
         data.update(node=operation.node, before=operation.before, after=operation.after)
     elif isinstance(operation, (AddArc, RemoveArc)):
         data['arc'] = _arc_data(operation.arc)
@@ -1123,7 +1173,7 @@ def _decode_operation(data: dict) -> Operation:
             return operation(_read_node(data['node']))
         if operation is MoveNode:
             return MoveNode(data['node'], tuple(data['before']), tuple(data['after']))
-        if operation in (SetNodeName, SetTokens, SetDescription):
+        if operation in (SetNodeName, SetTokens, SetDescription, SetVertical):
             return operation(data['node'], data['before'], data['after'])
         if operation in (AddArc, RemoveArc):
             return operation(_read_arc(data['arc']))
@@ -1175,6 +1225,8 @@ def _node_data(node: Node) -> dict:
     }
     if isinstance(node, PlaceData):
         data['tokens'] = node.tokens
+    else:
+        data['vertical'] = node.vertical
     data['description'] = node.description
     return data
 
@@ -1185,8 +1237,9 @@ def _read_node(data: dict) -> Node:
     Parameters
     ----------
     data : dict
-        What :func:`_node_data` wrote.  A line written before nodes had tokens
-        and descriptions has neither, and reads as a node with none.
+        What :func:`_node_data` wrote.  A line written before nodes had tokens,
+        descriptions or a way round has none of them, and reads as a node with
+        none and a transition lying across the sheet.
 
     Returns
     -------
@@ -1203,7 +1256,13 @@ def _read_node(data: dict) -> Node:
             data.get('tokens', 0),
             description,
         )
-    return TransitionData(data['uuid'], data['name'], tuple(data['position']), description)
+    return TransitionData(
+        data['uuid'],
+        data['name'],
+        tuple(data['position']),
+        description,
+        data.get('vertical', False),
+    )
 
 
 def _arc_data(arc: ArcData) -> dict:

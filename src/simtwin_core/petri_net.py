@@ -267,6 +267,34 @@ def _description(value, what: str) -> str:
     return value
 
 
+def _upright(value, what: str) -> bool:
+    """Check which way round a transition is drawn.
+
+    Parameters
+    ----------
+    value : bool
+        Whether it stands up the sheet rather than lying across it.
+    what : str
+        What is drawn that way, for the message when the answer is not one.
+
+    Returns
+    -------
+    bool
+        The answer, as given.
+
+    Raises
+    ------
+    InvalidNet
+        When it is not ``True`` or ``False``.  A transition either stands up or
+        lies across; there is no angle between the two, and a number is not an
+        answer to the question.
+    """
+
+    if not isinstance(value, bool):
+        raise InvalidNet(f'{what} is not drawn one way round or the other: {value!r}')
+    return value
+
+
 def _points(values, what: str) -> tuple[Point, ...]:
     """Make a tuple of points of anything that holds some.
 
@@ -339,22 +367,30 @@ class TransitionData:
         Its centre, in millimetres on the sheet.
     description : str
         What it is for, in a person's words, on one line.  Not part of the net.
+    vertical : bool
+        Whether the bar **stands up** the sheet rather than lying across it,
+        which is how a net laid out from top to bottom is drawn.  How it is
+        drawn and nothing more: a transition is the same transition either way
+        round, and no backend is told which.
 
     Raises
     ------
     InvalidNet
-        When the description is not one line of text.
+        When the description is not one line of text, or the bar is neither
+        upright nor lying across.
     """
 
     uuid: str
     name: str
     position: Point
     description: str = ''
+    vertical: bool = False
 
     def __post_init__(self) -> None:
         what = f'transition {self.name!r}'
         object.__setattr__(self, 'position', _point(self.position, what))
         object.__setattr__(self, 'description', _description(self.description, what))
+        object.__setattr__(self, 'vertical', _upright(self.vertical, what))
 
 
 @dataclass(frozen=True)
