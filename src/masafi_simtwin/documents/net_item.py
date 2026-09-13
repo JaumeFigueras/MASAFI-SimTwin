@@ -62,9 +62,10 @@ else — and a timed transition is a transition for this purpose however it is
 drawn, which is a fact about the net rather than about the class hierarchy.
 
 Nothing here knows about the *model*.  An item on the sheet is a drawing of one,
-and what a place or a transition is in a Petri net belongs to the document layer
-that is still to come; when it arrives these items are given one rather than
-being one.
+and what a place or a transition is in a Petri net belongs to
+:mod:`simtwin_core.petri_net`; an item is described as a
+:class:`~simtwin_core.petri_net.PlaceData` or a
+:class:`~simtwin_core.petri_net.TransitionData` rather than being one.
 
 **The colours are the palette's, never constants.**  The sheet is painted rather
 than styled, so one rule has to read on both schemes: ``Text`` is the ink,

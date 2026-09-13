@@ -2,9 +2,8 @@
 
 The editor is a :class:`~masafi_simtwin.documents.canvas.Canvas` — the ruled
 sheet, its grid, its zoom and its panning — and what it adds is the net: which
-model it is showing, and the places, transitions, arcs and tokens on it.  The
-place is the first of those; the rest are the next piece of work and are
-deliberately not invented here.
+model it is showing, and the places, transitions and arcs on it, with their
+tokens, their names and their descriptions.
 
 An element is put on the sheet by **dragging it out of the Libraries pane**.
 The canvas takes the drop and says what was dropped and where — a sheet is the
@@ -24,8 +23,8 @@ built can be chosen there: an inhibitor arc is greyed out until MASAFI-sim-petri
 has them.
 
 Every place and transition is given a **name** as it is put on the sheet —
-``P1``, ``T1`` — invented until there is somewhere to type one, and unique in the
-net, since that is what MASAFI-sim-petri knows a node by.  Nor may two arcs of
+``P1``, ``T1`` — which the Properties pane is where a person changes, and which is
+unique in the net, since that is what MASAFI-sim-petri knows a node by.  Nor may two arcs of
 one kind run the same way between the same two items; see
 :func:`~masafi_simtwin.documents.arc.arc_between`.
 
@@ -483,9 +482,10 @@ class PetriNetEditor(Canvas):
 
         The prefix and the number after the **highest** already in use — ``P1``,
         ``P2`` for places, ``T1``, ``T2`` for transitions — so a name deleted
-        from the middle of a net is not quietly handed out again.  Invented only
-        until there is somewhere to type a name, and made to keep the rule
-        names are held to, :func:`~simtwin_core.petri_net.name_problem`.  Names
+        from the middle of a net is not quietly handed out again.  An invented name
+        keeps the rule every name is held to,
+        :func:`~simtwin_core.petri_net.name_problem`, so one is never handed out
+        that the pane would refuse.  Names
         are unique ignoring case, so a number is counted whatever the case of
         its prefix: beside a ``p7`` the next place is ``P8``, never a ``P7`` that
         would clash with it.  A place and a transition cannot clash, their

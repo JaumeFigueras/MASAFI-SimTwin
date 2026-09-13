@@ -114,9 +114,10 @@ dialog starts at the same place every time; dialogs open wherever the window man
 **Why.** `QSettings` can hold a `saveGeometry()` blob perfectly well, but it was never asked for.
 
 **Related decision, still open.** Whether a `SimTwinDialog` base class is worth having for remembered
-geometry, once there are enough dialogs to show what they actually share. There are four now — About,
-Settings, New Project, and the two restart message boxes — which is about the point at which the
-question can be answered honestly.
+geometry, once there are enough dialogs to show what they actually share. There are four of them now —
+About, Settings, New Project and Model — beside the message boxes, which is about the point at which
+the question can be answered honestly. Only two are worth remembering the size of, which is itself
+part of the answer.
 
 ---
 
@@ -150,9 +151,11 @@ an installation identifier.
 **What it does not catch.** A student who rebuilds the model in a project of their own. Nothing in
 the manifest can see that, because nothing in the manifest looks at the model.
 
-**What would.** A fingerprint of the model's *topology*, once there is a model to fingerprint.
-Renaming blocks and moving the layout changes names and coordinates but not the graph, so: strip
-everything cosmetic — names, coordinates, colours, comments — then canonicalise with
+**What would.** A fingerprint of the model's *topology*. There is a model to fingerprint now — a
+`NetDocument` is a value, and `encode_net()` already writes one as plain data — so this is buildable
+rather than hypothetical. Renaming nodes and moving the layout changes names and coordinates but not
+the graph, so: strip everything cosmetic — names, coordinates, descriptions, the way the arcs bend —
+then canonicalise with
 Weisfeiler–Lehman refinement (each block labelled with its *type*, then
 `label ← hash(label, sorted(neighbour labels))` for three or four rounds), and store both the digest
 of the sorted final labels and the multiset of per-node labels. The digest catches identical networks
@@ -174,50 +177,33 @@ model.
 
 ---
 
-## Saving happens at boundaries and on a timer, and keeps what it replaces
+## Saving happens at boundaries and on a timer, not as the work is done
 
 **Now.** What a project *holds* — a model added, renamed, removed — is written as it is made. What a
 model *is* — the net drawn on its sheet — is written at **boundaries**: *File → Save* (`Ctrl+S`),
 closing a tab, closing the project, opening another, and quitting — and **every few minutes**, by the
-autosave timer. Every open model goes into **one** rewrite of the archive, and a model whose bytes have
-not changed is not written at all. A **journal** beside the archive holds every change not yet saved, so
-a session that ends badly loses nothing: the next opening puts the work back. And every save that
-changes the archive first keeps the project as it was, as a **numbered version** — see *Versions are
-counted, not thinned*.
+autosave timer. A **journal** beside the archive holds every change not yet saved, so a session that
+ends badly loses nothing; every save that changes the archive first keeps the project as it was, as a
+numbered version. All of that is built; see *The journal*, *Saving* and *Versions are counted, not
+thinned*.
 
-**Why not simply write more often.** The cost is not that saving is slow — it is that **a zip must be
-rewritten whole**. A single entry cannot be updated in place. Adding a model is a rare, deliberate
-act, so paying a full-archive write for it is right; dragging a place three pixels is not, and a
+**Why the drawing is not written as it is drawn.** Not because saving is slow — because **a zip must
+be rewritten whole**. A single entry cannot be updated in place. Adding a model is a rare, deliberate
+act, so paying a full-archive write for it is right; dragging a place three millimetres is not, and a
 canvas produces hundreds of small changes a minute against an archive that may be tens of megabytes.
-
-**The decided shape**, in the order it is being built:
-
-1. **The document lives in memory**, written in full at the boundaries above — *done* — and by a
-   **timer**, every `saving/autosave_interval` minutes (`0 (Off)`, 1, 2, 5, 10, 15, 30; five by
-   default) — *done*. A tick writes only the models that have changed, never asks anything, and waits a
-   few seconds rather than a whole interval when it finds a gesture under way or a dialog open.
-2. **Journal every mutation** — *done*. `Bottling Line.mfstz.journal`, beside the archive as the lock
-   is, one line of JSON per change: O(1) rather than O(project). Replayed when the project is opened.
-   A save takes out the entries of the models it wrote and of the models no longer open, and keeps the
-   rest — so closing one tab, or saving beside a model that cannot be saved, costs no other model its
-   recovery. A change undone is written as its **inverse**, so replaying is a straight line from the
-   last save to what the sheet showed.
-3. **The undo stack stays in memory only** — *done*, and see *Undo dies with the session*. Recovering
-   *to* the crash point is enough: nobody needs to undo past it, and persisting undo is a great deal of
-   machinery for almost none.
-
-**Undo came first, and that is what made the journal cheap.** The journal records *operations* and undo
-inverts them; because the operations were built first — `simtwin_core/operations.py`, every gesture a
-`Change` on a document's undo stack — writing them to a journal was one line at each push, exactly as
-was predicted here.
+The journal is what makes the gap safe: O(1) per change rather than O(project), replayed when the
+project is opened.
 
 **Two things that must not be buffered.** The **authorship history** is tiny and rare — session
 open/close, model added/updated/removed — so it was never the cost, but buffering it puts gaps in the
 chain, which is exactly the evidence that matters. It goes in the journal instead, folded into the
 history log at the next full write, ordered because the journal is append-only. Note that a *save*
 writes no history entry at all, and should not: how often somebody pressed `Ctrl+S` is not evidence of
-anything. **Simulation output** streams straight into `logs/`, beside the history log, as it is
-produced; it is large, write-once, and a crashed run is re-run rather than recovered.
+anything. **Simulation output**, when there is any, streams straight into `logs/` beside the history
+log as it is produced; it is large, write-once, and a crashed run is re-run rather than recovered.
+
+**What is still open.** Nothing about the model's own file. The undo stack stays in memory only — see
+*Undo dies with the session* — and recovering *to* the crash point is enough.
 
 ---
 
@@ -334,28 +320,34 @@ thing here that is more than a table entry.
 
 **Now.** A `Guide` is a scene item with `ItemIsSelectable`, and its shape runs the length of the
 sheet. A rubber-band drag anywhere that crosses a guide therefore selects the guide too, and a
-*Delete* after it takes the guide away with whatever else was caught. With no net items on the sheet
-yet nothing is actually lost by this, which is why it is left.
+*Delete* after it takes the guide away with whatever else was caught.
+
+**The cost has arrived.** This was left when the sheet held nothing but guides, on the grounds that
+nothing could be lost by it. There is a net on the sheet now, so a band drawn round three places on a
+sheet with a guide across it deletes the guide as well — and *Cut* takes the places and leaves the
+guide, guides not being copied, which is a second way the two disagree. It is now worth picking one of
+the answers below rather than leaving it; it stays here because which answer is right is a decision
+about how the editor selects, not about guides.
 
 **Why guides are scene items at all.** Because selecting one, dragging one, drawing one at any zoom
 and picking one out from under the pointer are then the scene's work rather than hit-testing,
-dragging and z-ordering written again by hand over the view. That is worth a great deal more than
-the rubber band is worth, and the trade only bites once there is something else on the sheet to
-rubber-band over.
+dragging and z-ordering written again by hand over the view. That is worth a great deal more than the
+rubber band is worth, and none of the answers below gives it up.
 
-**Options,** when the net's items arrive.
+**Options.**
 
 - `QGraphicsView.setRubberBandSelectionMode(ContainsItemShape)`. One line, and a guide can then never
   be caught, since no rubber band contains a line that runs off the sheet. It also changes how the
-  net's own items are selected — they would have to be enclosed rather than touched — which is a
-  decision about the editor, not about guides.
+  net's own items are selected — they would have to be enclosed rather than touched, and an arc, whose
+  shape is a band along the whole line, would have to be enclosed end to end — which is a decision
+  about the editor, not about guides.
 - Deselect the guides at the end of a rubber-band drag, leaving a click on a guide as the only way to
   select one. Small, and it keeps both selections behaving the way each should.
 - Take the guides off the selection model altogether and keep them in a layer of their own, selected
   by hand. Most control, most code, and it gives back the reason they are scene items.
 
 The second is the one to reach for first; the first is worth having only if the editor wants
-enclosing selection anyway.
+enclosing selection anyway, which for arcs it probably does not.
 
 ---
 
@@ -397,7 +389,7 @@ mistake made before the last save cannot be reached the next morning.
 
 **Why it was done this way.** Persisting undo is a great deal of machinery for almost none: what a
 person needs after a crash is their work back, not the ability to undo past it, and that is the
-journal's job (see *Saving happens at boundaries and on a timer*).
+journal's job (see *Saving happens at boundaries and on a timer, not as the work is done*).
 
 **When it will not be enough.** The day somebody wants yesterday's state back rather than the last
 saved one.
@@ -429,6 +421,8 @@ newly invented names. What that leaves out:
   off the first, but nothing cascades.
 - **Nothing else can read what is copied.** The clipboard carries one flavour, SimTwin's own — no PNML
   for another Petri net tool, no image for a document, no text for a mail.
+- ***Edit* still has no *Delete***: deleting is the key and the context menus. It belongs beside these
+  three when it comes, and `CanvasView.delete_selection()` is already the one place that does it.
 
 **Why it was done this way.** Each of them is a decision that can be made once there is a reason to
 prefer one answer, and each would be wrong to guess at. A guide is not part of the drawing anywhere
@@ -750,6 +744,35 @@ person to see it knows it was noticed.
 - Draw nothing when the two ends are closer together than the arrowhead is long, so the picture goes
   quiet instead of going wrong.
 - Leave it, and let the person move the item.
+
+---
+
+## A node is described in one line
+
+**Now.** A place or a transition carries a `description` — a person's words about what it is for, seen
+by no backend — and it is **one line**: `NetDocument` refuses text holding a newline or a carriage
+return, the Properties pane offers a single-line field, and the editor refuses the change as well, so
+the rule holds wherever it is asked for. The line may be long; the label on the sheet wraps it.
+
+**Why it was done this way.** A description is drawn on the sheet beside its node, and something that
+can be twenty lines is something that can bury the net it describes. One line also survives every
+place it has to pass through unremarked — a PNML attribute, a JSON string in the journal and on the
+clipboard, a field in a form — where a paragraph would want a text area in the pane, a decision about
+how much of it to draw, and an answer to what a line break means in an XML attribute.
+
+**When it will not be enough.** The first model somebody documents properly: the reason a transition is
+there, what its rate means, and where the number came from, which is a paragraph and not a line.
+
+**Options.**
+
+- **Two fields**: keep the one-line description as the caption and add a `note` of any length, edited
+  in a text area on the Properties pane and never drawn on the sheet. It keeps the label short by
+  construction, which is the property worth keeping.
+- **Let the description be many lines** and draw only the first on the sheet, with the rest in the pane
+  and in a tool tip. One field, and the sheet no longer shows all of what is there — which is the thing
+  to be sure about before choosing it.
+- **Nothing on the node, and a notes pane for the model as a whole.** Least in the way of the drawing,
+  and it loses the attachment to the thing being described.
 
 ---
 

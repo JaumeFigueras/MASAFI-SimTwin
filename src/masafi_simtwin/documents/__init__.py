@@ -8,10 +8,11 @@ window reports that rather than opening an empty tab: three of the four kinds
 of :class:`~masafi_simtwin.project.ModelKind` are offered before they are built,
 so *not yet* is an ordinary answer here rather than an error.
 
-These widgets are the view of a model and nothing more.  Reading a model out of
-a project and writing one back belongs to the document layer that is still to
-come, and when it arrives an editor is given the document rather than reaching
-for the archive itself.
+These widgets are the view of a model and nothing more, and this module is the
+one place that knows which is which: an editor is handed the **bytes** of its
+model (:func:`load_file`) and asked for them back (:func:`file_of`), and it is
+here rather than in the window that a Petri net is known to be written as PNML.
+No editor ever reaches for the archive itself.
 """
 
 from __future__ import annotations
