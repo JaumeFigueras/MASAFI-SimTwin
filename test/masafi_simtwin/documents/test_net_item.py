@@ -447,3 +447,40 @@ def test_the_two_shapes_are_not_the_same_size(place, transition):
     assert place.boundingRect() != transition.boundingRect()
     assert math.isclose(place.boundingRect().width(), place.boundingRect().height())
     assert transition.boundingRect().width() > transition.boundingRect().height()
+
+
+# ----------------------------------------------------------------------
+# What is written on the sheet
+# ----------------------------------------------------------------------
+
+
+def test_text_is_written_a_height_on_the_paper_centred_on_nought():
+    """The weight of an arc and the tokens of a place are written the same way."""
+
+    from masafi_simtwin.documents.net_item import glyph_path
+
+    written = glyph_path('42', 3.0).boundingRect()
+
+    assert written.height() == pytest.approx(3.0, abs=0.01)
+    assert written.center().x() == pytest.approx(0.0, abs=0.01)
+    assert written.center().y() == pytest.approx(0.0, abs=0.01)
+
+
+def test_text_too_wide_for_its_room_is_narrowed_to_it():
+    """Keeping its proportions, so it grows no taller than asked."""
+
+    from masafi_simtwin.documents.net_item import glyph_path
+
+    tall = glyph_path('1234567', 4.0).boundingRect()
+    narrowed = glyph_path('1234567', 4.0, 7.0).boundingRect()
+
+    assert narrowed.width() == pytest.approx(7.0, abs=0.01)
+    assert narrowed.height() / narrowed.width() == pytest.approx(tall.height() / tall.width(), rel=0.01)
+
+
+def test_text_that_draws_nothing_is_an_empty_path():
+    """Nothing to scale."""
+
+    from masafi_simtwin.documents.net_item import glyph_path
+
+    assert glyph_path('', 3.0).isEmpty()

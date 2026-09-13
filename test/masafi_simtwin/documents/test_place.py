@@ -14,10 +14,15 @@ from PyQt6.QtGui import QColor
 
 from masafi_simtwin.documents.net_item import PORT_RADIUS
 from masafi_simtwin.documents.place import (
+    MAX_TOKEN_DOTS,
     PLACE_DIAMETER,
     PLACE_RADIUS,
     PORT_COUNT,
     PORT_STEP_DEGREES,
+    TOKEN_LAYOUTS,
+    TOKEN_NUMBER_HEIGHT,
+    TOKEN_NUMBER_WIDTH,
+    TOKEN_RADIUS,
 )
 from masafi_simtwin.theme import DARK_COLORS, LIGHT_COLORS
 
@@ -142,3 +147,126 @@ def test_a_connecting_point_is_a_ring_and_not_a_dot(place, ink, colors):
     assert not ink.holds(hidden, accent)
     assert ink.holds(ink.window(image, PLACE_RADIUS, 0.0, PORT_RADIUS), accent)
     assert ink.at(image, across=PLACE_RADIUS) == QColor(colors.editor)
+
+
+# ----------------------------------------------------------------------
+# The tokens
+# ----------------------------------------------------------------------
+
+
+def test_a_place_holds_no_tokens_and_draws_none(place):
+    """Until it is given some."""
+
+    assert place.tokens == 0
+    assert place.token_marks().isEmpty()
+
+
+@pytest.mark.parametrize('count', range(1, MAX_TOKEN_DOTS + 1))
+def test_up_to_five_tokens_are_drawn_as_that_many_dots(place, count):
+    """In the pattern of a die's face, each dot where the layout puts it."""
+
+    place.tokens = count
+    marks = place.token_marks()
+
+    assert len(TOKEN_LAYOUTS[count]) == count
+    for across, down in TOKEN_LAYOUTS[count]:
+        assert marks.contains(QPointF(across, down))
+
+
+@pytest.mark.parametrize('count', range(1, MAX_TOKEN_DOTS + 1))
+def test_every_dot_is_clear_of_the_others_and_of_the_rim(count):
+    """So a count is read at a glance rather than guessed from a blot."""
+
+    layout = TOKEN_LAYOUTS[count]
+    for index, (across, down) in enumerate(layout):
+        assert math.hypot(across, down) + TOKEN_RADIUS < PLACE_RADIUS - 1.0
+        for other_across, other_down in layout[index + 1:]:
+            assert math.hypot(across - other_across, down - other_down) > 2.0 * TOKEN_RADIUS
+
+
+def test_there_is_a_layout_for_every_count_of_dots():
+    """And none beyond, more tokens being written as a number."""
+
+    assert MAX_TOKEN_DOTS == 5
+    assert sorted(TOKEN_LAYOUTS) == list(range(1, MAX_TOKEN_DOTS + 1))
+
+
+def test_more_than_five_tokens_are_written_as_a_number(place):
+    """Centred on the place, a size on the paper."""
+
+    place.tokens = MAX_TOKEN_DOTS + 1
+    drawn = place.token_marks().boundingRect()
+
+    assert drawn.height() == pytest.approx(TOKEN_NUMBER_HEIGHT, abs=0.01)
+    assert drawn.width() < TOKEN_NUMBER_WIDTH
+    assert drawn.center().x() == pytest.approx(0.0, abs=0.01)
+    assert drawn.center().y() == pytest.approx(0.0, abs=0.01)
+
+
+def test_a_long_number_is_narrowed_to_fit_inside_the_circle(place):
+    """Rather than running out of it."""
+
+    place.tokens = 1234567
+    drawn = place.token_marks().boundingRect()
+
+    assert drawn.width() == pytest.approx(TOKEN_NUMBER_WIDTH, abs=0.01)
+    assert drawn.height() < TOKEN_NUMBER_HEIGHT
+    assert drawn.width() < PLACE_DIAMETER
+
+
+def test_tokens_below_nought_are_held_at_nought(place):
+    """Nought is the fewest a place can hold."""
+
+    place.tokens = -3
+
+    assert place.tokens == 0
+
+
+def test_changing_the_tokens_repaints_the_place(place, monkeypatch):
+    """And giving the same number again does not."""
+
+    repainted = []
+    monkeypatch.setattr(place, 'update', lambda *arguments: repainted.append(True))
+
+    place.tokens = 2
+    place.tokens = 2
+
+    assert repainted == [True]
+
+
+@pytest.mark.parametrize('colors', SCHEMES, ids=SCHEME_NAMES)
+def test_a_token_is_a_dot_of_the_ink_on_the_paper(place, ink, colors):
+    """The ink of the rim, on the colour of the sheet."""
+
+    place.tokens = 1
+    image = ink.painted(place, colors)
+
+    assert ink.nearest(ink.at(image), QColor(colors.text), QColor(colors.editor)) == QColor(
+        colors.text
+    )
+    assert ink.at(image, across=2.5) == QColor(colors.editor)
+
+
+@pytest.mark.parametrize('colors', SCHEMES, ids=SCHEME_NAMES)
+def test_the_tokens_of_a_selected_place_are_drawn_in_the_accent(place, ink, colors):
+    """With its rim: a selected thing is drawn in the accent."""
+
+    place.tokens = 1
+    place.setSelected(True)
+
+    centre = ink.at(ink.painted(place, colors))
+
+    assert ink.nearest(
+        centre, QColor(colors.accent), QColor(colors.text), QColor(colors.editor)
+    ) == QColor(colors.accent)
+
+
+@pytest.mark.parametrize('colors', SCHEMES, ids=SCHEME_NAMES)
+def test_a_number_of_tokens_is_drawn_in_the_ink(place, ink, colors):
+    """Somewhere in the middle of the place there is ink, and at its edge none."""
+
+    place.tokens = 88
+    image = ink.painted(place, colors)
+
+    assert ink.holds(ink.window(image, 0.0, 0.0, TOKEN_NUMBER_HEIGHT / 2.0), QColor(colors.text))
+    assert ink.at(image, across=PLACE_RADIUS - 1.0) == QColor(colors.editor)

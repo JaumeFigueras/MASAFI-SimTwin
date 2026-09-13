@@ -127,7 +127,7 @@ from enum import Enum
 from uuid import uuid4
 
 from PyQt6.QtCore import QCoreApplication, QLineF, QPointF, QRectF, Qt
-from PyQt6.QtGui import QFont, QPainterPath, QPainterPathStroker, QPen, QTransform
+from PyQt6.QtGui import QPainterPath, QPainterPathStroker, QPen
 from PyQt6.QtWidgets import QGraphicsItem
 
 from masafi_simtwin.documents.net_item import (
@@ -135,6 +135,7 @@ from masafi_simtwin.documents.net_item import (
     ITEM_PEN,
     ITEM_PEN_SELECTED,
     NetItem,
+    glyph_path,
     ink_colour,
     paper_colour,
 )
@@ -1848,18 +1849,12 @@ class Arc(QGraphicsItem):
         if self._weight == DEFAULT_WEIGHT:
             return None
 
-        glyphs = QPainterPath()
-        glyphs.addText(0.0, 0.0, QFont(), str(self._weight))
-        drawn = glyphs.boundingRect()
-        if drawn.isEmpty():
+        placed = glyph_path(str(self._weight), WEIGHT_HEIGHT)
+        if placed.isEmpty():
             return None
 
-        glyphs.translate(-drawn.center().x(), -drawn.center().y())
-        scale = WEIGHT_HEIGHT / drawn.height()
         middle, away = self._halfway()
         reach = WEIGHT_OFFSET + WEIGHT_HEIGHT / 2.0
-
-        placed = QTransform().scale(scale, scale).map(glyphs)
         placed.translate(
             middle.x() + away.x() * reach,
             middle.y() + away.y() * reach,

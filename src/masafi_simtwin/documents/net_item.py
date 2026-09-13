@@ -81,7 +81,7 @@ from collections.abc import Callable
 from uuid import uuid4
 
 from PyQt6.QtCore import QPointF, QRectF, Qt
-from PyQt6.QtGui import QColor, QPainterPath, QPalette, QPen
+from PyQt6.QtGui import QColor, QFont, QPainterPath, QPalette, QPen, QTransform
 from PyQt6.QtWidgets import QGraphicsItem
 
 #: How big a connecting point is drawn, in millimetres of radius.  Small, and
@@ -112,6 +112,45 @@ ITEM_Z = 10.0
 #: The arcs go under the items they join, so that a line runs behind a place
 #: rather than across it and an arrowhead meets a boundary cleanly.
 ARC_Z = 5.0
+
+
+def glyph_path(text: str, height: float, width: float | None = None) -> QPainterPath:
+    """Build a piece of text as a path a height in millimetres, centred on nought.
+
+    What is written on the sheet — an arc's weight, a place's tokens — is a
+    **path** rather than text drawn with a font, because the scene is measured in
+    millimetres and a font in points: a path is scaled to a height on the paper,
+    so it is the same size at every zoom and on every machine, and it is filled
+    with the same brush as the thing it belongs to.
+
+    Parameters
+    ----------
+    text : str
+        What to write.
+    height : float
+        How tall it is to be, in millimetres.
+    width : float, optional
+        How wide it may be.  Text that would be wider at that height is
+        narrowed to it instead, keeping its proportions.
+
+    Returns
+    -------
+    PyQt6.QtGui.QPainterPath
+        The glyphs, their bounding box centred on the origin, or an empty path
+        for text that draws nothing.
+    """
+
+    glyphs = QPainterPath()
+    glyphs.addText(0.0, 0.0, QFont(), text)
+    drawn = glyphs.boundingRect()
+    if drawn.isEmpty():
+        return QPainterPath()
+
+    glyphs.translate(-drawn.center().x(), -drawn.center().y())
+    scale = height / drawn.height()
+    if width is not None and drawn.width() * scale > width:
+        scale = width / drawn.width()
+    return QTransform().scale(scale, scale).map(glyphs)
 
 
 def ink_colour(selected: bool, option) -> QColor:
