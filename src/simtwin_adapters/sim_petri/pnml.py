@@ -15,7 +15,8 @@ is the pattern MASAFI-sim-petri documents for the projects built on it:
 * PNML's own ``initialMarking``, which the library writes from a place's tokens
   and reads them back from — the one property of a place a backend runs on.
 * PNML's own ``graphics``, which every PNML tool reads: the centre of every place
-  and transition, and — as the ``position`` elements PNML gives an arc for the
+  and transition, the ``offset`` of a node's ``name`` when its caption has been
+  moved, and — as the ``position`` elements PNML gives an arc for the
   points it bends at — the route of an S or an L on the sheet.  In millimetres,
   the unit the sheet is measured in.  No ``dimension`` is written: how big a
   place is drawn is the editor's constant rather than a fact about this net.
@@ -214,6 +215,13 @@ def to_pnml(document: NetDocument) -> bytes:
     for node in (*document.places, *document.transitions):
         element = element_for(root, made[node.uuid])
         set_graphics(element, position=node.position)
+        if node.label_offset is not None:
+            x, y = node.label_offset
+            ElementTree.SubElement(
+                set_graphics(element.find(qname('name'))),
+                qname('offset'),
+                {'x': _number(x), 'y': _number(y)},
+            )
         attributes = {'uuid': node.uuid}
         if node.description:
             attributes['description'] = node.description
@@ -279,6 +287,7 @@ def from_pnml(data: bytes | str) -> NetDocument:
                     _position(element) or laid_out,
                     place.initial_marking,
                     _node_description(element),
+                    _label_offset(element),
                 )
             )
 
@@ -294,6 +303,7 @@ def from_pnml(data: bytes | str) -> NetDocument:
                     _position(element) or laid_out,
                     _node_description(element),
                     _node_vertical(element),
+                    _label_offset(element),
                 )
             )
 
@@ -544,6 +554,33 @@ def _node_vertical(element: ElementTree.Element) -> bool:
 
     node = _tool_element(element, 'node')
     return node is not None and node.get('vertical') == 'true'
+
+
+def _label_offset(element: ElementTree.Element):
+    """Read where a node's caption has been moved to, out of PNML's graphics.
+
+    PNML's own place for it — the ``offset`` in the ``graphics`` of the node's
+    ``name`` — so an offset another tool wrote is read as well.
+
+    Parameters
+    ----------
+    element : xml.etree.ElementTree.Element
+        The node's element.
+
+    Returns
+    -------
+    tuple of float, optional
+        The centre of the caption relative to the centre of the node, or
+        ``None`` when the file gives none: the caption goes where the editor
+        puts it.
+    """
+
+    name = element.find(qname('name'))
+    graphics = graphics_of(name) if name is not None else None
+    found = graphics.find(qname('offset')) if graphics is not None else None
+    if found is None:
+        return None
+    return float(found.get('x')), float(found.get('y'))
 
 
 def _position(element: ElementTree.Element):

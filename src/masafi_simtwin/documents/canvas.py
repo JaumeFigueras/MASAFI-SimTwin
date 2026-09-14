@@ -228,6 +228,13 @@ class CanvasView(QGraphicsView):
         is dragged, so this says what happened rather than asking.
     guides_moved : PyQt6.QtCore.pyqtSignal
         The same for the guides, as ``(guide, before, after)``.
+    labels_moved : PyQt6.QtCore.pyqtSignal
+        The same for the captions of the items, as ``(item, before, after)``:
+        the item whose caption was dragged, its
+        :attr:`~masafi_simtwin.documents.net_item.NetItem.label_offset` before —
+        ``None`` for a caption nobody had moved — and where the caption is now,
+        relative to the item.  A caption carried along by its item is not
+        moved.
     arcs_shaped : PyQt6.QtCore.pyqtSignal
         The same for the arcs a shaping handle was dragged on, as ``(arc,
         before controls, before points, after controls, after points)`` in each
@@ -259,6 +266,7 @@ class CanvasView(QGraphicsView):
     deletion_asked = pyqtSignal(object)
     items_moved = pyqtSignal(object)
     guides_moved = pyqtSignal(object)
+    labels_moved = pyqtSignal(object)
     arcs_shaped = pyqtSignal(object)
     arc_point_asked = pyqtSignal(object, QPointF)
     arc_point_removal_asked = pyqtSignal(object, int)
@@ -1778,6 +1786,11 @@ class CanvasView(QGraphicsView):
                 if isinstance(item, NetItem)
             },
             'guides': {guide: guide.position for guide in self.guides},
+            'labels': {
+                item: (item.label_offset, (item.label.pos().x(), item.label.pos().y()))
+                for item in self.scene().items()
+                if isinstance(item, NetItem)
+            },
             'arcs': {
                 arc: (arc.control_frames, arc.point_frames)
                 for arc in self.scene().items()
@@ -1812,6 +1825,14 @@ class CanvasView(QGraphicsView):
         ]
         if guides:
             self.guides_moved.emit(guides)
+
+        labels = [
+            (item, was, (item.label.pos().x(), item.label.pos().y()))
+            for item, (was, at) in before['labels'].items()
+            if item.scene() is self.scene() and at != (item.label.pos().x(), item.label.pos().y())
+        ]
+        if labels:
+            self.labels_moved.emit(labels)
 
         shaped = [
             (arc, was[0], was[1], arc.control_frames, arc.point_frames)

@@ -782,34 +782,45 @@ there, what its rate means, and where the number came from, which is a paragraph
 
 ---
 
-## A label sits where its item puts it, and an arc may cross it
+## A label is moved by hand, and nothing puts it back or out of the way
 
 **Now.** A node's name and description are written in one box, `Name: Description`, wrapped to
-`LABEL_WIDTH` and put in a fixed place: under a place, centred; across a transition, which is under a bar
-lying across the sheet and beside one standing up. The box is a thing of its own and can be **selected**,
-which is the first of the three a person will want; it cannot yet be **moved** or **given another
-width**, so it has no offset and no width of its own, nothing about it is written to the file, and it is
-drawn straight onto the sheet with nothing behind it — so an arc leaving a **place** downwards is drawn
-across the words under it, and two nodes a few millimetres apart have two boxes that overlap.
+`LABEL_WIDTH`. Until it is moved the box is in a fixed place: under a place, centred; across a
+transition, which is under a bar lying across the sheet and beside one standing up. It can be
+**selected** and **dragged**, and a dragged box keeps a `label_offset` — its centre relative to the
+node's — which is written where PNML keeps one (`<name><graphics><offset>`). It cannot yet be **given
+another width**; that is the next step of this work.
 
-Moving and resizing are the next two steps of the work this entry describes, and the offset will be
-written where PNML keeps one (`<name><graphics><offset>`); what stays open afterwards is everything
-below.
+A moved box is **where the person put it, and nothing moves it again**: not a longer description (the
+box grows about its centre, so it can grow over its own node), not a transition turned (a box put beside
+a bar lying across stays there when the bar stands up), and not a node dragged near it. There is **no
+way back** to the fixed place except *Undo*, which gives back `None` rather than the place the box
+happened to be in. The box is drawn straight onto the sheet with nothing behind it, so an arc can still
+run across the words.
 
-**Why it was done this way.** A fixed place is what makes a label free: nothing to store, nothing to
-undo, nothing new in the file, and no third thing on the sheet that can be selected, moved or lost.
-Every label the editor draws is worked out from the `name` and the `description` the document already
-carries, so drawing them cost the document nothing at all. The fixed places were chosen for where each
-shape's arcs are: a transition is met at its ends, so its box goes across it, and a place is met from
-every side, so its box goes where a drawn net has always put a name — under it.
+**Why it was done this way.** A box nobody moved costs nothing — no offset stored, nothing in the file —
+and follows its text and its bar as it always did; that is what `None` keeps. A box somebody moved is a
+decision, and a rule that shifted it afterwards would be undoing that decision behind their back. The
+offset is kept relative to the node, so the pair go about the sheet together, and it is PNML's own
+element, so another tool's offset is read and ours is read by another tool. The fixed places were
+chosen for where each shape's arcs are: a transition is met at its ends, so its box goes across it, and
+a place is met from every side, so its box goes where a drawn net has always put a name — under it.
 
 Backing each box with the colour of the paper was considered and left: it would hide the arcs that run
 under it, and a net where the lines disappear behind captions is worse than one where a line crosses a
 word.
 
 **When it will not be enough.** A dense net, where boxes collide with each other and with the arcs; a
-long description, which is a wide box under a small circle; and a file from another tool, which PNML
-lets carry a `graphics`/`offset` for a node's name that is dropped on reading and invented on writing.
+long description of a moved box, which grows over its node; a box moved beside a bar that is later
+stood up; and anybody who wants a box back where it started long after *Undo* has stopped reaching.
+
+**Options.**
+
+- **A *Reset Label Position* entry** on the item's context menu, recording a `MoveLabel` to `None`.
+  Small, and the obvious first addition if a person asks for it.
+- **Keeping the offset from the fixed place** rather than from the node's centre, so a moved box follows
+  its text and its bar the way an unmoved one does. It would no longer be PNML's offset, which is from
+  the node, so the file would have to convert both ways.
 
 **Options.**
 

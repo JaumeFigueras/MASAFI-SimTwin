@@ -88,6 +88,37 @@ def band(view, label: Label) -> None:
 # ----------------------------------------------------------------------
 
 
+def test_where_the_owner_puts_a_label_is_taken_exactly(place):
+    """Neither snapped nor held on the paper: a box laid out under a place is
+    already where it belongs."""
+
+    place.label.place(QPointF(0.35, -2.7))
+
+    assert place.label.pos() == QPointF(0.35, -2.7)
+
+
+def test_a_label_dragged_is_snapped_to_the_millimetre(place):
+    """A drag is any move that is not :meth:`Label.place` — which is how Qt moves
+    one under the hand."""
+
+    place.label.setPos(QPointF(3.4, 8.6))
+
+    assert place.label.pos() == QPointF(3.0, 9.0)
+
+
+def test_a_label_dragged_off_the_sheet_is_held_on_it_whole(editor, place):
+    """The box, not only its centre, as a node is held."""
+
+    sheet = editor.view.sceneRect()
+
+    place.label.setPos(place.mapFromScene(QPointF(-500.0, -500.0)))
+
+    box = place.label.mapRectToScene(place.label.box())
+    assert box.left() >= sheet.left() - 1e-9
+    assert box.top() >= sheet.top() - 1e-9
+    assert box.left() - sheet.left() < 1.0
+
+
 def test_a_label_says_what_it_is_given(place):
     """And lays the box out again when it changes."""
 

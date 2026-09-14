@@ -14,6 +14,7 @@ from simtwin_core.operations import (
     Change,
     MoveArcEnd,
     MoveGuide,
+    MoveLabel,
     MoveNode,
     RemoveArc,
     RemoveGuide,
@@ -78,6 +79,7 @@ EVERY_OPERATION = [
     SetTokens('p', 0, 3),
     SetDescription('t', '', 'Fill a bottle'),
     SetVertical('t', False, True),
+    MoveLabel('p', None, (3.0, -7.5)),
     AddArc(ArcData('b', 't', 'p', 3, 4)),
     RemoveArc(ARC),
     MoveArcEnd('a', 'source', 'p', 0, 'p', 6),
@@ -412,6 +414,32 @@ def test_a_way_round_that_is_neither_is_refused():
         SetVertical('t', False, 90).apply(net())
 
 
+def test_a_caption_is_moved_and_put_back_where_the_editor_puts_it():
+    """The first move of a box undone is a box nobody has moved, not a box moved
+    to where it happened to be."""
+
+    moved = MoveLabel('t', None, (0.0, 6.5)).apply(net())
+
+    assert moved.transitions[0].label_offset == (0.0, 6.5)
+    assert MoveLabel('t', None, (0.0, 6.5)).inverse().apply(moved) == net()
+
+
+def test_a_caption_moved_somewhere_that_is_not_a_place_is_refused():
+    """As a damaged journal would ask."""
+
+    with pytest.raises(InvalidNet, match='caption'):
+        MoveLabel('p', None, (1.0,)).apply(net())
+
+
+def test_a_caption_moved_goes_through_the_journal():
+    """Both offsets, and the ``None`` of a box nobody had moved, come back."""
+
+    moved = PlaceData('r', 'P3', (40.0, 40.0), 0, '', (2.5, 9.0))
+    change = Change('gesture', (MoveLabel('p', None, (1.0, 2.0)), AddNode(moved)))
+
+    assert operations.decode(json.loads(json.dumps(operations.encode(change)))) == change
+
+
 def test_a_name_another_node_has_is_refused():
     """A backend knows a node by its name."""
 
@@ -457,8 +485,12 @@ def test_a_node_written_before_tokens_existed_reads_as_holding_none():
 
     place, transition = (operation.node for operation in operations.decode(line).operations)
 
-    assert (place.tokens, place.description) == (0, '')
-    assert (transition.description, transition.vertical) == ('', False)
+    assert (place.tokens, place.description, place.label_offset) == (0, '', None)
+    assert (transition.description, transition.vertical, transition.label_offset) == (
+        '',
+        False,
+        None,
+    )
 
 
 

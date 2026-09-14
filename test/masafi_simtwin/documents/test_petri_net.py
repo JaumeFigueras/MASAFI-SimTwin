@@ -26,6 +26,7 @@ from simtwin_core.operations import (
     Change,
     MoveArcEnd,
     MoveGuide,
+    MoveLabel,
     MoveNode,
     Operation,
     RemoveArc,
@@ -533,6 +534,7 @@ def operations_for(editor) -> dict:
         SetTokens(place.uuid, 0, 3),
         SetDescription(transition.uuid, '', 'Fill a bottle'),
         SetVertical(transition.uuid, False, True),
+        MoveLabel(place.uuid, None, (4.5, 11.0)),
         AddArc(
             ArcData(
                 'new-arc',
@@ -903,6 +905,97 @@ def test_a_press_and_a_release_are_what_note_and_report_a_drag(editor):
     assert editor.view._before_drag is None
     assert editor.undo_stack.count() == count + 1
     assert editor.undo_stack.command(count).text() == 'Move'
+
+
+def drag_label(view, label, by: QPointF) -> None:
+    """Drag a caption through the view, the way a person's hand does.
+
+    A press, a move and a release, each carrying a real global position, since a
+    scene hit-tests through that — see :func:`test_arc.scene_mouse`.
+
+    Parameters
+    ----------
+    view : masafi_simtwin.documents.canvas.CanvasView
+        The view.
+    label : masafi_simtwin.documents.label.Label
+        The caption.
+    by : PyQt6.QtCore.QPointF
+        How far to drag it, in scene millimetres.
+    """
+
+    start = QPointF(view.mapFromScene(label.scenePos()))
+    end = QPointF(view.mapFromScene(label.scenePos() + by))
+    for kind, spot, button, buttons in (
+        (QEvent.Type.MouseButtonPress, start, Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton),
+        (QEvent.Type.MouseMove, end, Qt.MouseButton.NoButton, Qt.MouseButton.LeftButton),
+        (QEvent.Type.MouseButtonRelease, end, Qt.MouseButton.LeftButton, Qt.MouseButton.NoButton),
+    ):
+        event = QMouseEvent(
+            kind,
+            spot,
+            QPointF(view.viewport().mapToGlobal(spot.toPoint())),
+            button,
+            buttons,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        {
+            QEvent.Type.MouseButtonPress: view.mousePressEvent,
+            QEvent.Type.MouseMove: view.mouseMoveEvent,
+            QEvent.Type.MouseButtonRelease: view.mouseReleaseEvent,
+        }[kind](event)
+
+
+def test_a_caption_dragged_by_hand_is_one_recorded_change(editor):
+    """Moved a millimetre at a time, kept on the item, and put back by *Undo*
+    where the item puts it rather than where it happened to be."""
+
+    place, _free, _transition, _arc = little_net(editor)
+    before = editor.to_document()
+    anchor = place.label.pos()
+    count = editor.undo_stack.count()
+
+    drag_label(editor.view, place.label, QPointF(10.3, 20.2))
+
+    assert editor.undo_stack.count() == count + 1
+    assert editor.undo_stack.command(count).text() == 'Move Label'
+    offset = place.label_offset
+    assert offset == (place.label.pos().x(), place.label.pos().y())
+    assert offset == (round(offset[0]), round(offset[1]))
+    assert abs(offset[0] - anchor.x() - 10.3) <= 1.0 and abs(offset[1] - anchor.y() - 20.2) <= 1.0
+    assert editor.to_document().places[0].label_offset == offset
+
+    editor.undo_stack.undo()
+
+    assert place.label_offset is None
+    assert place.label.pos() == anchor
+    assert editor.to_document() == before
+
+
+def test_a_caption_that_has_been_moved_goes_with_its_item_and_stays_put_as_it_grows(editor):
+    """Relative to the item, so dragging the item carries it; and its centre stays
+    where it was put when the text in it changes."""
+
+    place, _free, _transition, _arc = little_net(editor)
+    editor.apply(Change('gesture', (MoveLabel(place.uuid, None, (15.0, -4.0)),)))
+
+    place.setPos(QPointF(60.0, 70.0))
+    editor.describe([place.uuid], 'A description long enough to wrap onto a second line')
+
+    assert place.label.pos() == QPointF(15.0, -4.0)
+    assert place.label.scenePos() == QPointF(75.0, 66.0)
+
+
+def test_a_moved_caption_survives_a_document_round_trip(editor):
+    """What is written is what is drawn again."""
+
+    place, _free, _transition, _arc = little_net(editor)
+    editor.apply(Change('gesture', (MoveLabel(place.uuid, None, (2.5, 9.0)),)))
+    document = editor.to_document()
+
+    editor.load_document(document)
+
+    assert editor.to_document() == document
+    assert editor.node(place.uuid).label.pos() == QPointF(2.5, 9.0)
 
 
 def test_a_click_that_moves_nothing_is_not_a_change(editor):

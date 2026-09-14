@@ -73,6 +73,7 @@ from simtwin_core.operations import (
     Change,
     MoveArcEnd,
     MoveGuide,
+    MoveLabel,
     MoveNode,
     Operation,
     RemoveArc,
@@ -244,13 +245,18 @@ def node_data(item: NetItem):
     -------
     simtwin_core.petri_net.PlaceData or simtwin_core.petri_net.TransitionData
         What it is: its identity, its name, where its centre is, its
-        description, a place's tokens and which way round a transition is drawn.
+        description, a place's tokens, which way round a transition is drawn,
+        and where its caption has been moved to.
     """
 
     position = (item.pos().x(), item.pos().y())
     if isinstance(item, Place):
-        return PlaceData(item.uuid, item.name, position, item.tokens, item.description)
-    return TransitionData(item.uuid, item.name, position, item.description, item.vertical)
+        return PlaceData(
+            item.uuid, item.name, position, item.tokens, item.description, item.label_offset
+        )
+    return TransitionData(
+        item.uuid, item.name, position, item.description, item.vertical, item.label_offset
+    )
 
 
 def guide_data(guide: Guide) -> GuideData:
@@ -426,6 +432,7 @@ class PetriNetEditor(Canvas):
         self.view.deletion_asked.connect(self._on_deletion_asked)
         self.view.items_moved.connect(self._on_items_moved)
         self.view.guides_moved.connect(self._on_guides_moved)
+        self.view.labels_moved.connect(self._on_labels_moved)
         self.view.arcs_shaped.connect(self._on_arcs_shaped)
         self.view.arc_point_asked.connect(self._on_arc_point_asked)
         self.view.arc_point_removal_asked.connect(self._on_arc_point_removal_asked)
@@ -957,6 +964,30 @@ class PetriNetEditor(Canvas):
             )
         )
 
+    def _on_labels_moved(self, moves) -> None:
+        """Record a drag of one or more captions as one change.
+
+        Qt has already put each box where it was dragged; what the item keeps
+        is set to match, so that a caption moved once stays where it was put
+        when its text changes, and then the change is recorded.
+
+        Parameters
+        ----------
+        moves : list
+            ``(item, before, after)`` for each item whose caption was dragged:
+            the offset it had, ``None`` for one nobody had moved, and where the
+            caption is now, relative to the item.
+        """
+
+        for item, _was, now in moves:
+            item.label_offset = now
+        self.record(
+            Change(
+                'move-label',
+                tuple(MoveLabel(item.uuid, was, now) for item, was, now in moves),
+            )
+        )
+
     def _on_arcs_shaped(self, shaped) -> None:
         """Record a drag of a shaping handle.
 
@@ -1192,6 +1223,7 @@ class PetriNetEditor(Canvas):
             'remove-arc-point': self.tr('Delete Point'),
             'move-items': self.tr('Move'),
             'move-guide': self.tr('Move Guide'),
+            'move-label': self.tr('Move Label'),
             'add-guide': self.tr('Add Guide'),
             'shape-arc': self.tr('Shape Arc'),
             'move-arc-end': self.tr('Move Arc End'),
@@ -1303,6 +1335,7 @@ class PetriNetEditor(Canvas):
             item.tokens = data.tokens
         else:
             item.vertical = data.vertical
+        item.label_offset = data.label_offset
         self.scene().addItem(item)
         item.setPos(QPointF(*data.position))
         return item
@@ -1482,6 +1515,8 @@ class PetriNetEditor(Canvas):
             if not isinstance(transition, Transition):
                 raise ValueError(f'the sheet has no transition {operation.node!r} to turn')
             transition.vertical = operation.after
+        elif isinstance(operation, MoveLabel):
+            self.node(operation.node).label_offset = operation.after
         elif isinstance(operation, AddArc):
             self.draw_arc(operation.arc)
         elif isinstance(operation, RemoveArc):

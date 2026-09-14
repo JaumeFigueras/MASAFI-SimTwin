@@ -28,11 +28,19 @@ in the way a place is: it says what the place is called.  So a band never picks
 one up — :meth:`Label.itemChange` refuses a selection nobody asked for —
 and a caption is never among what *Delete* or *Cut* act on.  A caption cannot be
 deleted: it goes when the thing it describes goes.
+
+**A label is moved by dragging it**, a millimetre at a time and held on the
+paper, as its owner is.  Those two rules are for a *person's* drag only: where
+the owner puts the box — :meth:`Label.place` — is taken exactly as it is given,
+since a box laid out under a place, or an offset read back from a file, is
+already where it is meant to be.
 """
 
 from __future__ import annotations
 
-from PyQt6.QtCore import QRectF, QSizeF, Qt
+from collections.abc import Callable
+
+from PyQt6.QtCore import QPointF, QRectF, QSizeF, Qt
 from PyQt6.QtGui import QPainterPath, QPen
 from PyQt6.QtWidgets import QGraphicsItem
 
@@ -58,6 +66,12 @@ class Label(QGraphicsItem):
     parent : PyQt6.QtWidgets.QGraphicsItem
         What the label belongs to.  A label is always a child: it is drawn in
         its owner's coordinates and goes when its owner goes.
+    snap : collections.abc.Callable, optional
+        What to round a coordinate to as a person drags the label, which is the
+        millimetre its owner is snapped to.
+    bounds : collections.abc.Callable, optional
+        Where the label may be dragged, as something returning a rectangle in
+        scene coordinates — the sheet, asked for at every move.
 
     Attributes
     ----------
@@ -66,14 +80,25 @@ class Label(QGraphicsItem):
         which draws no box and cannot be selected.
     """
 
-    def __init__(self, parent: QGraphicsItem) -> None:
+    def __init__(
+        self,
+        parent: QGraphicsItem,
+        snap: Callable[[float], float] | None = None,
+        bounds: Callable[[], QRectF] | None = None,
+    ) -> None:
         super().__init__(parent)
         self._text = ''
         self._glyphs = QPainterPath()
         self._size = QSizeF(0.0, 0.0)
         self._asked = False
+        self._snap = snap
+        self._bounds = bounds
+        self._placing = False
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
+        self.setCursor(Qt.CursorShape.SizeAllCursor)
 
     # ------------------------------------------------------------------
     # What it says
@@ -255,14 +280,70 @@ class Label(QGraphicsItem):
         finally:
             self._asked = False
 
+    def place(self, position: QPointF) -> None:
+        """Put the label where its owner says, exactly.
+
+        Parameters
+        ----------
+        position : PyQt6.QtCore.QPointF
+            Where its centre goes, in its owner's coordinates.  Neither snapped
+            nor held on the paper: those are rules for a drag, and what an owner
+            gives is where the box belongs.
+        """
+
+        self._placing = True
+        try:
+            self.setPos(position)
+        finally:
+            self._placing = False
+
+    def _dragged_to(self, position: QPointF) -> QPointF:
+        """Snap a place a person is dragging the label to, and hold it on the paper.
+
+        The whole **box** is held inside the sheet, not merely its centre, the
+        way a node is held.
+
+        Parameters
+        ----------
+        position : PyQt6.QtCore.QPointF
+            Where the drag would put its centre, in its owner's coordinates.
+
+        Returns
+        -------
+        PyQt6.QtCore.QPointF
+            Where it goes instead.
+        """
+
+        x, y = position.x(), position.y()
+        if self._snap is not None:
+            x, y = self._snap(x), self._snap(y)
+        owner = self.parentItem()
+        box = self.box()
+        if self._bounds is None or owner is None or box.isEmpty():
+            return QPointF(x, y)
+
+        area = self._bounds()
+        centre = owner.mapToScene(QPointF(x, y))
+        cx, cy = centre.x(), centre.y()
+        left, right = area.left() - box.left(), area.right() - box.right()
+        top, bottom = area.top() - box.top(), area.bottom() - box.bottom()
+        if left <= right:
+            cx = min(max(cx, left), right)
+        if top <= bottom:
+            cy = min(max(cy, top), bottom)
+        return owner.mapFromScene(QPointF(cx, cy))
+
     def itemChange(self, change, value):  # noqa: N802  (Qt naming)
-        """Refuse a selection nobody asked for.
+        """Refuse a selection nobody asked for, and keep a drag on the paper.
 
         A rubber band is drawn over the net to pick up what is drawn; a caption
         is not that, and a band that swept up half the captions on a sheet would
         make *Delete* look dangerous when it is not.  A press and :meth:`select`
         are the two things that do ask.  Putting a selection **down** is never
         refused, whoever asks.
+
+        A move that is not :meth:`place` is a person dragging the label, and is
+        snapped and held on the paper.
 
         Parameters
         ----------
@@ -283,4 +364,9 @@ class Label(QGraphicsItem):
             and not self._asked
         ):
             return False
+        if (
+            change == QGraphicsItem.GraphicsItemChange.ItemPositionChange
+            and not self._placing
+        ):
+            return self._dragged_to(value)
         return super().itemChange(change, value)

@@ -32,7 +32,8 @@ is made a tuple.
 Nor does a node hold tokens that are not a whole number of nought or more, or a
 description of more than one line.  A place's **tokens** are its initial
 marking, which a backend runs from; a node's **description** is a person's words
-about it, which no backend ever sees.
+about it, which no backend ever sees; and a node's **label offset** is where the
+box holding both has been moved to, or ``None`` for where the editor puts it.
 
 **A document holds everything in one order**, whatever order it is given in:
 nodes by name with numbers counted as numbers (:func:`reading_order`), arcs by
@@ -295,6 +296,31 @@ def _upright(value, what: str) -> bool:
     return value
 
 
+def _offset(value, what: str) -> Point | None:
+    """Check where a node's caption has been put.
+
+    Parameters
+    ----------
+    value : collections.abc.Sequence, optional
+        The centre of the caption relative to the centre of the node, or
+        ``None`` for where the editor puts it.
+    what : str
+        Whose caption it is, for the message when it is not a place.
+
+    Returns
+    -------
+    tuple of float, optional
+        The offset as a pair of floats, or ``None``.
+
+    Raises
+    ------
+    InvalidNet
+        When it is neither ``None`` nor two numbers.
+    """
+
+    return None if value is None else _point(value, f'the caption of {what}')
+
+
 def _points(values, what: str) -> tuple[Point, ...]:
     """Make a tuple of points of anything that holds some.
 
@@ -332,12 +358,17 @@ class PlaceData:
     description : str
         What it is for, in a person's words, on one line.  Not part of the net:
         a backend never sees it.
+    label_offset : tuple of float, optional
+        Where the box holding its name and description has been moved to: the
+        centre of the box relative to the centre of the place, in millimetres.
+        ``None`` for a box nobody has moved, which goes where the editor puts
+        it — under the place, however tall the text makes it.
 
     Raises
     ------
     InvalidNet
-        When the tokens are not a whole number of nought or more, or the
-        description is not one line of text.
+        When the tokens are not a whole number of nought or more, the
+        description is not one line of text, or the offset is not a pair.
     """
 
     uuid: str
@@ -345,12 +376,14 @@ class PlaceData:
     position: Point
     tokens: int = 0
     description: str = ''
+    label_offset: Point | None = None
 
     def __post_init__(self) -> None:
         what = f'place {self.name!r}'
         object.__setattr__(self, 'position', _point(self.position, what))
         object.__setattr__(self, 'tokens', _tokens(self.tokens, what))
         object.__setattr__(self, 'description', _description(self.description, what))
+        object.__setattr__(self, 'label_offset', _offset(self.label_offset, what))
 
 
 @dataclass(frozen=True)
@@ -372,12 +405,17 @@ class TransitionData:
         which is how a net laid out from top to bottom is drawn.  How it is
         drawn and nothing more: a transition is the same transition either way
         round, and no backend is told which.
+    label_offset : tuple of float, optional
+        Where the box holding its name and description has been moved to,
+        relative to the centre of the transition, in millimetres; ``None`` for
+        where the editor puts it.  A box that has been moved stays where it was
+        put when the bar is turned.
 
     Raises
     ------
     InvalidNet
-        When the description is not one line of text, or the bar is neither
-        upright nor lying across.
+        When the description is not one line of text, the bar is neither
+        upright nor lying across, or the offset is not a pair.
     """
 
     uuid: str
@@ -385,12 +423,14 @@ class TransitionData:
     position: Point
     description: str = ''
     vertical: bool = False
+    label_offset: Point | None = None
 
     def __post_init__(self) -> None:
         what = f'transition {self.name!r}'
         object.__setattr__(self, 'position', _point(self.position, what))
         object.__setattr__(self, 'description', _description(self.description, what))
         object.__setattr__(self, 'vertical', _upright(self.vertical, what))
+        object.__setattr__(self, 'label_offset', _offset(self.label_offset, what))
 
 
 @dataclass(frozen=True)

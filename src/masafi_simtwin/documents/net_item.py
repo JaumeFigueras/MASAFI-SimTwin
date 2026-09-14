@@ -199,7 +199,8 @@ class NetItem(QGraphicsItem):
         self.uuid = str(uuid4())
         self._name = ''
         self._description = ''
-        self._label = Label(self)
+        self._label_offset: tuple[float, float] | None = None
+        self._label = Label(self, snap, bounds)
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
@@ -277,16 +278,41 @@ class NetItem(QGraphicsItem):
 
         return self._label
 
+    @property
+    def label_offset(self) -> tuple[float, float] | None:
+        """tuple of float, optional: Where the box has been moved to.
+
+        The centre of the box relative to the centre of the item, in
+        millimetres, or ``None`` for a box nobody has moved — which goes where
+        :meth:`label_anchor` says and follows the text as it grows.  A box that
+        has been moved stays where it was put: its centre does not move when
+        what is written in it changes, nor when a transition is turned.
+        """
+
+        return self._label_offset
+
+    @label_offset.setter
+    def label_offset(self, offset) -> None:
+        offset = None if offset is None else (float(offset[0]), float(offset[1]))
+        if offset == self._label_offset:
+            return
+        self._label_offset = offset
+        self.show_label()
+
     def show_label(self) -> None:
         """Put what the item is called in its box, and the box where it belongs.
 
         Called whenever either could have changed: the name, the description,
-        and the shape the box is measured from — a transition stood up is
-        captioned somewhere else than one lying across.
+        where the box has been moved to, and the shape the box is measured from
+        — a transition stood up is captioned somewhere else than one lying
+        across.
         """
 
         self._label.text = self.label_text()
-        self._label.setPos(self.label_anchor(self._label.size))
+        if self._label_offset is not None:
+            self._label.place(QPointF(*self._label_offset))
+        else:
+            self._label.place(self.label_anchor(self._label.size))
 
     def label_anchor(self, size: QSizeF) -> QPointF:
         """Say where a box of this size belongs, in the item's own coordinates.

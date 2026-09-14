@@ -371,6 +371,21 @@ def test_a_transition_lies_across_the_sheet_unless_it_is_stood_up():
     assert TransitionData('t', 'T1', (60.0, 20.0), '', True).vertical is True
 
 
+def test_a_caption_nobody_has_moved_has_no_offset():
+    """``None`` is where the editor puts it; a pair is where it was put."""
+
+    assert PlaceData('p', 'P1', (20.0, 20.0)).label_offset is None
+    assert TransitionData('t', 'T1', (60.0, 20.0), '', False, [1, 2]).label_offset == (1.0, 2.0)
+
+
+@pytest.mark.parametrize('offset', [(1.0,), 'far', 3.0], ids=['one', 'text', 'number'])
+def test_a_caption_moved_somewhere_that_is_not_a_place_is_refused(offset):
+    """An offset is two numbers or nothing."""
+
+    with pytest.raises(InvalidNet, match='caption'):
+        PlaceData('p', 'P1', (20.0, 20.0), 0, '', offset)
+
+
 @pytest.mark.parametrize('vertical', [1, 'true', None], ids=['number', 'text', 'nothing'])
 def test_a_transition_drawn_neither_way_round_is_refused(vertical):
     """There is no angle between the two, so nothing but an answer will do."""

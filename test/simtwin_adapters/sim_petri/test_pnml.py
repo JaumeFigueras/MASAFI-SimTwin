@@ -380,6 +380,46 @@ def test_a_transition_standing_up_rides_in_the_tools_own_data():
     assert pnml.from_pnml(written) == document
 
 
+def test_a_moved_caption_is_written_where_pnml_keeps_one():
+    """The ``offset`` in the ``graphics`` of the node's ``name``, which is PNML's
+    own, so another tool reads it too — and only for a caption that was moved."""
+
+    moved = replace(
+        DRAWN,
+        places=(replace(DRAWN.places[0], label_offset=(0.0, 7.5)), DRAWN.places[1]),
+        transitions=(replace(DRAWN.transitions[0], label_offset=(-12.25, 3.0)),),
+    )
+    written = pnml.to_pnml(moved)
+    root = tree_of(written)
+
+    def offset_of(name):
+        graphics = graphics_of(element_for(root, name).find(qname('name')))
+        return None if graphics is None else graphics.find(qname('offset'))
+
+    assert offset_of('P1').attrib == {'x': '0', 'y': '7.5'}
+    assert offset_of('T1').attrib == {'x': '-12.25', 'y': '3'}
+    assert offset_of('P2') is None
+    assert pnml.from_pnml(written) == moved
+    assert [place.name for place in library_reads(written.decode('utf-8')).places] == ['P1', 'P2']
+
+
+def test_a_caption_offset_another_tool_writes_is_read():
+    """PNML's place for it is everybody's."""
+
+    written = FROM_ANOTHER_TOOL.replace(
+        b'<place id="p"><name><text>buffer</text></name></place>',
+        b'<place id="p"><name><text>buffer</text>'
+        b'<graphics><offset x="4" y="-6"/></graphics></name></place>',
+    )
+
+    document = pnml.from_pnml(written)
+
+    assert {place.name: place.label_offset for place in document.places} == {
+        'buffer': (4.0, -6.0),
+        'done': None,
+    }
+
+
 def test_a_marking_another_tool_writes_is_read_as_tokens():
     """And its nodes have no description, and its bars lie across the sheet."""
 

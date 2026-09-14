@@ -453,6 +453,54 @@ class SetVertical(Operation):
         return SetVertical(self.node, self.after, self.before)
 
 
+@dataclass(frozen=True)
+class MoveLabel(Operation):
+    """Move the box holding a node's name and description.
+
+    Attributes
+    ----------
+    node : str
+        The UUID of the node.
+    before, after : tuple of float, optional
+        Where the centre of the box was and where it goes, relative to the
+        centre of the node, in millimetres — or ``None`` for where the editor
+        puts it, which is what undoing the first move of a box gives back.
+    """
+
+    NAME = 'move-label'
+
+    node: str
+    before: Point | None
+    after: Point | None
+
+    def apply(self, document: NetDocument) -> NetDocument:
+        """Put the box where it goes.
+
+        Parameters
+        ----------
+        document : simtwin_core.petri_net.NetDocument
+            The net.
+
+        Returns
+        -------
+        simtwin_core.petri_net.NetDocument
+            The net with the node's caption moved.
+        """
+
+        return _changed_node(document, self.node, label_offset=self.after)
+
+    def inverse(self) -> Operation:
+        """Give the move back.
+
+        Returns
+        -------
+        MoveLabel
+            The inverse.
+        """
+
+        return MoveLabel(self.node, self.after, self.before)
+
+
 # ----------------------------------------------------------------------
 # The arcs
 # ----------------------------------------------------------------------
@@ -1033,6 +1081,7 @@ OPERATIONS: dict[str, type[Operation]] = {
         SetTokens,
         SetDescription,
         SetVertical,
+        MoveLabel,
         AddArc,
         RemoveArc,
         MoveArcEnd,
@@ -1181,6 +1230,12 @@ def _encode_operation(operation: Operation) -> dict:
         data.update(node=operation.node, before=list(operation.before), after=list(operation.after))
     elif isinstance(operation, (SetNodeName, SetTokens, SetDescription, SetVertical)):
         data.update(node=operation.node, before=operation.before, after=operation.after)
+    elif isinstance(operation, MoveLabel):
+        data.update(
+            node=operation.node,
+            before=_offset_data(operation.before),
+            after=_offset_data(operation.after),
+        )
     elif isinstance(operation, (AddArc, RemoveArc)):
         data['arc'] = _arc_data(operation.arc)
     elif isinstance(operation, MoveArcEnd):
@@ -1245,6 +1300,10 @@ def _decode_operation(data: dict) -> Operation:
             return MoveNode(data['node'], tuple(data['before']), tuple(data['after']))
         if operation in (SetNodeName, SetTokens, SetDescription, SetVertical):
             return operation(data['node'], data['before'], data['after'])
+        if operation is MoveLabel:
+            return MoveLabel(
+                data['node'], _read_offset(data['before']), _read_offset(data['after'])
+            )
         if operation in (AddArc, RemoveArc):
             return operation(_read_arc(data['arc']))
         if operation is MoveArcEnd:
@@ -1298,6 +1357,7 @@ def _node_data(node: Node) -> dict:
     else:
         data['vertical'] = node.vertical
     data['description'] = node.description
+    data['label_offset'] = _offset_data(node.label_offset)
     return data
 
 
@@ -1308,8 +1368,9 @@ def _read_node(data: dict) -> Node:
     ----------
     data : dict
         What :func:`_node_data` wrote.  A line written before nodes had tokens,
-        descriptions or a way round has none of them, and reads as a node with
-        none and a transition lying across the sheet.
+        descriptions, a way round or a caption that could be moved has none of
+        them, and reads as a node with none, a transition lying across the sheet
+        and a caption where the editor puts it.
 
     Returns
     -------
@@ -1318,6 +1379,7 @@ def _read_node(data: dict) -> Node:
     """
 
     description = data.get('description', '')
+    offset = _read_offset(data.get('label_offset'))
     if data['kind'] == 'place':
         return PlaceData(
             data['uuid'],
@@ -1325,6 +1387,7 @@ def _read_node(data: dict) -> Node:
             tuple(data['position']),
             data.get('tokens', 0),
             description,
+            offset,
         )
     return TransitionData(
         data['uuid'],
@@ -1332,7 +1395,42 @@ def _read_node(data: dict) -> Node:
         tuple(data['position']),
         description,
         data.get('vertical', False),
+        offset,
     )
+
+
+def _offset_data(offset) -> list | None:
+    """Write where a caption has been moved to as plain data.
+
+    Parameters
+    ----------
+    offset : tuple of float, optional
+        The offset, or ``None`` for where the editor puts it.
+
+    Returns
+    -------
+    list, optional
+        The offset as a list, or ``None``.
+    """
+
+    return None if offset is None else list(offset)
+
+
+def _read_offset(offset) -> tuple | None:
+    """Read it back.
+
+    Parameters
+    ----------
+    offset : list, optional
+        What :func:`_offset_data` wrote.
+
+    Returns
+    -------
+    tuple, optional
+        The offset, or ``None``.
+    """
+
+    return None if offset is None else tuple(offset)
 
 
 def _arc_data(arc: ArcData) -> dict:
