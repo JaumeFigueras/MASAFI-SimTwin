@@ -524,6 +524,19 @@ class ArcData:
         part in comparing two arcs, and no operation and no journal line carries
         it: two descriptions of one drawing are equal whether or not the route
         has been filled in.
+    weight_offset : tuple of float, optional
+        Where the box holding the weight has been moved to, in the arc's chord
+        frame — how far along and how far across, as fractions of the chord, the
+        way the bends are kept — so that a moved number turns and scales with
+        the arc.  ``None`` for a box nobody has moved, which sits beside the
+        middle of the line.  Kept whatever the weight, so a number moved, set to
+        one and set to three again comes back where it was.
+    inscription_offset : tuple of float, optional
+        Where the weight's box is drawn relative to the middle of the drawn
+        arc, in millimetres, which is what PNML's ``inscription`` offset says.
+        Like the ``route``, **worked out rather than kept**: written for other
+        tools, never used to draw, and no part of comparing two arcs.  ``None``
+        when no weight is drawn.
 
     Raises
     ------
@@ -544,6 +557,8 @@ class ArcData:
     controls: tuple[Point, Point] | None = None
     points: tuple[Point, ...] | None = None
     route: tuple[Point, ...] = field(default=(), compare=False)
+    weight_offset: Point | None = None
+    inscription_offset: Point | None = field(default=None, compare=False)
 
     def __post_init__(self) -> None:
         if self.kind not in KINDS:
@@ -564,6 +579,9 @@ class ArcData:
                 self, 'points', _points(self.points, f'a point of arc {self.uuid!r}')
             )
         object.__setattr__(self, 'route', _points(self.route, f'the route of arc {self.uuid!r}'))
+        what = f'arc {self.uuid!r}'
+        object.__setattr__(self, 'weight_offset', _offset(self.weight_offset, what))
+        object.__setattr__(self, 'inscription_offset', _offset(self.inscription_offset, what))
 
 
 @dataclass(frozen=True)

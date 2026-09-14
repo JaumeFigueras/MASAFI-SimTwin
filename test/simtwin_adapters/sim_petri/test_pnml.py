@@ -425,6 +425,45 @@ def test_a_resized_caption_rides_in_the_tools_own_data():
     assert pnml.from_pnml(written) == resized
 
 
+def test_a_moved_weight_is_kept_in_the_tools_data_and_shown_to_other_tools():
+    """The chord frame is ours and is read back; PNML's inscription offset is
+    written for other tools, only where there is an inscription to hang it on."""
+
+    changed = {
+        'a1': {'weight_offset': (0.5, -0.3), 'inscription_offset': (0.25, -4.0)},
+        'a2': {'weight_offset': (0.2, 0.1), 'inscription_offset': (1.0, 1.0)},
+    }
+    moved = replace(
+        DRAWN, arcs=tuple(replace(arc, **changed.get(arc.uuid, {})) for arc in DRAWN.arcs)
+    )
+    written = pnml.to_pnml(moved)
+    root = tree_of(written)
+    namespace = f'{{{pnml.TOOL_NAMESPACE}}}'
+    elements = [
+        element
+        for element in root.iter(qname('arc'))
+    ]
+
+    def caption_of(uuid):
+        for element in elements:
+            link = element.find(qname('toolspecific')).find(f'{namespace}link')
+            if link.get('uuid') == uuid:
+                return element, link.find(f'{namespace}caption')
+        raise AssertionError(uuid)
+
+    heavy, caption = caption_of('a1')
+    assert caption.attrib == {'along': '0.5', 'across': '-0.3'}
+    offset = graphics_of(heavy.find(qname('inscription'))).find(qname('offset'))
+    assert offset.attrib == {'x': '0.25', 'y': '-4'}
+
+    light, caption = caption_of('a2')
+    assert caption.attrib == {'along': '0.2', 'across': '0.1'}
+    assert light.find(qname('inscription')) is None
+
+    assert caption_of('a3')[1] is None
+    assert pnml.from_pnml(written) == moved
+
+
 def test_a_caption_offset_another_tool_writes_is_read():
     """PNML's place for it is everybody's."""
 

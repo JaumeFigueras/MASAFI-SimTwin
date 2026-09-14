@@ -332,6 +332,24 @@ class NetItem(QGraphicsItem):
         self._label_width = width
         self.show_label()
 
+    def label_offset_at(self, position: QPointF) -> tuple[float, float]:
+        """Say what offset a caption at a position has, as the item keeps one.
+
+        Parameters
+        ----------
+        position : PyQt6.QtCore.QPointF
+            Where the centre of the box is, in the item's own coordinates.
+
+        Returns
+        -------
+        tuple of float
+            The same place as a pair: an item keeps its caption relative to its
+            own centre, so there is nothing to turn.  An arc keeps its weight in
+            its chord frame and answers otherwise.
+        """
+
+        return (position.x(), position.y())
+
     def label_centre(self, size: QSizeF) -> QPointF:
         """Say where the centre of a box of this size goes.
 
@@ -684,6 +702,10 @@ class NetItem(QGraphicsItem):
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
             for arc in self._arcs:
                 arc.route()
+        if change == QGraphicsItem.GraphicsItemChange.ItemSelectedHasChanged:
+            # The caption is drawn in the accent while the item is selected, and
+            # it lies outside the item's rectangle, which is all Qt repaints.
+            self._label.update()
         return super().itemChange(change, value)
 
     def reshaped(self) -> None:

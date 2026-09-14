@@ -97,7 +97,11 @@ accord.
 The **weight** is how many tokens the arc carries, one by default.  It is drawn
 beside the line only when it is not one, which is the convention of every drawn
 Petri net: an arc without a number is an arc of weight one, and writing the one
-in would put a number on nearly every arc of nearly every net.
+in would put a number on nearly every arc of nearly every net.  The number is a
+:class:`~masafi_simtwin.documents.label.Label`, a child of the arc in the same
+lettering as a node's caption, so it can be selected and moved; it is not
+resized, one short number having nothing to wrap.  A moved number is kept in the
+arc's **chord frame**, as the bends are, so it turns and scales with the arc.
 
 An arc is **normal or inhibitor**, which is :class:`ArcKind`.  An inhibitor arc
 runs from a place to a transition and nowhere else — :data:`KIND_DIRECTIONS`
@@ -126,17 +130,17 @@ from collections.abc import Callable
 from enum import Enum
 from uuid import uuid4
 
-from PyQt6.QtCore import QCoreApplication, QLineF, QPointF, QRectF, Qt
+from PyQt6.QtCore import QCoreApplication, QLineF, QPointF, QRectF, QSizeF, Qt
 from PyQt6.QtGui import QPainterPath, QPainterPathStroker, QPen
 from PyQt6.QtWidgets import QGraphicsItem
 
 from masafi_simtwin.documents.ink import (
     HANDLE_GRAB,
     HANDLE_SIZE,
-    glyph_path,
     ink_colour,
     paper_colour,
 )
+from masafi_simtwin.documents.label import Label
 from masafi_simtwin.documents.net_item import (
     ARC_Z,
     ITEM_PEN,
@@ -171,8 +175,9 @@ SEARCH_TAIL = 6.0
 #: pixel at any zoom a person works at.  A straight arc does not search at all.
 SEARCH_STEPS = 16
 
-#: How tall the weight is drawn, in millimetres, and how far off the line.
-WEIGHT_HEIGHT = 3.0
+#: How far the box of the weight stands off the middle of the line, in
+#: millimetres.  The number itself is a caption, lettered like every other on
+#: the sheet.
 WEIGHT_OFFSET = 1.2
 
 #: The weight an arc carries unless it is told otherwise, and the one that is
@@ -1020,6 +1025,8 @@ class Arc(QGraphicsItem):
         self._points: list[list[float]] = []
         self._dragging: str | None = None
         self._line = QLineF()
+        self._label_offset: tuple[float, float] | None = None
+        self._label = Label(self, snap, self._sheet)
 
         if source_port is None:
             source_port = source.free_port_towards(target.scenePos())
@@ -1037,6 +1044,7 @@ class Arc(QGraphicsItem):
         self.route()
         self._points = [list(self.chord_frame(QPointF(point))) for point in points or ()]
         self._seed_points()
+        self.show_label()
 
     # ------------------------------------------------------------------
     # What it joins
@@ -1177,6 +1185,7 @@ class Arc(QGraphicsItem):
             self.target.scene_port(self.target_port),
         )
         self.update()
+        self.show_label()
 
     # ------------------------------------------------------------------
     # Straight or curved
@@ -1211,6 +1220,7 @@ class Arc(QGraphicsItem):
 
         self.set_shape(value)
         self._seed_points()
+        self.show_label()
 
     def set_shape(self, shape: ArcShape) -> None:
         """Draw the arc in a shape, and change nothing else.
@@ -1232,6 +1242,7 @@ class Arc(QGraphicsItem):
             self.prepareGeometryChange()
             self._shape_kind = shape
             self.update()
+            self.show_label()
 
     def _seed_points(self) -> None:
         """Give the shape its own default points, when the arc has none.
@@ -1356,6 +1367,7 @@ class Arc(QGraphicsItem):
         else:
             self._points = [list(point) for point in points]
         self.update()
+        self.show_label()
 
     def curve_middle(self) -> QPointF:
         """Give the half-way point of the arc as it is drawn.
@@ -1495,6 +1507,7 @@ class Arc(QGraphicsItem):
         self.prepareGeometryChange()
         self._points.insert(index, list(self.chord_frame(where)))
         self.update()
+        self.show_label()
         return index
 
     def remove_point(self, index: int) -> bool:
@@ -1522,6 +1535,7 @@ class Arc(QGraphicsItem):
         self.prepareGeometryChange()
         del self._points[index]
         self.update()
+        self.show_label()
         return True
 
     def point_at(self, position: QPointF) -> int | None:
@@ -1760,6 +1774,7 @@ class Arc(QGraphicsItem):
                 self.prepareGeometryChange()
                 self._points[index] = list(self.chord_frame(point))
                 self.update()
+                self.show_label()
             return
 
         if self._shape_kind is not ArcShape.CURVED:
@@ -1777,6 +1792,7 @@ class Arc(QGraphicsItem):
             index = 0 if name == 'source_control' else 1
             self._controls[index] = list(self.chord_frame(point))
         self.update()
+        self.show_label()
 
     def handle_rect(self, at: QPointF) -> QRectF:
         """Give the square a handle is drawn as.
@@ -1817,40 +1833,129 @@ class Arc(QGraphicsItem):
 
         value = max(int(value), 1)
         if value != self._weight:
-            self.prepareGeometryChange()
             self._weight = value
-            self.update()
+            self.show_label()
 
-    def weight_path(self) -> QPainterPath | None:
-        """Build the number beside the line, when there is one to draw.
+    @property
+    def label(self) -> Label:
+        """masafi_simtwin.documents.label.Label: The box the weight is written in.
 
-        The number is a **path** rather than text drawn with a font, because the
-        scene is measured in millimetres and a font is measured in points: a
-        path can be scaled to a height in millimetres, so the number is the same
-        size on the paper at every zoom and on every machine, and it is painted
-        with the same brush as the rest of the arc.
+        A child of the arc, empty — and so neither drawn nor selectable — while
+        the weight is one.
+        """
+
+        return self._label
+
+    @property
+    def label_offset(self) -> tuple[float, float] | None:
+        """tuple of float, optional: Where the weight's box has been moved to.
+
+        Its centre in the arc's chord frame — how far along and how far across,
+        as fractions of the chord — or ``None`` for a box nobody has moved,
+        which sits beside the middle of the drawn line.  Kept whatever the
+        weight, so a number that goes and comes back comes back where it was.
+        """
+
+        return self._label_offset
+
+    @label_offset.setter
+    def label_offset(self, offset) -> None:
+        offset = None if offset is None else (float(offset[0]), float(offset[1]))
+        if offset == self._label_offset:
+            return
+        self._label_offset = offset
+        self.show_label()
+
+    def label_offset_at(self, position: QPointF) -> tuple[float, float]:
+        """Say what offset the weight's box at a position has.
+
+        Parameters
+        ----------
+        position : PyQt6.QtCore.QPointF
+            Where the centre of the box is, in scene millimetres — the arc's own
+            coordinates, the arc never moving.
 
         Returns
         -------
-        PyQt6.QtGui.QPainterPath, optional
-            The digits, centred beside the middle of the line, or ``None`` when
-            the weight is one and nothing is drawn.
+        tuple of float
+            The place in the chord's own frame.
         """
 
-        if self._weight == DEFAULT_WEIGHT:
-            return None
+        along, across = self.chord_frame(position)
+        return (float(along), float(across))
 
-        placed = glyph_path(str(self._weight), WEIGHT_HEIGHT)
-        if placed.isEmpty():
-            return None
+    def label_text(self) -> str:
+        """Give what is written in the weight's box.
+
+        Returns
+        -------
+        str
+            The weight, and nothing at all when it is one.
+        """
+
+        return '' if self._weight == DEFAULT_WEIGHT else str(self._weight)
+
+    def label_anchor(self, size: QSizeF) -> QPointF:
+        """Say where a box nobody has moved belongs.
+
+        Beside the middle of the **drawn** arc, :data:`WEIGHT_OFFSET` off the
+        line on its left, so a number beside a curve sits beside the curve.
+
+        Parameters
+        ----------
+        size : PyQt6.QtCore.QSizeF
+            How big the box is, in millimetres.
+
+        Returns
+        -------
+        PyQt6.QtCore.QPointF
+            Where its centre goes, in scene millimetres.
+        """
 
         middle, away = self._halfway()
-        reach = WEIGHT_OFFSET + WEIGHT_HEIGHT / 2.0
-        placed.translate(
-            middle.x() + away.x() * reach,
-            middle.y() + away.y() * reach,
-        )
-        return placed
+        reach = WEIGHT_OFFSET + size.height() / 2.0
+        return QPointF(middle.x() + away.x() * reach, middle.y() + away.y() * reach)
+
+    def label_centre(self, size: QSizeF) -> QPointF:
+        """Say where the centre of the weight's box goes.
+
+        Parameters
+        ----------
+        size : PyQt6.QtCore.QSizeF
+            How big the box is, in millimetres.
+
+        Returns
+        -------
+        PyQt6.QtCore.QPointF
+            Where it was moved to, turned out of the chord frame, or where
+            :meth:`label_anchor` puts it — in scene millimetres.
+        """
+
+        if self._label_offset is not None:
+            return self.chord_point(*self._label_offset)
+        return self.label_anchor(size)
+
+    def show_label(self) -> None:
+        """Put the weight in its box, and the box where it belongs.
+
+        Called whenever the weight, the offset or the drawn line could have
+        changed — which is whenever the arc is routed or reshaped.
+        """
+
+        self._label.text = self.label_text()
+        self._label.place(self.label_centre(self._label.size))
+
+    def _sheet(self) -> QRectF:
+        """Give where the weight's box may be dragged: the sheet the arc is on.
+
+        Returns
+        -------
+        PyQt6.QtCore.QRectF
+            The scene's rectangle, or an empty one for an arc on no scene.
+        """
+
+        scene = self.scene()
+        return scene.sceneRect() if scene is not None else QRectF()
 
     def _halfway(self) -> tuple[QPointF, QPointF]:
         """Give the middle of the arc and the way across it there.
@@ -1975,15 +2080,12 @@ class Arc(QGraphicsItem):
         Returns
         -------
         PyQt6.QtCore.QRectF
-            The arc as it is drawn, the arrowhead, the number beside it, its
-            handles when it has any, and the band the line can be taken hold of
-            in.
+            The arc as it is drawn, the arrowhead, its handles when it has any,
+            and the band the line can be taken hold of in.  The weight is a child
+            with a rectangle of its own.
         """
 
         area = self.path().boundingRect().normalized()
-        weight = self.weight_path()
-        if weight is not None:
-            area = area.united(weight.boundingRect())
         for where in self.handles().values():
             area = area.united(self.handle_rect(where))
         reach = max(ARC_GRAB, ARROW_WIDTH, ITEM_PEN_SELECTED, HANDLE_GRAB)
@@ -2011,7 +2113,7 @@ class Arc(QGraphicsItem):
         return band
 
     def paint(self, painter, option, widget=None) -> None:
-        """Draw the arc, the mark it ends in and its weight.
+        """Draw the arc and the mark it ends in; the weight paints itself.
 
         A normal arc ends in a filled arrowhead.  An inhibitor arc ends in a
         **ring**, drawn with the line's own pen around the colour of the paper,
@@ -2053,10 +2155,6 @@ class Arc(QGraphicsItem):
             painter.setBrush(colour)
             painter.drawPath(self.arrow())
 
-        weight = self.weight_path()
-        if weight is not None:
-            painter.drawPath(weight)
-
         self._paint_handles(painter, option)
 
     def itemChange(self, change, value):  # noqa: N802  (Qt naming)
@@ -2093,6 +2191,9 @@ class Arc(QGraphicsItem):
 
         if change == QGraphicsItem.GraphicsItemChange.ItemSelectedChange:
             self.prepareGeometryChange()
+        if change == QGraphicsItem.GraphicsItemChange.ItemSelectedHasChanged:
+            # The weight is drawn in the accent while the arc is selected.
+            self._label.update()
         return super().itemChange(change, value)
 
     def mousePressEvent(self, event) -> None:  # noqa: N802  (Qt naming)

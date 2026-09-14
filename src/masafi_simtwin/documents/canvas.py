@@ -229,12 +229,13 @@ class CanvasView(QGraphicsView):
     guides_moved : PyQt6.QtCore.pyqtSignal
         The same for the guides, as ``(guide, before, after)``.
     labels_moved : PyQt6.QtCore.pyqtSignal
-        The same for the captions of the items, as ``(item, before, after)``:
-        the item whose caption was dragged, its
-        :attr:`~masafi_simtwin.documents.net_item.NetItem.label_offset` before —
-        ``None`` for a caption nobody had moved — and where the caption is now,
-        relative to the item.  A caption carried along by its item is not
-        moved, and nor is one that shifted because it was resized.
+        The same for the captions a person dragged — a node's and an arc's
+        weight alike — as ``(owner, before, after)``: what the caption belongs
+        to, its ``label_offset`` before — ``None`` for a caption nobody had
+        moved — and after, as the owner keeps one: relative to a node's centre,
+        in an arc's chord frame.  Only a caption the label itself says was
+        dragged is reported, so one carried along by its node, re-placed as its
+        arc is re-routed, or shifted by a resize is not.
     labels_resized : PyQt6.QtCore.pyqtSignal
         The same for the captions a handle was dragged on, as ``(item, before,
         after)``: the item and its
@@ -1793,11 +1794,12 @@ class CanvasView(QGraphicsView):
             },
             'guides': {guide: guide.position for guide in self.guides},
             'labels': {
-                item: (
-                    item.label_offset,
-                    (item.label.pos().x(), item.label.pos().y()),
-                    item.label_width,
-                )
+                owner: owner.label_offset
+                for owner in self.scene().items()
+                if isinstance(owner, (NetItem, Arc))
+            },
+            'widths': {
+                item: item.label_width
                 for item in self.scene().items()
                 if isinstance(item, NetItem)
             },
@@ -1807,6 +1809,8 @@ class CanvasView(QGraphicsView):
                 if isinstance(arc, Arc)
             },
         }
+        for owner in self._before_drag['labels']:
+            owner.label.dragged = False
 
     def _report_a_drag(self) -> None:
         """Say what a drag moved or shaped, once the button is up.
@@ -1838,17 +1842,17 @@ class CanvasView(QGraphicsView):
 
         resized = [
             (item, width, item.label_width)
-            for item, (_offset, _at, width) in before['labels'].items()
+            for item, width in before['widths'].items()
             if item.scene() is self.scene() and width != item.label_width
         ]
-        stretched = {entry[0] for entry in resized}
-        labels = [
-            (item, was, (item.label.pos().x(), item.label.pos().y()))
-            for item, (was, at, _width) in before['labels'].items()
-            if item.scene() is self.scene()
-            and item not in stretched
-            and at != (item.label.pos().x(), item.label.pos().y())
-        ]
+        labels = []
+        for owner, was in before['labels'].items():
+            if owner.scene() is not self.scene() or not owner.label.dragged:
+                continue
+            owner.label.dragged = False
+            now = owner.label_offset_at(owner.label.pos())
+            if now != was:
+                labels.append((owner, was, now))
         if labels:
             self.labels_moved.emit(labels)
         if resized:

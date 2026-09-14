@@ -378,6 +378,19 @@ def test_a_caption_nobody_has_moved_has_no_offset():
     assert TransitionData('t', 'T1', (60.0, 20.0), '', False, [1, 2]).label_offset == (1.0, 2.0)
 
 
+def test_a_weight_nobody_has_moved_has_no_offset_and_what_is_drawn_is_not_compared():
+    """The offset is kept; where PNML's inscription says it is drawn is worked out,
+    and two arcs differing only in that are one arc."""
+
+    arc = ArcData('a', 'p', 't', 0, 10)
+
+    assert arc.weight_offset is None
+    assert ArcData('a', 'p', 't', 0, 10, weight_offset=[0.5, 1]).weight_offset == (0.5, 1.0)
+    assert ArcData('a', 'p', 't', 0, 10, inscription_offset=(1.0, 2.0)) == arc
+    with pytest.raises(InvalidNet, match='caption'):
+        ArcData('a', 'p', 't', 0, 10, weight_offset=(1.0,))
+
+
 def test_a_caption_nobody_has_resized_has_no_width():
     """``None`` is the editor's own width; a number is the width it was made."""
 

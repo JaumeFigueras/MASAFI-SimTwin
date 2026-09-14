@@ -27,9 +27,9 @@ and the same name, and the arcs that hung on it come back in the same change.
 Nothing is looked up from the net at the time it is undone, because by then the
 net is not what it was.
 
-An arc's ``route`` is not carried: it is derived from the arc's points, the
-editor is the only thing that can work it out, and it takes no part in comparing
-two descriptions.
+An arc's ``route`` is not carried, nor its ``inscription_offset``: both are
+derived from what the arc keeps, the editor is the only thing that can work them
+out, and they take no part in comparing two descriptions.
 
 **A whole net is written as the same plain data** — :func:`encode_net` and
 :func:`decode_net` — because it is the same nodes and the same arcs written by
@@ -499,6 +499,53 @@ class MoveLabel(Operation):
         """
 
         return MoveLabel(self.node, self.after, self.before)
+
+
+@dataclass(frozen=True)
+class MoveWeight(Operation):
+    """Move the box holding an arc's weight.
+
+    Attributes
+    ----------
+    arc : str
+        The UUID of the arc.
+    before, after : tuple of float, optional
+        Where the centre of the box was and where it goes, in the arc's chord
+        frame — or ``None`` for beside the middle of the line.
+    """
+
+    NAME = 'move-weight'
+
+    arc: str
+    before: Point | None
+    after: Point | None
+
+    def apply(self, document: NetDocument) -> NetDocument:
+        """Put the box where it goes.
+
+        Parameters
+        ----------
+        document : simtwin_core.petri_net.NetDocument
+            The net.
+
+        Returns
+        -------
+        simtwin_core.petri_net.NetDocument
+            The net with the arc's weight moved.
+        """
+
+        return _changed_arc(document, self.arc, weight_offset=self.after)
+
+    def inverse(self) -> Operation:
+        """Give the move back.
+
+        Returns
+        -------
+        MoveWeight
+            The inverse.
+        """
+
+        return MoveWeight(self.arc, self.after, self.before)
 
 
 @dataclass(frozen=True)
@@ -1134,6 +1181,7 @@ OPERATIONS: dict[str, type[Operation]] = {
         SetVertical,
         MoveLabel,
         SetLabelWidth,
+        MoveWeight,
         AddArc,
         RemoveArc,
         MoveArcEnd,
@@ -1290,6 +1338,12 @@ def _encode_operation(operation: Operation) -> dict:
             before=_offset_data(operation.before),
             after=_offset_data(operation.after),
         )
+    elif isinstance(operation, MoveWeight):
+        data.update(
+            arc=operation.arc,
+            before=_offset_data(operation.before),
+            after=_offset_data(operation.after),
+        )
     elif isinstance(operation, (AddArc, RemoveArc)):
         data['arc'] = _arc_data(operation.arc)
     elif isinstance(operation, MoveArcEnd):
@@ -1357,6 +1411,10 @@ def _decode_operation(data: dict) -> Operation:
         if operation is MoveLabel:
             return MoveLabel(
                 data['node'], _read_offset(data['before']), _read_offset(data['after'])
+            )
+        if operation is MoveWeight:
+            return MoveWeight(
+                data['arc'], _read_offset(data['before']), _read_offset(data['after'])
             )
         if operation in (AddArc, RemoveArc):
             return operation(_read_arc(data['arc']))
@@ -1517,6 +1575,7 @@ def _arc_data(arc: ArcData) -> dict:
         'shape': arc.shape,
         'controls': _frames(arc.controls),
         'points': _frames(arc.points),
+        'weight_offset': _offset_data(arc.weight_offset),
     }
 
 
@@ -1545,6 +1604,7 @@ def _read_arc(data: dict) -> ArcData:
         data['shape'],
         _read_frames(data['controls']),
         _read_frames(data['points']),
+        weight_offset=_read_offset(data.get('weight_offset')),
     )
 
 

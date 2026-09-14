@@ -797,6 +797,16 @@ the paper** while it is resized — only while it is moved — so a box widened 
 reach off it. It cannot be made narrower than `MIN_LABEL_WIDTH` (5 mm), and a word wider than the box is
 broken. Like a move, there is no way back to the editor's own width except *Undo*.
 
+An **arc's weight** is the same kind of box, moved but never resized. A moved number is kept in the
+arc's **chord frame** — how far along and across, as fractions of the chord, the way its bends are — so
+it turns and scales with the arc: a number put 5 mm off a long arc is 2 mm off once the arc is dragged to
+half its length, and on a very short arc it all but sits on the line. The chord frame is SimTwin's own
+(`<simtwin:caption>` in the arc's tool data). PNML's `<inscription><graphics><offset>` is **written for
+other tools and never read back**, as an arc's route is not: it is in millimetres from the middle of the
+drawn arc, which only the editor can work out, and it exists only while the weight is not one, since the
+library writes no `inscription` for a weight of one. So an offset another tool wrote for a weight is
+passed over, and the number sits beside the middle of the line.
+
 A moved box is **where the person put it, and nothing moves it again**: not a longer description (the
 box grows about its centre, so it can grow over its own node), not a transition turned (a box put beside
 a bar lying across stays there when the bar stands up), and not a node dragged near it. There is **no
@@ -825,6 +835,12 @@ stood up; and anybody who wants a box back where it started long after *Undo* ha
 - **A *Reset Label Position* entry** on the item's context menu, recording a `MoveLabel` to `None`
   (and a *Reset Label Width* beside it, a `SetLabelWidth` to `None`, or one entry doing both). Small,
   and the obvious first addition if a person asks for it.
+- **Reading another tool's inscription offset**, by handing it to the editor as millimetres from the
+  middle of the arc and turning it into the chord frame there, the way a node without positions is laid
+  out. Worth it once files from other tools with placed weights are met.
+- **Keeping a moved weight a fixed distance off the line** rather than scaling with the chord — an
+  offset from the middle of the arc, turned with the arc. It would not follow the curve's shape the way
+  the chord frame does.
 - **Holding a resized box on the paper**, by capping the width at what reaches the sheet's edge from
   the side held still. Left while a box off the edge is something nobody has met.
 - **Keeping the offset from the fixed place** rather than from the node's centre, so a moved box follows

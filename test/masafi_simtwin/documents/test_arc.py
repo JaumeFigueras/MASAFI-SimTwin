@@ -319,19 +319,56 @@ def test_an_arc_carries_one_token_unless_it_is_told_otherwise(editor, net):
     arc = editor.add_arc(place, transition)
 
     assert arc.weight == DEFAULT_WEIGHT == 1
-    assert arc.weight_path() is None
+    assert arc.label.is_empty()
 
 
-def test_a_weight_that_is_not_one_is_drawn_beside_the_line(editor, net):
-    """Writing the one in would put a number on nearly every arc of every net."""
+def test_a_weight_that_is_not_one_is_a_caption_beside_the_line(editor, net):
+    """Writing the one in would put a number on nearly every arc of every net;
+    the number is lettered like every other caption on the sheet."""
+
+    from masafi_simtwin.documents.arc import WEIGHT_OFFSET
+    from masafi_simtwin.documents.ink import LABEL_LINE_HEIGHT
 
     place, transition = net
     arc = editor.add_arc(place, transition)
     arc.weight = 4
-    drawn = arc.weight_path()
 
-    assert drawn is not None
-    assert arc.boundingRect().contains(drawn.boundingRect())
+    assert arc.label.text == '4'
+    assert arc.label.size.height() == LABEL_LINE_HEIGHT
+    middle = arc.curve_middle()
+    assert QLineF(arc.label.pos(), middle).length() == pytest.approx(
+        WEIGHT_OFFSET + LABEL_LINE_HEIGHT / 2.0
+    )
+
+
+def test_a_weight_that_goes_back_to_one_goes_and_is_let_go_of(editor, net):
+    """An empty box is nothing, and a selection of nothing is put down — but where
+    it had been moved to is kept for when it comes back."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    arc.weight = 4
+    arc.label_offset = (0.5, 0.3)
+    arc.label.select()
+
+    arc.weight = 1
+
+    assert arc.label.is_empty()
+    assert not arc.label.isSelected()
+    assert arc.label_offset == (0.5, 0.3)
+
+
+def test_a_moved_weight_turns_and_scales_with_the_arc(editor, net):
+    """Kept in the chord frame, as the bends are."""
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    arc.weight = 4
+    arc.label_offset = (0.25, -0.5)
+
+    transition.setPos(QPointF(transition.pos().x() + 30.0, transition.pos().y() + 20.0))
+
+    assert arc.label.pos() == arc.chord_point(0.25, -0.5)
 
 
 def test_a_weight_below_one_is_not_a_weight(editor, net):
@@ -1093,11 +1130,11 @@ def test_the_weight_rides_the_curve(editor, net):
     place, transition = net
     arc = editor.add_arc(place, transition)
     arc.weight = 5
-    on_the_chord = arc.weight_path().boundingRect().center()
+    on_the_chord = arc.label.pos()
 
     arc.shape_kind = ArcShape.CURVED
 
-    assert arc.weight_path().boundingRect().center() != on_the_chord
+    assert arc.label.pos() != on_the_chord
 
 
 def test_a_curved_arc_covers_and_is_grabbed_along_its_curve(editor, net):

@@ -16,8 +16,10 @@ is the pattern MASAFI-sim-petri documents for the projects built on it:
   and reads them back from — the one property of a place a backend runs on.
 * PNML's own ``graphics``, which every PNML tool reads: the centre of every place
   and transition, the ``offset`` of a node's ``name`` when its caption has been
-  moved, and — as the ``position`` elements PNML gives an arc for the
-  points it bends at — the route of an S or an L on the sheet.  In millimetres,
+  moved, the ``offset`` of an arc's ``inscription`` from the middle of the drawn
+  arc — written for other tools and never read back, as the route is not — and,
+  as the ``position`` elements PNML gives an arc for the
+  points it bends at, the route of an S or an L on the sheet.  In millimetres,
   the unit the sheet is measured in.  No ``dimension`` is written: how big a
   place is drawn is the editor's constant rather than a fact about this net.
 * ``<toolspecific tool="MASAFI-SimTwin" version="1">``, which PNML sets aside
@@ -26,7 +28,8 @@ is the pattern MASAFI-sim-petri documents for the projects built on it:
   it has one, a transition's way round when it stands up and the width of its
   caption when it has been resized, and each arc's UUID,
   kind, shape, connecting points, control points and points in its chord frame
-  — which is what the editor draws from, and which wins over the route.
+  — which is what the editor draws from, and which wins over the route — and,
+  when its weight has been moved, where to, in the same frame (``caption``).
 
 **The tool's elements are in a namespace of their own**, :data:`TOOL_NAMESPACE`,
 and are **named unlike any element of PNML** — ``node``, ``link``, ``guide``,
@@ -234,6 +237,12 @@ def to_pnml(document: NetDocument) -> bytes:
 
     for arc in document.arcs:
         element = element_for(root, made[arc.uuid])
+        inscription = element.find(qname('inscription'))
+        if arc.inscription_offset is not None and inscription is not None:
+            x, y = arc.inscription_offset
+            ElementTree.SubElement(
+                set_graphics(inscription), qname('offset'), {'x': _number(x), 'y': _number(y)}
+            )
         if arc.route:
             graphics = set_graphics(element)
             for x, y in arc.route:
@@ -474,6 +483,12 @@ def _write_link(tool: ElementTree.Element, arc: ArcData) -> None:
                 holder, _ours(item), {'along': _number(along), 'across': _number(across)}
             )
 
+    if arc.weight_offset is not None:
+        along, across = arc.weight_offset
+        ElementTree.SubElement(
+            link, _ours('caption'), {'along': _number(along), 'across': _number(across)}
+        )
+
 
 def _read_frames(link: ElementTree.Element, wrapper: str, item: str):
     """Read the controls or the points of an arc out of the tool's data.
@@ -668,6 +683,13 @@ def _read_arc(arc: Arc, element: ElementTree.Element, uuids: dict) -> ArcData:
         text = link.get(name)
         return None if text is None else int(text)
 
+    caption = link.find(_ours('caption'))
+    weight_offset = (
+        None
+        if caption is None
+        else (float(caption.get('along')), float(caption.get('across')))
+    )
+
     return ArcData(
         link.get('uuid') or str(uuid4()),
         source,
@@ -680,4 +702,5 @@ def _read_arc(arc: Arc, element: ElementTree.Element, uuids: dict) -> ArcData:
         _read_frames(link, 'controls', 'control'),
         _read_frames(link, 'points', 'point'),
         route,
+        weight_offset=weight_offset,
     )

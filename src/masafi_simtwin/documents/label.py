@@ -130,6 +130,11 @@ class Label(QGraphicsItem):
         self._placing = False
         self._resizable = resizable
         self._resizing: int | None = None
+        #: Whether a person has dragged the label since this was last put down.
+        #: What the view reads after a drag, rather than comparing positions:
+        #: a caption that shifted because its arc was re-routed, or because it
+        #: was resized, has moved without anybody moving it.
+        self.dragged = False
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
@@ -599,5 +604,6 @@ class Label(QGraphicsItem):
             change == QGraphicsItem.GraphicsItemChange.ItemPositionChange
             and not self._placing
         ):
+            self.dragged = True
             return self._dragged_to(value)
         return super().itemChange(change, value)

@@ -16,6 +16,7 @@ from simtwin_core.operations import (
     MoveGuide,
     MoveLabel,
     MoveNode,
+    MoveWeight,
     RemoveArc,
     RemoveGuide,
     RemoveNode,
@@ -82,6 +83,7 @@ EVERY_OPERATION = [
     SetVertical('t', False, True),
     MoveLabel('p', None, (3.0, -7.5)),
     SetLabelWidth('t', None, 12.0),
+    MoveWeight('a', None, (0.5, 0.2)),
     AddArc(ArcData('b', 't', 'p', 3, 4)),
     RemoveArc(ARC),
     MoveArcEnd('a', 'source', 'p', 0, 'p', 6),
@@ -456,6 +458,33 @@ def test_a_caption_resized_goes_through_the_journal():
     change = Change('gesture', (SetLabelWidth('p', None, 9.0), AddNode(wide)))
 
     assert operations.decode(json.loads(json.dumps(operations.encode(change)))) == change
+
+
+def test_a_weight_is_moved_and_put_back_beside_the_line():
+    """In the chord frame, and undone to ``None``."""
+
+    moved = MoveWeight('a', None, (0.5, -0.25)).apply(net())
+
+    assert moved.arcs[0].weight_offset == (0.5, -0.25)
+    assert MoveWeight('a', None, (0.5, -0.25)).inverse().apply(moved) == net()
+
+
+def test_a_moved_weight_goes_through_the_journal():
+    """The operation, and an arc carrying one whole."""
+
+    carried = ArcData('b', 't', 'p', 3, 4, 2, weight_offset=(0.4, 0.1))
+    change = Change('gesture', (MoveWeight('a', None, (0.5, 0.2)), AddArc(carried)))
+
+    assert operations.decode(json.loads(json.dumps(operations.encode(change)))) == change
+
+
+def test_an_arc_written_before_weights_moved_reads_as_unmoved():
+    """A journal line from an earlier version still replays."""
+
+    data = operations.encode(Change('gesture', (AddArc(ARC),)))
+    del data['operations'][0]['arc']['weight_offset']
+
+    assert operations.decode(data).operations[0].arc.weight_offset is None
 
 
 def test_a_caption_moved_goes_through_the_journal():

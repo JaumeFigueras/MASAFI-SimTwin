@@ -75,6 +75,7 @@ from simtwin_core.operations import (
     MoveGuide,
     MoveLabel,
     MoveNode,
+    MoveWeight,
     Operation,
     RemoveArc,
     RemoveGuide,
@@ -289,6 +290,28 @@ def guide_data(guide: Guide) -> GuideData:
     return GuideData(GUIDE_ORIENTATIONS[guide.orientation], guide.position)
 
 
+def drawn_inscription(arc: Arc) -> tuple[float, float] | None:
+    """Say where an arc's weight is drawn, the way PNML's inscription says it.
+
+    Parameters
+    ----------
+    arc : masafi_simtwin.documents.arc.Arc
+        The arc.
+
+    Returns
+    -------
+    tuple of float, optional
+        The centre of the weight's box relative to the middle of the drawn arc,
+        in millimetres, or ``None`` when no weight is drawn.  For other tools:
+        the editor draws from the chord frame.
+    """
+
+    if arc.label.is_empty():
+        return None
+    centre, middle = arc.label.pos(), arc.curve_middle()
+    return (centre.x() - middle.x(), centre.y() - middle.y())
+
+
 def arc_data(arc: Arc) -> ArcData:
     """Describe an arc as it is drawn.
 
@@ -316,6 +339,8 @@ def arc_data(arc: Arc) -> ArcData:
         arc.control_frames,
         arc.point_frames,
         drawn_route(arc),
+        weight_offset=arc.label_offset,
+        inscription_offset=drawn_inscription(arc),
     )
 
 
@@ -845,7 +870,7 @@ class PetriNetEditor(Canvas):
 
         selected = []
         for item in self.scene().selectedItems():
-            if isinstance(item, Label) and isinstance(item.parentItem(), NetItem):
+            if isinstance(item, Label) and isinstance(item.parentItem(), (NetItem, Arc)):
                 item = item.parentItem()
             if item not in selected:
                 selected.append(item)
@@ -981,24 +1006,30 @@ class PetriNetEditor(Canvas):
     def _on_labels_moved(self, moves) -> None:
         """Record a drag of one or more captions as one change.
 
-        Qt has already put each box where it was dragged; what the item keeps
+        Qt has already put each box where it was dragged; what the owner keeps
         is set to match, so that a caption moved once stays where it was put
-        when its text changes, and then the change is recorded.
+        when its text changes, and then the change is recorded.  A node's
+        caption and an arc's weight dragged together are one change.
 
         Parameters
         ----------
         moves : list
-            ``(item, before, after)`` for each item whose caption was dragged:
-            the offset it had, ``None`` for one nobody had moved, and where the
-            caption is now, relative to the item.
+            ``(owner, before, after)`` for each node or arc whose caption was
+            dragged: the offset it had, ``None`` for one nobody had moved, and
+            the offset it has — relative to a node, in an arc's chord frame.
         """
 
-        for item, _was, now in moves:
-            item.label_offset = now
+        for owner, _was, now in moves:
+            owner.label_offset = now
         self.record(
             Change(
                 'move-label',
-                tuple(MoveLabel(item.uuid, was, now) for item, was, now in moves),
+                tuple(
+                    MoveWeight(owner.uuid, was, now)
+                    if isinstance(owner, Arc)
+                    else MoveLabel(owner.uuid, was, now)
+                    for owner, was, now in moves
+                ),
             )
         )
 
@@ -1406,6 +1437,7 @@ class PetriNetEditor(Canvas):
             uuid=data.uuid,
         )
         arc.restore_bends(data.controls, data.points)
+        arc.label_offset = data.weight_offset
         self.scene().addItem(arc)
         return arc
 
@@ -1557,6 +1589,8 @@ class PetriNetEditor(Canvas):
             self.node(operation.node).label_offset = operation.after
         elif isinstance(operation, SetLabelWidth):
             self.node(operation.node).label_width = operation.after
+        elif isinstance(operation, MoveWeight):
+            self.arc(operation.arc).label_offset = operation.after
         elif isinstance(operation, AddArc):
             self.draw_arc(operation.arc)
         elif isinstance(operation, RemoveArc):
@@ -1954,6 +1988,8 @@ class PetriNetEditor(Canvas):
             What was under the pointer, or ``None`` for the bare sheet.
         """
 
+        if isinstance(item, Label) and isinstance(item.parentItem(), Arc):
+            item = item.parentItem()
         if isinstance(item, Arc):
             self.arc_activated.emit(self.model_id, item.uuid)
 

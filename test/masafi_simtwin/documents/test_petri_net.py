@@ -28,6 +28,7 @@ from simtwin_core.operations import (
     MoveGuide,
     MoveLabel,
     MoveNode,
+    MoveWeight,
     Operation,
     RemoveArc,
     RemoveGuide,
@@ -537,6 +538,7 @@ def operations_for(editor) -> dict:
         SetVertical(transition.uuid, False, True),
         MoveLabel(place.uuid, None, (4.5, 11.0)),
         SetLabelWidth(transition.uuid, None, 22.5),
+        MoveWeight(arc.uuid, None, (0.5, 0.25)),
         AddArc(
             ArcData(
                 'new-arc',
@@ -1037,6 +1039,80 @@ def test_a_caption_beside_an_upright_bar_has_no_handle_on_the_side_by_the_bar(ed
 
     assert label.mapRectToScene(label.box()).left() == pytest.approx(near)
     assert label.size.width() == 40.0
+
+
+def test_a_weight_dragged_by_hand_is_one_recorded_change(editor):
+    """Kept in the chord frame, called *Move Label* like any caption, and put back
+    beside the line by *Undo*."""
+
+    _place, _free, _transition, arc = little_net(editor)
+    editor.set_weight([arc.uuid], 3)
+    before = editor.to_document()
+    count = editor.undo_stack.count()
+
+    drag_label(editor.view, arc.label, QPointF(0.0, 8.0))
+
+    assert editor.undo_stack.count() == count + 1
+    assert editor.undo_stack.command(count).text() == 'Move Label'
+    assert arc.label_offset == arc.label_offset_at(arc.label.pos())
+    assert editor.to_document().arcs[0].weight_offset == arc.label_offset
+
+    editor.undo_stack.undo()
+
+    assert arc.label_offset is None
+    assert editor.to_document() == before
+
+
+def test_dragging_a_node_moves_no_weight(editor):
+    """The number is re-placed as the arc is re-routed, and nobody moved it."""
+
+    place, _free, _transition, arc = little_net(editor)
+    editor.set_weight([arc.uuid], 3)
+    count = editor.undo_stack.count()
+
+    editor.view._remember_before_a_drag()
+    place.setPos(QPointF(30.0, 60.0))
+    editor.view._report_a_drag()
+
+    assert editor.undo_stack.count() == count + 1
+    assert editor.undo_stack.command(count).text() == 'Move'
+    assert arc.label_offset is None
+
+
+def test_a_selected_weight_stands_for_its_arc(editor):
+    """What the Properties pane shows, and what a double click opens."""
+
+    _place, _free, _transition, arc = little_net(editor)
+    editor.set_weight([arc.uuid], 3)
+    activated = []
+    editor.arc_activated.connect(lambda model, uuid: activated.append(uuid))
+
+    arc.label.select()
+    editor._on_item_activated(arc.label)
+
+    assert [data.uuid for data in editor.selection().arcs] == [arc.uuid]
+    assert activated == [arc.uuid]
+    editor.arc_activated.disconnect()
+
+
+def test_a_moved_weight_survives_a_document_round_trip(editor):
+    """What is written is what is drawn again, and PNML's offset is filled in."""
+
+    _place, _free, _transition, arc = little_net(editor)
+    editor.set_weight([arc.uuid], 2)
+    editor.apply(Change('gesture', (MoveWeight(arc.uuid, None, (0.5, -0.4)),)))
+    document = editor.to_document()
+
+    editor.load_document(document)
+
+    assert editor.to_document() == document
+    loaded = editor.arc(arc.uuid)
+    assert loaded.label.pos() == loaded.chord_point(0.5, -0.4)
+    offset = document.arcs[0].inscription_offset
+    middle = loaded.curve_middle()
+    assert offset == pytest.approx(
+        (loaded.label.pos().x() - middle.x(), loaded.label.pos().y() - middle.y())
+    )
 
 
 def test_a_moved_caption_survives_a_document_round_trip(editor):
