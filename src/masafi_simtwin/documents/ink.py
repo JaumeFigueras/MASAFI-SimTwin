@@ -15,6 +15,14 @@ with a ``g`` in it would then come out smaller than a line without one.
 :func:`text_block` scales the **font's own line height**, once, for the whole
 block, and wraps it to a width.
 
+**Both are filled by the winding rule.**  A path is filled odd-even unless it is
+told otherwise, and many fonts — Cantarell, the GNOME default, among them — draw
+a letter out of contours that overlap: the crossbar of a ``t``, the dot of an
+``i``, the loops of ``g`` and ``&``.  Filled odd-even, every overlap is a hole,
+which on the sheet is a hairline dash through the text.  DejaVu Sans, the
+offscreen platform's font, does not overlap, which is why the tests that hold
+this letter in Cantarell.
+
 Nothing here is an item or knows about one: this is what a painter needs, and it
 is in a module of its own so that the things that paint — the items, the arcs and
 :class:`~masafi_simtwin.documents.label.Label` — can all reach it without
@@ -23,7 +31,7 @@ reaching for one another.
 
 from __future__ import annotations
 
-from PyQt6.QtCore import QSizeF
+from PyQt6.QtCore import QSizeF, Qt
 from PyQt6.QtGui import (
     QColor,
     QFont,
@@ -166,6 +174,7 @@ def text_block(
         glyphs.addText(along, metrics.ascent() + row * metrics.height(), font, line)
     glyphs = QTransform().scale(scale, scale).map(glyphs)
     glyphs.translate(-box.width() / 2.0, -box.height() / 2.0)
+    glyphs.setFillRule(Qt.FillRule.WindingFill)
     return glyphs, box
 
 
@@ -205,7 +214,9 @@ def glyph_path(text: str, height: float, width: float | None = None) -> QPainter
     scale = height / drawn.height()
     if width is not None and drawn.width() * scale > width:
         scale = width / drawn.width()
-    return QTransform().scale(scale, scale).map(glyphs)
+    lettering = QTransform().scale(scale, scale).map(glyphs)
+    lettering.setFillRule(Qt.FillRule.WindingFill)
+    return lettering
 
 
 def ink_colour(selected: bool, option) -> QColor:

@@ -11,6 +11,7 @@ from __future__ import annotations
 import pytest
 from PyQt6.QtCore import QEvent, QPointF, Qt
 from PyQt6.QtGui import QColor, QMouseEvent, QPainterPath
+from PyQt6.QtWidgets import QApplication
 
 from masafi_simtwin.documents.ink import HANDLE_GRAB, LABEL_LINE_HEIGHT
 from masafi_simtwin.documents.label import LABEL_PADDING, MIN_LABEL_WIDTH, Label
@@ -52,6 +53,63 @@ def press(view, label: Label) -> None:
     )
 
 
+def repainted(scene, act) -> QPainterPath:
+    """Give the part of the sheet the scene asked to have painted again.
+
+    The same question :func:`test_arc.repainted` asks, for the same reason: a
+    fresh painting of the sheet is right either way, and a caption left in the
+    wrong ink is a fault in the *region* the view is told to repaint.  The
+    connection is taken off again before this returns, since the scene outlives
+    the test.
+
+    Parameters
+    ----------
+    scene : PyQt6.QtWidgets.QGraphicsScene
+        The scene.
+    act : collections.abc.Callable
+        What to do to it.
+
+    Returns
+    -------
+    list of PyQt6.QtCore.QRectF
+        Every rectangle reported, in scene millimetres.
+    """
+
+    seen = []
+    watch = scene.changed.connect(seen.extend)
+    try:
+        QApplication.processEvents()
+        seen.clear()
+        act()
+        QApplication.processEvents()
+    finally:
+        scene.changed.disconnect(watch)
+    return list(seen)
+
+
+def covers(rects, area) -> bool:
+    """Say whether one of the rectangles repainted holds the whole of an area.
+
+    Rectangles rather than a path united out of them: a path does not count a
+    rectangle that shares its edges as inside it, and the scene reports a
+    caption repainted by exactly the caption's own rectangle.
+
+    Parameters
+    ----------
+    rects : list of PyQt6.QtCore.QRectF
+        What :func:`repainted` gave.
+    area : PyQt6.QtCore.QRectF
+        What has to have been repainted.
+
+    Returns
+    -------
+    bool
+        Whether it was.
+    """
+
+    return any(rect.contains(area) for rect in rects)
+
+
 def band(view, label: Label) -> None:
     """Sweep a rubber band over the whole sheet, the way a drag over it does.
 
@@ -87,6 +145,66 @@ def band(view, label: Label) -> None:
 # ----------------------------------------------------------------------
 # The box
 # ----------------------------------------------------------------------
+
+
+# ----------------------------------------------------------------------
+# Repainting what an owner's selection changes
+# ----------------------------------------------------------------------
+
+
+def test_selecting_a_node_repaints_its_caption(editor, place):
+    """The caption turns the accent with its node, and lies outside the node's
+    rectangle — which is all Qt repaints of its own accord."""
+
+    area = place.label.sceneBoundingRect()
+
+    region = repainted(editor.scene(), lambda: place.setSelected(True))
+
+    assert covers(region, area)
+
+
+def test_deselecting_a_node_repaints_its_caption(editor, place):
+    """What was reported: a caption left in the accent reads as still selected."""
+
+    place.setSelected(True)
+    area = place.label.sceneBoundingRect()
+
+    region = repainted(editor.scene(), lambda: place.setSelected(False))
+
+    assert covers(region, area)
+
+
+@pytest.mark.parametrize('selected', [True, False], ids=['selected', 'deselected'])
+def test_an_arcs_weight_is_repainted_with_its_arc(editor, place, transition, selected):
+    """The number is a caption of the arc, drawn in the accent with it.
+
+    For an arc it is ``prepareGeometryChange()`` on ``ItemSelectedChange`` that
+    does it — Qt invalidates an item's children with it — and the explicit
+    ``label.update()`` beside it is a second word for the same thing; the test
+    fails only when both are gone, which is what was checked.
+    """
+
+    arc = editor.add_arc(place, transition)
+    arc.weight = 3
+    arc.setSelected(not selected)
+    area = arc.label.sceneBoundingRect()
+
+    region = repainted(editor.scene(), lambda: arc.setSelected(selected))
+
+    assert covers(region, area)
+
+
+def test_deselecting_a_caption_repaints_where_its_frame_and_handles_were(editor, place):
+    """A selected caption is bigger than an unselected one — its handles are in
+    its rectangle only while it is selected — so letting go of it repaints what it
+    was, not what it becomes."""
+
+    place.label.select()
+    area = place.label.sceneBoundingRect()
+
+    region = repainted(editor.scene(), lambda: place.label.setSelected(False))
+
+    assert covers(region, area)
 
 
 def test_where_the_owner_puts_a_label_is_taken_exactly(place):

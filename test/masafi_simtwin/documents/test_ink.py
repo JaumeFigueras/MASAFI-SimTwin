@@ -7,7 +7,12 @@ Two kinds of lettering, and the difference between them is the point:
 
 from __future__ import annotations
 
+import math
+
 import pytest
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QColor, QFont, QFontDatabase, QImage, QPainter, QPainterPath
+from PyQt6.QtWidgets import QApplication
 
 from masafi_simtwin.documents.ink import (
     LABEL_LINE_HEIGHT,
@@ -15,6 +20,108 @@ from masafi_simtwin.documents.ink import (
     glyph_path,
     text_block,
 )
+
+#: Letters whose strokes overlap in fonts drawn with overlapping contours —
+#: Cantarell, the GNOME default, among them: the crossbar of a ``t``, the dot of
+#: an ``i``, the loops of ``g``, ``@``, ``&`` and ``%``.
+OVERLAPPING = 'tig@&%'
+
+
+def inked(path: QPainterPath, zoom: float = 40.0) -> bytes:
+    """Fill a path close up, with no antialiasing, and give the pixels.
+
+    Parameters
+    ----------
+    path : PyQt6.QtGui.QPainterPath
+        What to fill, in millimetres.
+    zoom : float, optional
+        Pixels to the millimetre.
+
+    Returns
+    -------
+    bytes
+        The image, so that two fillings can be compared exactly.
+    """
+
+    area = path.boundingRect()
+    image = QImage(
+        math.ceil(area.width() * zoom) + 4,
+        math.ceil(area.height() * zoom) + 4,
+        QImage.Format.Format_ARGB32,
+    )
+    image.fill(QColor('white'))
+    painter = QPainter(image)
+    painter.scale(zoom, zoom)
+    painter.translate(-area.left() + 2.0 / zoom, -area.top() + 2.0 / zoom)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(QColor('black'))
+    painter.drawPath(path)
+    painter.end()
+    return image.constBits().asstring(image.sizeInBytes())
+
+
+def winding(path: QPainterPath) -> QPainterPath:
+    """Give a copy of a path filled by the winding rule.
+
+    Parameters
+    ----------
+    path : PyQt6.QtGui.QPainterPath
+        The path.
+
+    Returns
+    -------
+    PyQt6.QtGui.QPainterPath
+        The copy.
+    """
+
+    copy = QPainterPath(path)
+    copy.setFillRule(Qt.FillRule.WindingFill)
+    return copy
+
+
+# ----------------------------------------------------------------------
+# How the letters are filled
+# ----------------------------------------------------------------------
+
+
+def test_lettering_is_filled_by_the_winding_rule():
+    """A path is filled odd-even unless it is told otherwise, and odd-even punches
+    a hairline hole wherever two strokes of one letter overlap."""
+
+    assert text_block(OVERLAPPING, LABEL_WIDTH)[0].fillRule() == Qt.FillRule.WindingFill
+    assert glyph_path(OVERLAPPING, 3.0).fillRule() == Qt.FillRule.WindingFill
+
+
+@pytest.fixture
+def overlapping_font():
+    """Letter in a font whose strokes overlap, for as long as a test lasts.
+
+    The tests run on the offscreen platform, whose default font is DejaVu Sans:
+    its letters are drawn without overlapping contours, so there odd-even and
+    winding fill give the very same pixels and a test of the fill rule could
+    never fail.  Cantarell — the GNOME default, which is where the dashes
+    through the text were seen — overlaps.  Lettering is laid out in the
+    application's font, so that is what is set, and set back.
+    """
+
+    if 'Cantarell' not in QFontDatabase.families():
+        pytest.skip('Cantarell, a font with overlapping contours, is not installed')
+    was = QApplication.font()
+    QApplication.setFont(QFont('Cantarell'))
+    try:
+        yield
+    finally:
+        QApplication.setFont(was)
+
+
+@pytest.mark.parametrize('lettering', ['block', 'glyphs'])
+def test_no_overlap_of_strokes_leaves_a_hole_in_a_letter(qapp, overlapping_font, lettering):
+    """Read in the pixels, close up: the letters as drawn are the letters filled
+    whole.  This is what was seen on the sheet as dashes through the text."""
+
+    path = text_block(OVERLAPPING, LABEL_WIDTH)[0] if lettering == 'block' else glyph_path(OVERLAPPING, 3.0)
+
+    assert inked(path) == inked(winding(path))
 
 
 # ----------------------------------------------------------------------

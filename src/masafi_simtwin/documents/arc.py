@@ -2192,7 +2192,10 @@ class Arc(QGraphicsItem):
         if change == QGraphicsItem.GraphicsItemChange.ItemSelectedChange:
             self.prepareGeometryChange()
         if change == QGraphicsItem.GraphicsItemChange.ItemSelectedHasChanged:
-            # The weight is drawn in the accent while the arc is selected.
+            # The weight is drawn in the accent while the arc is selected.  The
+            # prepareGeometryChange() above already repaints it, children being
+            # invalidated with their item; this says so where a node, which has
+            # no such call, has to.
             self._label.update()
         return super().itemChange(change, value)
 
