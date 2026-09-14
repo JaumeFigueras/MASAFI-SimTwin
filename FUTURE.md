@@ -920,6 +920,33 @@ along.
 
 ---
 
+## An item's own style is written for SimTwin alone
+
+**Now.** A place, a transition or an arc with a text or line style of its own carries it in SimTwin's
+tool data, as `<simtwin:lettering>` and `<simtwin:stroke>`. PNML has places of its own for both — a
+node's `<graphics><line color width/>` and an annotation's `<graphics><font family size weight style
+align/>` — and nothing is written there, so another PNML tool opening the file draws the net in its own
+colours and fonts, and a style another tool wrote there is not read.
+
+**Why it was done this way.** SimTwin's styles do not map onto PNML's cleanly. *Automatic* — the theme's
+own ink — has no PNML colour; PNML's `size` is a CSS length rather than millimetres; its `align` has no
+*justified* that leaves the last line to the left; and a style in SimTwin is complete or absent, where
+PNML's attributes each stand alone. Writing ours alone keeps one meaning for each field and makes the file
+read back exactly.
+
+**When it will not be enough.** Exchanging coloured nets with a tool such as PIPE or Tina, in either
+direction.
+
+**Options.**
+
+- **Write PNML's own graphics as well**, the way an arc's route and its inscription offset are: millimetres
+  as `mm` lengths, an explicit colour as it is, *Automatic* left out. Written for other tools, never read
+  back.
+- **Read PNML's graphics** when the tool's data is absent, turning a foreign `line` and `font` into a
+  complete style from the defaults of the moment.
+
+---
+
 ## A version opened by itself is a second copy of the project
 
 **Now.** A version is a whole `.mfstz`, and nothing stops it being opened from inside its folder. It

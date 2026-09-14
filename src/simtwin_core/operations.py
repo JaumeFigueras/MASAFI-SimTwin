@@ -42,14 +42,16 @@ them, and it is read back by whichever sheet it is pasted onto.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 
 from simtwin_core.petri_net import (
     ArcData,
     GuideData,
+    LineStyle,
     NetDocument,
     PlaceData,
     Point,
+    TextStyle,
     TransitionData,
 )
 
@@ -597,6 +599,104 @@ class SetLabelWidth(Operation):
         """
 
         return SetLabelWidth(self.node, self.after, self.before)
+
+
+@dataclass(frozen=True)
+class SetTextStyle(Operation):
+    """Write a place's, a transition's or an arc's text in a style of its own, or
+    in the application's defaults again.
+
+    One operation for the three kinds of item, since a UUID is unique across a
+    whole net and what changes is the same field on each.
+
+    Attributes
+    ----------
+    item : str
+        The UUID of the place, the transition or the arc.
+    before, after : simtwin_core.petri_net.TextStyle, optional
+        Its style before and after, ``None`` being the defaults.  A style an arc
+        may not have — bold, italic, aligned — is refused where it is applied.
+    """
+
+    NAME = 'set-text-style'
+
+    item: str
+    before: TextStyle | None
+    after: TextStyle | None
+
+    def apply(self, document: NetDocument) -> NetDocument:
+        """Give the item its text style.
+
+        Parameters
+        ----------
+        document : simtwin_core.petri_net.NetDocument
+            The net.
+
+        Returns
+        -------
+        simtwin_core.petri_net.NetDocument
+            The net with the item's text styled.
+        """
+
+        return _styled(document, self.item, text_style=self.after)
+
+    def inverse(self) -> Operation:
+        """Give the style back.
+
+        Returns
+        -------
+        SetTextStyle
+            The inverse.
+        """
+
+        return SetTextStyle(self.item, self.after, self.before)
+
+
+@dataclass(frozen=True)
+class SetLineStyle(Operation):
+    """Draw a place's, a transition's or an arc's lines in a style of its own, or
+    in the application's defaults again.
+
+    Attributes
+    ----------
+    item : str
+        The UUID of the place, the transition or the arc.
+    before, after : simtwin_core.petri_net.LineStyle, optional
+        Its style before and after, ``None`` being the defaults.
+    """
+
+    NAME = 'set-line-style'
+
+    item: str
+    before: LineStyle | None
+    after: LineStyle | None
+
+    def apply(self, document: NetDocument) -> NetDocument:
+        """Give the item its line style.
+
+        Parameters
+        ----------
+        document : simtwin_core.petri_net.NetDocument
+            The net.
+
+        Returns
+        -------
+        simtwin_core.petri_net.NetDocument
+            The net with the item's lines styled.
+        """
+
+        return _styled(document, self.item, line_style=self.after)
+
+    def inverse(self) -> Operation:
+        """Give the style back.
+
+        Returns
+        -------
+        SetLineStyle
+            The inverse.
+        """
+
+        return SetLineStyle(self.item, self.after, self.before)
 
 
 # ----------------------------------------------------------------------
@@ -1182,6 +1282,8 @@ OPERATIONS: dict[str, type[Operation]] = {
         MoveLabel,
         SetLabelWidth,
         MoveWeight,
+        SetTextStyle,
+        SetLineStyle,
         AddArc,
         RemoveArc,
         MoveArcEnd,
@@ -1344,6 +1446,12 @@ def _encode_operation(operation: Operation) -> dict:
             before=_offset_data(operation.before),
             after=_offset_data(operation.after),
         )
+    elif isinstance(operation, (SetTextStyle, SetLineStyle)):
+        data.update(
+            item=operation.item,
+            before=_style_data(operation.before),
+            after=_style_data(operation.after),
+        )
     elif isinstance(operation, (AddArc, RemoveArc)):
         data['arc'] = _arc_data(operation.arc)
     elif isinstance(operation, MoveArcEnd):
@@ -1416,6 +1524,14 @@ def _decode_operation(data: dict) -> Operation:
             return MoveWeight(
                 data['arc'], _read_offset(data['before']), _read_offset(data['after'])
             )
+        if operation is SetTextStyle:
+            return SetTextStyle(
+                data['item'], _read_text_style(data['before']), _read_text_style(data['after'])
+            )
+        if operation is SetLineStyle:
+            return SetLineStyle(
+                data['item'], _read_line_style(data['before']), _read_line_style(data['after'])
+            )
         if operation in (AddArc, RemoveArc):
             return operation(_read_arc(data['arc']))
         if operation is MoveArcEnd:
@@ -1471,6 +1587,8 @@ def _node_data(node: Node) -> dict:
     data['description'] = node.description
     data['label_offset'] = _offset_data(node.label_offset)
     data['label_width'] = node.label_width
+    data['text_style'] = _style_data(node.text_style)
+    data['line_style'] = _style_data(node.line_style)
     return data
 
 
@@ -1495,6 +1613,8 @@ def _read_node(data: dict) -> Node:
     description = data.get('description', '')
     offset = _read_offset(data.get('label_offset'))
     width = data.get('label_width')
+    text = _read_text_style(data.get('text_style'))
+    line = _read_line_style(data.get('line_style'))
     if data['kind'] == 'place':
         return PlaceData(
             data['uuid'],
@@ -1504,6 +1624,8 @@ def _read_node(data: dict) -> Node:
             description,
             offset,
             width,
+            text,
+            line,
         )
     return TransitionData(
         data['uuid'],
@@ -1513,6 +1635,8 @@ def _read_node(data: dict) -> Node:
         data.get('vertical', False),
         offset,
         width,
+        text,
+        line,
     )
 
 
@@ -1550,6 +1674,58 @@ def _read_offset(offset) -> tuple | None:
     return None if offset is None else tuple(offset)
 
 
+def _style_data(style) -> dict | None:
+    """Write an item's own style as plain data.
+
+    Parameters
+    ----------
+    style : simtwin_core.petri_net.TextStyle or simtwin_core.petri_net.LineStyle, optional
+        The style, or ``None`` for the application's defaults.
+
+    Returns
+    -------
+    dict, optional
+        Its fields by name, or ``None``.
+    """
+
+    return None if style is None else asdict(style)
+
+
+def _read_text_style(data) -> TextStyle | None:
+    """Read a text style back.
+
+    Parameters
+    ----------
+    data : dict, optional
+        What :func:`_style_data` wrote.  A line written before items had styles
+        has none, and reads as the defaults.
+
+    Returns
+    -------
+    simtwin_core.petri_net.TextStyle, optional
+        The style, or ``None``.
+    """
+
+    return None if data is None else TextStyle(**data)
+
+
+def _read_line_style(data) -> LineStyle | None:
+    """Read a line style back.
+
+    Parameters
+    ----------
+    data : dict, optional
+        What :func:`_style_data` wrote.
+
+    Returns
+    -------
+    simtwin_core.petri_net.LineStyle, optional
+        The style, or ``None``.
+    """
+
+    return None if data is None else LineStyle(**data)
+
+
 def _arc_data(arc: ArcData) -> dict:
     """Write an arc as plain data, its route left out.
 
@@ -1576,6 +1752,8 @@ def _arc_data(arc: ArcData) -> dict:
         'controls': _frames(arc.controls),
         'points': _frames(arc.points),
         'weight_offset': _offset_data(arc.weight_offset),
+        'text_style': _style_data(arc.text_style),
+        'line_style': _style_data(arc.line_style),
     }
 
 
@@ -1605,6 +1783,8 @@ def _read_arc(data: dict) -> ArcData:
         _read_frames(data['controls']),
         _read_frames(data['points']),
         weight_offset=_read_offset(data.get('weight_offset')),
+        text_style=_read_text_style(data.get('text_style')),
+        line_style=_read_line_style(data.get('line_style')),
     )
 
 
@@ -1763,6 +1943,28 @@ def _changed_arc(document: NetDocument, uuid: str, **fields) -> NetDocument:
             replace(arc, **fields) if arc.uuid == uuid else arc for arc in document.arcs
         ),
     )
+
+
+def _styled(document: NetDocument, uuid: str, **fields) -> NetDocument:
+    """Give a description with one place, transition or arc styled.
+
+    Parameters
+    ----------
+    document : simtwin_core.petri_net.NetDocument
+        The net.
+    uuid : str
+        Which item.  A UUID is unique across the whole net, so at most one node
+        or one arc is changed.
+    **fields
+        The style to set, as ``text_style`` or ``line_style``.
+
+    Returns
+    -------
+    simtwin_core.petri_net.NetDocument
+        The net, with the item where it was.
+    """
+
+    return _changed_arc(_changed_node(document, uuid, **fields), uuid, **fields)
 
 
 def _without(guides: tuple, guide: GuideData) -> tuple:

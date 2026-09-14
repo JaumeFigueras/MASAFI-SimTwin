@@ -26,7 +26,9 @@ from simtwin_core.operations import (
     SetArcWeight,
     SetDescription,
     SetLabelWidth,
+    SetLineStyle,
     SetNodeName,
+    SetTextStyle,
     SetTokens,
     SetVertical,
 )
@@ -35,7 +37,9 @@ from simtwin_core.petri_net import (
     GuideData,
     InvalidNet,
     NetDocument,
+    LineStyle,
     PlaceData,
+    TextStyle,
     TransitionData,
 )
 
@@ -46,6 +50,8 @@ OTHER = PlaceData('q', 'P2', (20.0, 80.0))
 TRANSITION = TransitionData('t', 'T1', (60.0, 20.0))
 ARC = ArcData('a', 'p', 't', 0, 10)
 GUIDE = GuideData('horizontal', 50.0)
+TEXT = TextStyle('Nimbus Sans', 3.5, True, True, 'justified', '#aa0000')
+LINE = LineStyle('#0000ff', 1.2)
 
 
 def net(**rest) -> NetDocument:
@@ -84,6 +90,8 @@ EVERY_OPERATION = [
     MoveLabel('p', None, (3.0, -7.5)),
     SetLabelWidth('t', None, 12.0),
     MoveWeight('a', None, (0.5, 0.2)),
+    SetTextStyle('p', None, TEXT),
+    SetLineStyle('a', None, LINE),
     AddArc(ArcData('b', 't', 'p', 3, 4)),
     RemoveArc(ARC),
     MoveArcEnd('a', 'source', 'p', 0, 'p', 6),
@@ -458,6 +466,57 @@ def test_a_caption_resized_goes_through_the_journal():
     change = Change('gesture', (SetLabelWidth('p', None, 9.0), AddNode(wide)))
 
     assert operations.decode(json.loads(json.dumps(operations.encode(change)))) == change
+
+
+@pytest.mark.parametrize('uuid', ['p', 't', 'a'], ids=['place', 'transition', 'arc'])
+def test_any_item_is_given_its_own_line_style_and_given_back_the_defaults(uuid):
+    """One operation for the three kinds of item: a UUID is unique in a net."""
+
+    styled = SetLineStyle(uuid, None, LINE).apply(net())
+    items = {item.uuid: item for item in (*styled.places, *styled.transitions, *styled.arcs)}
+
+    assert items[uuid].line_style == LINE
+    assert [item.line_style for key, item in items.items() if key != uuid] == [None, None]
+    assert SetLineStyle(uuid, None, LINE).inverse().apply(styled) == net()
+
+
+def test_a_text_style_an_arc_may_not_have_is_refused_where_it_is_applied():
+    """As a damaged journal would ask: a weight is never bold, italic or aligned."""
+
+    assert SetTextStyle('p', None, TEXT).apply(net()).places[0].text_style == TEXT
+    with pytest.raises(InvalidNet, match='normal'):
+        SetTextStyle('a', None, TEXT).apply(net())
+
+
+def test_styles_go_through_the_journal_on_the_operation_and_on_the_items():
+    """A place, a transition and an arc carried whole keep their styles."""
+
+    plain = TextStyle('DejaVu Sans', 2.4, colour='#123456')
+    change = Change(
+        'gesture',
+        (
+            SetTextStyle('p', TEXT, None),
+            AddNode(PlaceData('r', 'P3', (1.0, 1.0), 0, '', None, None, TEXT, LINE)),
+            AddNode(TransitionData('u', 'T2', (1.0, 1.0), '', True, None, None, TEXT, None)),
+            AddArc(ArcData('b', 't', 'p', 3, 4, text_style=plain, line_style=LINE)),
+        ),
+    )
+
+    assert operations.decode(json.loads(json.dumps(operations.encode(change)))) == change
+
+
+def test_items_written_before_styles_existed_read_as_following_the_defaults():
+    """A journal line from an earlier version still replays."""
+
+    data = operations.encode(Change('gesture', (AddNode(PLACE), AddArc(ARC))))
+    for operation in data['operations']:
+        written = operation.get('node', operation.get('arc'))
+        del written['text_style'], written['line_style']
+
+    place, arc = (operation.node if hasattr(operation, 'node') else operation.arc
+                  for operation in operations.decode(data).operations)
+
+    assert (place.text_style, place.line_style, arc.text_style, arc.line_style) == (None,) * 4
 
 
 def test_a_weight_is_moved_and_put_back_beside_the_line():

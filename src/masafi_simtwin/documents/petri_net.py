@@ -86,7 +86,9 @@ from simtwin_core.operations import (
     SetArcWeight,
     SetDescription,
     SetLabelWidth,
+    SetLineStyle,
     SetNodeName,
+    SetTextStyle,
     SetTokens,
     SetVertical,
 )
@@ -261,6 +263,8 @@ def node_data(item: NetItem):
             item.description,
             item.label_offset,
             item.label_width,
+            item.text_style,
+            item.line_style,
         )
     return TransitionData(
         item.uuid,
@@ -270,6 +274,8 @@ def node_data(item: NetItem):
         item.vertical,
         item.label_offset,
         item.label_width,
+        item.text_style,
+        item.line_style,
     )
 
 
@@ -341,6 +347,8 @@ def arc_data(arc: Arc) -> ArcData:
         drawn_route(arc),
         weight_offset=arc.label_offset,
         inscription_offset=drawn_inscription(arc),
+        text_style=arc.text_style,
+        line_style=arc.line_style,
     )
 
 
@@ -1405,6 +1413,8 @@ class PetriNetEditor(Canvas):
             item.vertical = data.vertical
         item.label_offset = data.label_offset
         item.label_width = data.label_width
+        item.text_style = data.text_style
+        item.line_style = data.line_style
         self.scene().addItem(item)
         item.setPos(QPointF(*data.position))
         return item
@@ -1438,6 +1448,8 @@ class PetriNetEditor(Canvas):
         )
         arc.restore_bends(data.controls, data.points)
         arc.label_offset = data.weight_offset
+        arc.text_style = data.text_style
+        arc.line_style = data.line_style
         self.scene().addItem(arc)
         return arc
 
@@ -1465,6 +1477,30 @@ class PetriNetEditor(Canvas):
             if item.uuid == uuid:
                 return item
         raise ValueError(f'the sheet holds no node {uuid!r}')
+
+    def node_or_arc(self, uuid: str):
+        """Find a place, a transition or an arc by its UUID.
+
+        Parameters
+        ----------
+        uuid : str
+            Its UUID, unique across the whole net.
+
+        Returns
+        -------
+        masafi_simtwin.documents.net_item.NetItem or masafi_simtwin.documents.arc.Arc
+            The item.
+
+        Raises
+        ------
+        ValueError
+            When the sheet holds neither by that UUID.
+        """
+
+        for item in (*self.items_of(NetItem), *self.arcs):
+            if item.uuid == uuid:
+                return item
+        raise ValueError(f'the sheet holds nothing called {uuid!r}')
 
     def arc(self, uuid: str) -> Arc:
         """Find an arc by its UUID.
@@ -1591,6 +1627,10 @@ class PetriNetEditor(Canvas):
             self.node(operation.node).label_width = operation.after
         elif isinstance(operation, MoveWeight):
             self.arc(operation.arc).label_offset = operation.after
+        elif isinstance(operation, SetTextStyle):
+            self.node_or_arc(operation.item).text_style = operation.after
+        elif isinstance(operation, SetLineStyle):
+            self.node_or_arc(operation.item).line_style = operation.after
         elif isinstance(operation, AddArc):
             self.draw_arc(operation.arc)
         elif isinstance(operation, RemoveArc):

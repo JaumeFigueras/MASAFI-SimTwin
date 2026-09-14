@@ -30,6 +30,8 @@ is the pattern MASAFI-sim-petri documents for the projects built on it:
   kind, shape, connecting points, control points and points in its chord frame
   — which is what the editor draws from, and which wins over the route — and,
   when its weight has been moved, where to, in the same frame (``caption``).
+  Every node and arc with a text or line style of its own carries it as
+  ``lettering`` and ``stroke`` — never ``text`` or ``line``, which are PNML's.
 
 **The tool's elements are in a namespace of their own**, :data:`TOOL_NAMESPACE`,
 and are **named unlike any element of PNML** — ``node``, ``link``, ``guide``,
@@ -81,8 +83,10 @@ from simtwin_core.petri_net import (
     ArcData,
     GuideData,
     InvalidNet,
+    LineStyle,
     NetDocument,
     PlaceData,
+    TextStyle,
     TransitionData,
 )
 
@@ -233,7 +237,9 @@ def to_pnml(document: NetDocument) -> bytes:
             attributes['vertical'] = 'true'
         if node.label_width is not None:
             attributes['label-width'] = _number(node.label_width)
-        ElementTree.SubElement(_tool_data(element), _ours('node'), attributes)
+        _write_styles(
+            ElementTree.SubElement(_tool_data(element), _ours('node'), attributes), node
+        )
 
     for arc in document.arcs:
         element = element_for(root, made[arc.uuid])
@@ -301,6 +307,7 @@ def from_pnml(data: bytes | str) -> NetDocument:
                     _node_description(element),
                     _label_offset(element),
                     _label_width(element),
+                    *_read_styles(_tool_element(element, 'node')),
                 )
             )
 
@@ -318,6 +325,7 @@ def from_pnml(data: bytes | str) -> NetDocument:
                     _node_vertical(element),
                     _label_offset(element),
                     _label_width(element),
+                    *_read_styles(_tool_element(element, 'node')),
                 )
             )
 
@@ -488,6 +496,130 @@ def _write_link(tool: ElementTree.Element, arc: ArcData) -> None:
         ElementTree.SubElement(
             link, _ours('caption'), {'along': _number(along), 'across': _number(across)}
         )
+    _write_styles(link, arc)
+
+
+def _write_styles(holder: ElementTree.Element, item) -> None:
+    """Write an item's own text and line styles into the tool's data.
+
+    Only a style the item has of its own is written: ``None`` follows the
+    application's defaults and writes nothing, so a net drawn the default way is
+    the file it always was.  A style is complete, so every attribute is written.
+
+    The elements are named ``lettering`` and ``stroke`` rather than ``text``
+    and ``line``, which are PNML's own — the library finds elements by their
+    local name at any depth, and a tool's ``text`` would be read as a label's.
+
+    Parameters
+    ----------
+    holder : xml.etree.ElementTree.Element
+        The item's ``node`` or ``link`` element.
+    item : simtwin_core.petri_net.PlaceData or TransitionData or ArcData
+        The item.
+    """
+
+    text = item.text_style
+    if text is not None:
+        ElementTree.SubElement(
+            holder,
+            _ours('lettering'),
+            {
+                'font': text.font,
+                'size': _number(text.size),
+                'bold': _truth(text.bold),
+                'italic': _truth(text.italic),
+                'alignment': text.alignment,
+                'colour': text.colour,
+            },
+        )
+    line = item.line_style
+    if line is not None:
+        ElementTree.SubElement(
+            holder, _ours('stroke'), {'colour': line.colour, 'width': _number(line.width)}
+        )
+
+
+def _truth(value: bool) -> str:
+    """Write a yes-or-no answer the way XML Schema does.
+
+    Parameters
+    ----------
+    value : bool
+        The answer.
+
+    Returns
+    -------
+    str
+        ``true`` or ``false``.
+    """
+
+    return 'true' if value else 'false'
+
+
+def _read_truth(text: str | None) -> bool:
+    """Read one back.
+
+    Parameters
+    ----------
+    text : str, optional
+        What :func:`_truth` wrote.
+
+    Returns
+    -------
+    bool
+        The answer.
+
+    Raises
+    ------
+    ValueError
+        When it is neither, which a file that has been tampered with would say.
+    """
+
+    if text not in ('true', 'false'):
+        raise ValueError(f'not true or false: {text!r}')
+    return text == 'true'
+
+
+def _read_styles(holder: ElementTree.Element | None) -> tuple:
+    """Read an item's own text and line styles out of the tool's data.
+
+    Parameters
+    ----------
+    holder : xml.etree.ElementTree.Element, optional
+        The item's ``node`` or ``link`` element, or ``None`` for an item another
+        tool wrote.
+
+    Returns
+    -------
+    tuple
+        The :class:`~simtwin_core.petri_net.TextStyle` and the
+        :class:`~simtwin_core.petri_net.LineStyle`, each ``None`` when the file
+        gives none — the application's defaults.
+
+    Raises
+    ------
+    ValueError
+        When a style is there and is not one; an
+        :class:`~simtwin_core.petri_net.InvalidNet` is one of these.
+    """
+
+    if holder is None:
+        return None, None
+    text = holder.find(_ours('lettering'))
+    line = holder.find(_ours('stroke'))
+    return (
+        None
+        if text is None
+        else TextStyle(
+            text.get('font'),
+            float(text.get('size')),
+            _read_truth(text.get('bold')),
+            _read_truth(text.get('italic')),
+            text.get('alignment'),
+            text.get('colour'),
+        ),
+        None if line is None else LineStyle(line.get('colour'), float(line.get('width'))),
+    )
 
 
 def _read_frames(link: ElementTree.Element, wrapper: str, item: str):
@@ -683,6 +815,7 @@ def _read_arc(arc: Arc, element: ElementTree.Element, uuids: dict) -> ArcData:
         text = link.get(name)
         return None if text is None else int(text)
 
+    text_style, line_style = _read_styles(link)
     caption = link.find(_ours('caption'))
     weight_offset = (
         None
@@ -703,4 +836,6 @@ def _read_arc(arc: Arc, element: ElementTree.Element, uuids: dict) -> ArcData:
         _read_frames(link, 'points', 'point'),
         route,
         weight_offset=weight_offset,
+        text_style=text_style,
+        line_style=line_style,
     )

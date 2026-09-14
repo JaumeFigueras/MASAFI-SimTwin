@@ -37,6 +37,13 @@ box holding both has been moved to, or ``None`` for where the editor puts it; an
 its **label width** how wide that box has been made, or ``None`` for the editor's
 own width.
 
+**Every place, transition and arc may have a style of its own** — a
+:class:`TextStyle` for what is written beside it and a :class:`LineStyle` for
+what is drawn — or ``None``, which follows the application's defaults.  A style
+is complete or not there: the defaults are the application's, kept per machine,
+and a document says only what an item was given of its own.  None of it is part
+of the net, and no backend ever sees it.
+
 **A document holds everything in one order**, whatever order it is given in:
 nodes by name with numbers counted as numbers (:func:`reading_order`), arcs by
 the names of their ends and their kind, guides by the way they lie and where.  So
@@ -88,6 +95,23 @@ ORIENTATIONS: tuple[str, ...] = ('horizontal', 'vertical')
 DIRECTIONS: dict[str, tuple[str, str]] = {
     'inhibitor': ('place', 'transition'),
 }
+
+#: How the lines of a box of text are laid against its sides.  ``justified``
+#: stretches every line but the last, which is left-aligned as in any editor.
+ALIGNMENTS: tuple[str, ...] = ('left', 'right', 'center', 'justified')
+
+#: The colour that follows the theme: the sheet's own ink, dark on the light
+#: scheme and light on the dark one.  Every other colour is ``#rrggbb`` and stays
+#: what it is whichever scheme it is shown in.
+AUTOMATIC = 'automatic'
+
+#: How small and how large a font may be, in millimetres.
+MIN_FONT_SIZE = 1.0
+MAX_FONT_SIZE = 20.0
+
+#: How thin and how thick a line may be drawn, in millimetres.
+MIN_LINE_WIDTH = 0.1
+MAX_LINE_WIDTH = 3.0
 
 
 class InvalidNet(ValueError):
@@ -358,6 +382,122 @@ def _width(value, what: str) -> float | None:
     return float(value)
 
 
+def _flag(value, what: str) -> bool:
+    """Check a yes-or-no answer.
+
+    Parameters
+    ----------
+    value : bool
+        The answer.
+    what : str
+        What it answers, for the message when it is not an answer.
+
+    Returns
+    -------
+    bool
+        The answer, as given.
+
+    Raises
+    ------
+    InvalidNet
+        When it is not ``True`` or ``False``.
+    """
+
+    if not isinstance(value, bool):
+        raise InvalidNet(f'{what} is neither true nor false: {value!r}')
+    return value
+
+
+def _measure(value, low: float, high: float, what: str) -> float:
+    """Check a length in millimetres against its limits.
+
+    Parameters
+    ----------
+    value : float
+        The length.
+    low, high : float
+        The shortest and the longest it may be, both allowed.
+    what : str
+        What it measures, for the message when it is not allowed.
+
+    Returns
+    -------
+    float
+        The length, as a float.
+
+    Raises
+    ------
+    InvalidNet
+        When it is not a finite number between the two, or is a ``bool``.
+    """
+
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or not low <= value <= high
+    ):
+        raise InvalidNet(f'{what} is not between {low:g} and {high:g} mm: {value!r}')
+    return float(value)
+
+
+def _colour(value, what: str) -> str:
+    """Check a colour.
+
+    Parameters
+    ----------
+    value : str
+        :data:`AUTOMATIC`, or ``#rrggbb``.
+    what : str
+        What is drawn in it, for the message when it is not a colour.
+
+    Returns
+    -------
+    str
+        The colour, a hexadecimal one in lower case, so that two spellings of
+        one colour are one colour.
+
+    Raises
+    ------
+    InvalidNet
+        When it is neither.
+    """
+
+    if value == AUTOMATIC:
+        return value
+    if not isinstance(value, str) or not re.fullmatch(r'#[0-9a-fA-F]{6}', value):
+        raise InvalidNet(f'{what} is not a colour: {value!r}')
+    return value.lower()
+
+
+def _style(value, kind: type, what: str):
+    """Check that an item's own style is one, or that it has none.
+
+    Parameters
+    ----------
+    value : TextStyle or LineStyle, optional
+        The style, or ``None`` for the application's defaults.
+    kind : type
+        :class:`TextStyle` or :class:`LineStyle`.
+    what : str
+        Whose style it is, for the message when it is not one.
+
+    Returns
+    -------
+    TextStyle or LineStyle, optional
+        The style, as given.
+
+    Raises
+    ------
+    InvalidNet
+        When it is something else.
+    """
+
+    if value is not None and not isinstance(value, kind):
+        raise InvalidNet(f'the {kind.__name__} of {what} is not one: {value!r}')
+    return value
+
+
 def _points(values, what: str) -> tuple[Point, ...]:
     """Make a tuple of points of anything that holds some.
 
@@ -375,6 +515,94 @@ def _points(values, what: str) -> tuple[Point, ...]:
     """
 
     return tuple(_point(value, what) for value in values)
+
+
+@dataclass(frozen=True)
+class TextStyle:
+    """How an item's text is written, when it is not written the default way.
+
+    **Complete or not there at all.**  An item either follows the application's
+    defaults — its style is ``None`` — or has a style of its own, and then every
+    field is its own: unticking *Use app default text appearance* fills them in
+    with the defaults of that moment, and ticking it again throws them away.
+
+    Attributes
+    ----------
+    font : str
+        The family, as a font is named on the machine that set it.  One this
+        machine lacks is drawn in the default font, which is the application's
+        business rather than a document's.
+    size : float
+        In millimetres, from :data:`MIN_FONT_SIZE` to :data:`MAX_FONT_SIZE`.
+    bold, italic : bool
+        The typeface, the two being combined as they are in any editor.
+    alignment : str
+        One of :data:`ALIGNMENTS`.
+    colour : str
+        :data:`AUTOMATIC`, or ``#rrggbb``.
+
+    Raises
+    ------
+    InvalidNet
+        When any of them is not what it says.
+    """
+
+    font: str
+    size: float
+    bold: bool = False
+    italic: bool = False
+    alignment: str = 'left'
+    colour: str = AUTOMATIC
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.font, str) or not self.font.strip():
+            raise InvalidNet(f'a text style names no font: {self.font!r}')
+        object.__setattr__(
+            self, 'size', _measure(self.size, MIN_FONT_SIZE, MAX_FONT_SIZE, 'a font size')
+        )
+        object.__setattr__(self, 'bold', _flag(self.bold, 'bold'))
+        object.__setattr__(self, 'italic', _flag(self.italic, 'italic'))
+        if self.alignment not in ALIGNMENTS:
+            raise InvalidNet(f'text is aligned no way there is: {self.alignment!r}')
+        object.__setattr__(self, 'colour', _colour(self.colour, 'text'))
+
+    @property
+    def normal(self) -> bool:
+        """bool: Whether it is upright, unemphasised and left-aligned — the one
+        way an arc's weight is ever written."""
+
+        return not self.bold and not self.italic and self.alignment == 'left'
+
+
+@dataclass(frozen=True)
+class LineStyle:
+    """How an item's lines are drawn, when they are not drawn the default way.
+
+    Complete or not there at all, as a :class:`TextStyle` is.
+
+    Attributes
+    ----------
+    colour : str
+        :data:`AUTOMATIC`, or ``#rrggbb``: a place's outline and its tokens, a
+        transition's bar, an arc's line and the mark it ends in.
+    width : float
+        In millimetres, from :data:`MIN_LINE_WIDTH` to :data:`MAX_LINE_WIDTH`.
+        What a selected item is drawn with is this and a fixed amount more.
+
+    Raises
+    ------
+    InvalidNet
+        When either is not what it says.
+    """
+
+    colour: str
+    width: float
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, 'colour', _colour(self.colour, 'a line'))
+        object.__setattr__(
+            self, 'width', _measure(self.width, MIN_LINE_WIDTH, MAX_LINE_WIDTH, 'a line width')
+        )
 
 
 @dataclass(frozen=True)
@@ -404,6 +632,11 @@ class PlaceData:
         How wide that box has been made, in millimetres: the text wraps to it
         and the box is drawn that wide.  ``None`` for a box nobody has resized,
         which wraps to the editor's own width and fits its text.
+    text_style : TextStyle, optional
+        How its name and description are written, or ``None`` for the
+        application's defaults.
+    line_style : LineStyle, optional
+        How its outline and its tokens are drawn, or ``None`` for the defaults.
 
     Raises
     ------
@@ -420,6 +653,8 @@ class PlaceData:
     description: str = ''
     label_offset: Point | None = None
     label_width: float | None = None
+    text_style: TextStyle | None = None
+    line_style: LineStyle | None = None
 
     def __post_init__(self) -> None:
         what = f'place {self.name!r}'
@@ -428,6 +663,8 @@ class PlaceData:
         object.__setattr__(self, 'description', _description(self.description, what))
         object.__setattr__(self, 'label_offset', _offset(self.label_offset, what))
         object.__setattr__(self, 'label_width', _width(self.label_width, what))
+        _style(self.text_style, TextStyle, what)
+        _style(self.line_style, LineStyle, what)
 
 
 @dataclass(frozen=True)
@@ -457,6 +694,11 @@ class TransitionData:
     label_width : float, optional
         How wide that box has been made, in millimetres, or ``None`` for the
         editor's own width.
+    text_style : TextStyle, optional
+        How its name and description are written, or ``None`` for the
+        application's defaults.
+    line_style : LineStyle, optional
+        How its bar is drawn, or ``None`` for the defaults.
 
     Raises
     ------
@@ -473,6 +715,8 @@ class TransitionData:
     vertical: bool = False
     label_offset: Point | None = None
     label_width: float | None = None
+    text_style: TextStyle | None = None
+    line_style: LineStyle | None = None
 
     def __post_init__(self) -> None:
         what = f'transition {self.name!r}'
@@ -481,6 +725,8 @@ class TransitionData:
         object.__setattr__(self, 'vertical', _upright(self.vertical, what))
         object.__setattr__(self, 'label_offset', _offset(self.label_offset, what))
         object.__setattr__(self, 'label_width', _width(self.label_width, what))
+        _style(self.text_style, TextStyle, what)
+        _style(self.line_style, LineStyle, what)
 
 
 @dataclass(frozen=True)
@@ -537,6 +783,13 @@ class ArcData:
         Like the ``route``, **worked out rather than kept**: written for other
         tools, never used to draw, and no part of comparing two arcs.  ``None``
         when no weight is drawn.
+    text_style : TextStyle, optional
+        How the weight is written, or ``None`` for the application's defaults.
+        Its font, size and colour are the arc's own; it is always
+        :attr:`TextStyle.normal`, a weight never being bold, italic or aligned.
+    line_style : LineStyle, optional
+        How the line and the mark it ends in are drawn, or ``None`` for the
+        defaults.
 
     Raises
     ------
@@ -559,6 +812,8 @@ class ArcData:
     route: tuple[Point, ...] = field(default=(), compare=False)
     weight_offset: Point | None = None
     inscription_offset: Point | None = field(default=None, compare=False)
+    text_style: TextStyle | None = None
+    line_style: LineStyle | None = None
 
     def __post_init__(self) -> None:
         if self.kind not in KINDS:
@@ -582,6 +837,13 @@ class ArcData:
         what = f'arc {self.uuid!r}'
         object.__setattr__(self, 'weight_offset', _offset(self.weight_offset, what))
         object.__setattr__(self, 'inscription_offset', _offset(self.inscription_offset, what))
+        _style(self.text_style, TextStyle, what)
+        _style(self.line_style, LineStyle, what)
+        if self.text_style is not None and not self.text_style.normal:
+            raise InvalidNet(
+                f'the weight of {what} is written normal and left-aligned, '
+                'never bold, italic or aligned otherwise'
+            )
 
 
 @dataclass(frozen=True)

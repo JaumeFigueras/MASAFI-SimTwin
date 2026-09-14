@@ -39,7 +39,9 @@ from simtwin_core.operations import (
     SetArcWeight,
     SetDescription,
     SetLabelWidth,
+    SetLineStyle,
     SetNodeName,
+    SetTextStyle,
     SetTokens,
     SetVertical,
 )
@@ -47,7 +49,9 @@ from simtwin_core.petri_net import (
     ArcData,
     GuideData,
     NetDocument,
+    LineStyle,
     PlaceData,
+    TextStyle,
     TransitionData,
 )
 
@@ -539,6 +543,8 @@ def operations_for(editor) -> dict:
         MoveLabel(place.uuid, None, (4.5, 11.0)),
         SetLabelWidth(transition.uuid, None, 22.5),
         MoveWeight(arc.uuid, None, (0.5, 0.25)),
+        SetTextStyle(transition.uuid, None, TextStyle('Nimbus Sans', 3.0, True, False, 'center', '#aa0000')),
+        SetLineStyle(arc.uuid, None, LineStyle('#0000ff', 1.2)),
         AddArc(
             ArcData(
                 'new-arc',
@@ -1093,6 +1099,40 @@ def test_a_selected_weight_stands_for_its_arc(editor):
     assert [data.uuid for data in editor.selection().arcs] == [arc.uuid]
     assert activated == [arc.uuid]
     editor.arc_activated.disconnect()
+
+
+def test_styles_survive_a_document_round_trip_and_a_paste(editor):
+    """Kept on the items, written by the editor, read back; a pasted copy carries
+    its original's styles."""
+
+    place, _free, transition, arc = little_net(editor)
+    text = TextStyle('Nimbus Sans', 3.0, italic=True, alignment='right', colour='#aa0000')
+    line = LineStyle('#0000ff', 1.2)
+    editor.apply(
+        Change(
+            'gesture',
+            (
+                SetTextStyle(place.uuid, None, text),
+                SetLineStyle(transition.uuid, None, line),
+                SetLineStyle(arc.uuid, None, line),
+            ),
+        )
+    )
+    document = editor.to_document()
+
+    editor.load_document(document)
+
+    assert editor.to_document() == document
+    assert editor.node(place.uuid).text_style == text
+    assert editor.arc(arc.uuid).line_style == line
+
+    for item in editor.scene().selectedItems():
+        item.setSelected(False)
+    editor.node(place.uuid).setSelected(True)
+    assert editor.paste(editor.copy_selection(), QPointF(150.0, 150.0))
+    pasted = [node for node in editor.to_document().places if node.uuid != place.uuid
+              and node.name not in {data.name for data in document.places}]
+    assert [node.text_style for node in pasted] == [text]
 
 
 def test_a_moved_weight_survives_a_document_round_trip(editor):

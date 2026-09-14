@@ -201,6 +201,10 @@ class NetItem(QGraphicsItem):
         self._description = ''
         self._label_offset: tuple[float, float] | None = None
         self._label_width: float | None = None
+        #: The item's own text and line style, ``None`` for the application's
+        #: defaults.  Kept and written, not yet drawn with.
+        self.text_style = None
+        self.line_style = None
         self._label = Label(self, snap, bounds, resizable=True)
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)

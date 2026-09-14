@@ -13,10 +13,13 @@ from masafi_sim_petri.io import PT_NET_TYPE, element_for, graphics_of, qname
 from masafi_sim_petri.io import from_pnml as library_reads
 from simtwin_adapters.sim_petri import pnml
 from simtwin_core.petri_net import (
+    AUTOMATIC,
     ArcData,
     GuideData,
+    LineStyle,
     NetDocument,
     PlaceData,
+    TextStyle,
     TransitionData,
 )
 
@@ -462,6 +465,119 @@ def test_a_moved_weight_is_kept_in_the_tools_data_and_shown_to_other_tools():
 
     assert caption_of('a3')[1] is None
     assert pnml.from_pnml(written) == moved
+
+
+#: Styles of every kind a file has to carry: every field set away from its
+#: default, a fractional size, and the colour that follows the theme.
+TEXT = TextStyle('Nimbus Sans', 3.25, True, True, 'justified', '#aa0000')
+PLAIN = TextStyle('DejaVu Sans Mono', 2.4, colour=AUTOMATIC)
+LINE = LineStyle('#0000ff', 1.5)
+
+
+def styled() -> NetDocument:
+    """Give the drawn net with its own styles on a place, a transition and an arc.
+
+    Returns
+    -------
+    simtwin_core.petri_net.NetDocument
+        The net: P1 with a text and a line style, P2 with none, T1 with a line
+        style, a1 with both and the others with none.
+    """
+
+    return replace(
+        DRAWN,
+        places=(replace(DRAWN.places[0], text_style=TEXT, line_style=LINE), DRAWN.places[1]),
+        transitions=(replace(DRAWN.transitions[0], line_style=LineStyle(AUTOMATIC, 0.1)),),
+        arcs=tuple(
+            replace(arc, text_style=PLAIN, line_style=LINE) if arc.uuid == 'a1' else arc
+            for arc in DRAWN.arcs
+        ),
+    )
+
+
+def test_styles_are_written_in_the_tools_own_data_and_read_back():
+    """Every attribute of a style, since a style is complete; nothing at all for
+    an item that follows the defaults."""
+
+    document = styled()
+    written = pnml.to_pnml(document)
+    root = tree_of(written)
+    namespace = f'{{{pnml.TOOL_NAMESPACE}}}'
+
+    def holder_of(element, name):
+        return element.find(qname('toolspecific')).find(f'{namespace}{name}')
+
+    place = holder_of(element_for(root, 'P1'), 'node')
+    assert place.find(f'{namespace}lettering').attrib == {
+        'font': 'Nimbus Sans',
+        'size': '3.25',
+        'bold': 'true',
+        'italic': 'true',
+        'alignment': 'justified',
+        'colour': '#aa0000',
+    }
+    assert place.find(f'{namespace}stroke').attrib == {'colour': '#0000ff', 'width': '1.5'}
+    bare = holder_of(element_for(root, 'P2'), 'node')
+    assert bare.find(f'{namespace}lettering') is None
+    assert bare.find(f'{namespace}stroke') is None
+    assert holder_of(element_for(root, 'T1'), 'node').find(f'{namespace}stroke').attrib == {
+        'colour': 'automatic',
+        'width': '0.1',
+    }
+    links = {
+        link.get('uuid'): link
+        for element in root.iter(qname('arc'))
+        for link in [holder_of(element, 'link')]
+    }
+    assert links['a1'].find(f'{namespace}lettering').get('bold') == 'false'
+    assert links['a2'].find(f'{namespace}stroke') is None
+
+    assert pnml.from_pnml(written) == document
+
+
+def test_a_styled_net_is_still_the_librarys_net():
+    """The styles ride in the tool's data and are named unlike PNML's own ``text``
+    and ``line``, so the library reads the same places, markings and weights."""
+
+    written = pnml.to_pnml(styled()).decode('utf-8')
+    plain = pnml.to_pnml(DRAWN).decode('utf-8')
+
+    ours, theirs = library_reads(written), library_reads(plain)
+
+    assert [(place.name, place.initial_marking) for place in ours.places] == [
+        (place.name, place.initial_marking) for place in theirs.places
+    ]
+    assert [arc.weight for arc in ours.arcs] == [arc.weight for arc in theirs.arcs]
+
+
+@pytest.mark.parametrize(
+    'damage',
+    [
+        (b'size="3.25"', b'size="50"'),
+        (b'bold="true"', b'bold="yes"'),
+        (b'alignment="justified"', b'alignment="middle"'),
+        (b'colour="#0000ff" width="1.5"', b'colour="blue" width="1.5"'),
+        (b'width="0.1"', b'width="4"'),
+        (b' size="3.25"', b''),
+    ],
+    ids=['size', 'bold', 'alignment', 'colour', 'width', 'missing'],
+)
+def test_a_style_that_is_not_one_makes_the_file_unreadable(damage):
+    """As any damaged tool data does, rather than drawing something nobody chose."""
+
+    written = pnml.to_pnml(styled())
+    assert damage[0] in written
+
+    with pytest.raises(pnml.UnreadableNet):
+        pnml.from_pnml(written.replace(damage[0], damage[1], 1))
+
+
+def test_a_file_written_before_styles_follows_the_defaults():
+    """Every file written until now, and every file another tool writes."""
+
+    for document in (pnml.from_pnml(pnml.to_pnml(DRAWN)), pnml.from_pnml(FROM_ANOTHER_TOOL)):
+        items = (*document.places, *document.transitions, *document.arcs)
+        assert {(item.text_style, item.line_style) for item in items} == {(None, None)}
 
 
 def test_a_caption_offset_another_tool_writes_is_read():

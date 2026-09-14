@@ -1027,6 +1027,10 @@ class Arc(QGraphicsItem):
         self._line = QLineF()
         self._label_offset: tuple[float, float] | None = None
         self._label = Label(self, snap, self._sheet)
+        #: The arc's own text and line style, ``None`` for the application's
+        #: defaults.  Kept and written, not yet drawn with.
+        self.text_style = None
+        self.line_style = None
 
         if source_port is None:
             source_port = source.free_port_towards(target.scenePos())

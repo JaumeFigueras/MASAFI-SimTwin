@@ -7,12 +7,16 @@ import dataclasses
 import pytest
 
 from simtwin_core.petri_net import (
+    ALIGNMENTS,
+    AUTOMATIC,
     ArcData,
     GuideData,
     InvalidNet,
+    LineStyle,
     NameProblem,
     NetDocument,
     PlaceData,
+    TextStyle,
     TransitionData,
     name_problem,
 )
@@ -389,6 +393,94 @@ def test_a_weight_nobody_has_moved_has_no_offset_and_what_is_drawn_is_not_compar
     assert ArcData('a', 'p', 't', 0, 10, inscription_offset=(1.0, 2.0)) == arc
     with pytest.raises(InvalidNet, match='caption'):
         ArcData('a', 'p', 't', 0, 10, weight_offset=(1.0,))
+
+
+def test_a_text_style_holds_what_it_is_given_and_defaults_to_plain_automatic_left():
+    """A colour is written one way however it was spelt."""
+
+    style = TextStyle('Nimbus Sans', 2.4)
+
+    assert (style.bold, style.italic, style.alignment, style.colour) == (
+        False,
+        False,
+        'left',
+        AUTOMATIC,
+    )
+    assert style.normal
+    assert TextStyle('Nimbus Sans', 20, True, True, 'justified', '#AA00ff').colour == '#aa00ff'
+    assert set(ALIGNMENTS) == {'left', 'right', 'center', 'justified'}
+
+
+@pytest.mark.parametrize(
+    'fields',
+    [
+        {'font': ''},
+        {'size': 0.9},
+        {'size': 20.5},
+        {'size': True},
+        {'bold': 1},
+        {'italic': 'yes'},
+        {'alignment': 'middle'},
+        {'colour': 'red'},
+        {'colour': '#12345'},
+    ],
+    ids=['no-font', 'too-small', 'too-large', 'bool-size', 'number-bold', 'text-italic',
+         'alignment', 'named-colour', 'short-colour'],
+)
+def test_a_text_style_that_is_not_one_is_refused(fields):
+    """Font sizes run from 1 to 20 mm, as agreed."""
+
+    given = {'font': 'Nimbus Sans', 'size': 2.4, **fields}
+
+    with pytest.raises(InvalidNet):
+        TextStyle(**given)
+
+
+@pytest.mark.parametrize('width', [0.1, 1.0, 3.0])
+def test_a_line_style_takes_any_width_from_a_tenth_to_three_millimetres(width):
+    """Both ends included."""
+
+    assert LineStyle(AUTOMATIC, width).width == width
+
+
+@pytest.mark.parametrize('fields', [{'width': 0.05}, {'width': 3.5}, {'colour': 'blue'}],
+                         ids=['too-thin', 'too-thick', 'named-colour'])
+def test_a_line_style_that_is_not_one_is_refused(fields):
+    """Line widths run from 0.1 to 3 mm, as agreed."""
+
+    with pytest.raises(InvalidNet):
+        LineStyle(**{'colour': '#000000', 'width': 0.3, **fields})
+
+
+def test_every_item_follows_the_defaults_unless_it_has_a_style_of_its_own():
+    """``None`` is the application's defaults, whatever they are on this machine."""
+
+    text, line = TextStyle('Nimbus Sans', 3.0, True), LineStyle('#aa0000', 1.0)
+
+    assert PlaceData('p', 'P1', (0, 0)).text_style is None
+    assert PlaceData('p', 'P1', (0, 0)).line_style is None
+    assert PlaceData('p', 'P1', (0, 0), 0, '', None, None, text, line).text_style == text
+    assert TransitionData('t', 'T1', (0, 0), '', False, None, None, text, line).line_style == line
+    assert ArcData('a', 'p', 't', 0, 10, line_style=line).line_style == line
+    with pytest.raises(InvalidNet, match='TextStyle'):
+        PlaceData('p', 'P1', (0, 0), 0, '', None, None, {'font': 'Nimbus Sans'})
+
+
+@pytest.mark.parametrize(
+    'style',
+    [
+        TextStyle('Nimbus Sans', 3.0, bold=True),
+        TextStyle('Nimbus Sans', 3.0, italic=True),
+        TextStyle('Nimbus Sans', 3.0, alignment='center'),
+    ],
+    ids=['bold', 'italic', 'aligned'],
+)
+def test_an_arcs_weight_is_never_bold_italic_or_aligned(style):
+    """Its font, size and colour may be its own; its typeface may not."""
+
+    assert ArcData('a', 'p', 't', 0, 10, text_style=TextStyle('Mono', 4.0, colour='#00aa00'))
+    with pytest.raises(InvalidNet, match='normal'):
+        ArcData('a', 'p', 't', 0, 10, text_style=style)
 
 
 def test_a_caption_nobody_has_resized_has_no_width():
