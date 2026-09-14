@@ -24,6 +24,7 @@ from simtwin_core.operations import (
     SetArcShape,
     SetArcWeight,
     SetDescription,
+    SetLabelWidth,
     SetNodeName,
     SetTokens,
     SetVertical,
@@ -80,6 +81,7 @@ EVERY_OPERATION = [
     SetDescription('t', '', 'Fill a bottle'),
     SetVertical('t', False, True),
     MoveLabel('p', None, (3.0, -7.5)),
+    SetLabelWidth('t', None, 12.0),
     AddArc(ArcData('b', 't', 'p', 3, 4)),
     RemoveArc(ARC),
     MoveArcEnd('a', 'source', 'p', 0, 'p', 6),
@@ -431,6 +433,31 @@ def test_a_caption_moved_somewhere_that_is_not_a_place_is_refused():
         MoveLabel('p', None, (1.0,)).apply(net())
 
 
+def test_a_caption_is_resized_and_given_back_the_editors_width():
+    """The first resize undone is a box nobody has resized."""
+
+    resized = SetLabelWidth('p', None, 18.0).apply(net())
+
+    assert resized.places[0].label_width == 18.0
+    assert SetLabelWidth('p', None, 18.0).inverse().apply(resized) == net()
+
+
+def test_a_caption_given_a_width_that_is_not_one_is_refused():
+    """As a damaged journal would ask."""
+
+    with pytest.raises(InvalidNet, match='not a width'):
+        SetLabelWidth('p', None, -1.0).apply(net())
+
+
+def test_a_caption_resized_goes_through_the_journal():
+    """Both widths, the ``None`` of a box nobody had resized, and a node's own."""
+
+    wide = TransitionData('u', 'T2', (1.0, 1.0), '', True, None, 22.5)
+    change = Change('gesture', (SetLabelWidth('p', None, 9.0), AddNode(wide)))
+
+    assert operations.decode(json.loads(json.dumps(operations.encode(change)))) == change
+
+
 def test_a_caption_moved_goes_through_the_journal():
     """Both offsets, and the ``None`` of a box nobody had moved, come back."""
 
@@ -491,6 +518,7 @@ def test_a_node_written_before_tokens_existed_reads_as_holding_none():
         False,
         None,
     )
+    assert (place.label_width, transition.label_width) == (None, None)
 
 
 

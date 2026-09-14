@@ -23,7 +23,8 @@ is the pattern MASAFI-sim-petri documents for the projects built on it:
 * ``<toolspecific tool="MASAFI-SimTwin" version="1">``, which PNML sets aside
   for exactly this and every other tool passes over: the model's UUID on the
   ``net``, the guides on the ``page``, each node's UUID, its description when
-  it has one and a transition's way round when it stands up, and each arc's UUID,
+  it has one, a transition's way round when it stands up and the width of its
+  caption when it has been resized, and each arc's UUID,
   kind, shape, connecting points, control points and points in its chord frame
   — which is what the editor draws from, and which wins over the route.
 
@@ -227,6 +228,8 @@ def to_pnml(document: NetDocument) -> bytes:
             attributes['description'] = node.description
         if isinstance(node, TransitionData) and node.vertical:
             attributes['vertical'] = 'true'
+        if node.label_width is not None:
+            attributes['label-width'] = _number(node.label_width)
         ElementTree.SubElement(_tool_data(element), _ours('node'), attributes)
 
     for arc in document.arcs:
@@ -288,6 +291,7 @@ def from_pnml(data: bytes | str) -> NetDocument:
                     place.initial_marking,
                     _node_description(element),
                     _label_offset(element),
+                    _label_width(element),
                 )
             )
 
@@ -304,6 +308,7 @@ def from_pnml(data: bytes | str) -> NetDocument:
                     _node_description(element),
                     _node_vertical(element),
                     _label_offset(element),
+                    _label_width(element),
                 )
             )
 
@@ -554,6 +559,28 @@ def _node_vertical(element: ElementTree.Element) -> bool:
 
     node = _tool_element(element, 'node')
     return node is not None and node.get('vertical') == 'true'
+
+
+def _label_width(element: ElementTree.Element) -> float | None:
+    """Read how wide a node's caption has been made, out of the tool's data.
+
+    PNML has no place for the width of a label, so it is SimTwin's own and
+    written only for a caption that was resized.
+
+    Parameters
+    ----------
+    element : xml.etree.ElementTree.Element
+        The node's element.
+
+    Returns
+    -------
+    float, optional
+        The width in millimetres, or ``None`` for the editor's own.
+    """
+
+    node = _tool_element(element, 'node')
+    text = node.get('label-width') if node is not None else None
+    return None if text is None else float(text)
 
 
 def _label_offset(element: ElementTree.Element):

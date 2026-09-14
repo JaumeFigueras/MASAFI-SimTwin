@@ -501,6 +501,57 @@ class MoveLabel(Operation):
         return MoveLabel(self.node, self.after, self.before)
 
 
+@dataclass(frozen=True)
+class SetLabelWidth(Operation):
+    """Make the box holding a node's name and description wider or narrower.
+
+    Only the width: the text wraps to it and the box is as tall as the lines
+    that makes.
+
+    Attributes
+    ----------
+    node : str
+        The UUID of the node.
+    before, after : float, optional
+        How wide the box was and how wide it is, in millimetres — or ``None``
+        for the editor's own width, which is what undoing the first resize of a
+        box gives back.
+    """
+
+    NAME = 'set-label-width'
+
+    node: str
+    before: float | None
+    after: float | None
+
+    def apply(self, document: NetDocument) -> NetDocument:
+        """Give the box its width.
+
+        Parameters
+        ----------
+        document : simtwin_core.petri_net.NetDocument
+            The net.
+
+        Returns
+        -------
+        simtwin_core.petri_net.NetDocument
+            The net with the node's caption resized.
+        """
+
+        return _changed_node(document, self.node, label_width=self.after)
+
+    def inverse(self) -> Operation:
+        """Give the width back.
+
+        Returns
+        -------
+        SetLabelWidth
+            The inverse.
+        """
+
+        return SetLabelWidth(self.node, self.after, self.before)
+
+
 # ----------------------------------------------------------------------
 # The arcs
 # ----------------------------------------------------------------------
@@ -1082,6 +1133,7 @@ OPERATIONS: dict[str, type[Operation]] = {
         SetDescription,
         SetVertical,
         MoveLabel,
+        SetLabelWidth,
         AddArc,
         RemoveArc,
         MoveArcEnd,
@@ -1228,7 +1280,9 @@ def _encode_operation(operation: Operation) -> dict:
         data['node'] = _node_data(operation.node)
     elif isinstance(operation, MoveNode):
         data.update(node=operation.node, before=list(operation.before), after=list(operation.after))
-    elif isinstance(operation, (SetNodeName, SetTokens, SetDescription, SetVertical)):
+    elif isinstance(
+        operation, (SetNodeName, SetTokens, SetDescription, SetVertical, SetLabelWidth)
+    ):
         data.update(node=operation.node, before=operation.before, after=operation.after)
     elif isinstance(operation, MoveLabel):
         data.update(
@@ -1298,7 +1352,7 @@ def _decode_operation(data: dict) -> Operation:
             return operation(_read_node(data['node']))
         if operation is MoveNode:
             return MoveNode(data['node'], tuple(data['before']), tuple(data['after']))
-        if operation in (SetNodeName, SetTokens, SetDescription, SetVertical):
+        if operation in (SetNodeName, SetTokens, SetDescription, SetVertical, SetLabelWidth):
             return operation(data['node'], data['before'], data['after'])
         if operation is MoveLabel:
             return MoveLabel(
@@ -1358,6 +1412,7 @@ def _node_data(node: Node) -> dict:
         data['vertical'] = node.vertical
     data['description'] = node.description
     data['label_offset'] = _offset_data(node.label_offset)
+    data['label_width'] = node.label_width
     return data
 
 
@@ -1368,9 +1423,10 @@ def _read_node(data: dict) -> Node:
     ----------
     data : dict
         What :func:`_node_data` wrote.  A line written before nodes had tokens,
-        descriptions, a way round or a caption that could be moved has none of
-        them, and reads as a node with none, a transition lying across the sheet
-        and a caption where the editor puts it.
+        descriptions, a way round or a caption that could be moved or resized
+        has none of them, and reads as a node with none, a transition lying
+        across the sheet and a caption where the editor puts it, as wide as the
+        editor makes it.
 
     Returns
     -------
@@ -1380,6 +1436,7 @@ def _read_node(data: dict) -> Node:
 
     description = data.get('description', '')
     offset = _read_offset(data.get('label_offset'))
+    width = data.get('label_width')
     if data['kind'] == 'place':
         return PlaceData(
             data['uuid'],
@@ -1388,6 +1445,7 @@ def _read_node(data: dict) -> Node:
             data.get('tokens', 0),
             description,
             offset,
+            width,
         )
     return TransitionData(
         data['uuid'],
@@ -1396,6 +1454,7 @@ def _read_node(data: dict) -> Node:
         description,
         data.get('vertical', False),
         offset,
+        width,
     )
 
 

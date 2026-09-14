@@ -44,6 +44,20 @@ LABEL_LINE_HEIGHT = 2.8
 #: belongs to the item under it rather than floating between two.
 LABEL_WIDTH = 30.0
 
+#: How big a handle is drawn, in millimetres of side.  A square, so that a
+#: handle is never mistaken for a connecting point, which is a ring; and as
+#: small as a connecting point is, because both are marks put on the drawing to
+#: be aimed at rather than parts of the drawing itself.  Here rather than with
+#: the arcs because a caption carries handles too.
+HANDLE_SIZE = 0.7
+
+#: How far from a handle, in millimetres, the pointer may be and still take hold
+#: of it.  Well beyond the square it is drawn as: a handle is aimed at, and a
+#: handle that has to be hit exactly is a handle nobody can use.  Drawing it
+#: smaller is a change to the picture and not to the aiming, which is why the
+#: two are separate numbers.
+HANDLE_GRAB = 1.3
+
 def label_lines(text: str, width: float, metrics: QFontMetricsF, scale: float) -> list[str]:
     """Break a piece of text into the lines a box that wide holds.
 
@@ -95,7 +109,9 @@ def label_lines(text: str, width: float, metrics: QFontMetricsF, scale: float) -
     return lines
 
 
-def text_block(text: str, width: float, line_height: float = LABEL_LINE_HEIGHT):
+def text_block(
+    text: str, width: float, line_height: float = LABEL_LINE_HEIGHT, fit: bool = True
+):
     """Lay a piece of text out as a path of however many lines it needs.
 
     A block of text is not :func:`glyph_path`: that scales one piece of text so
@@ -116,6 +132,11 @@ def text_block(text: str, width: float, line_height: float = LABEL_LINE_HEIGHT):
         How wide it may be, in millimetres, before it goes onto another line.
     line_height : float, optional
         How tall one line is, in millimetres.
+    fit : bool, optional
+        Whether the box is as wide as its widest line, which is what a box
+        nobody has resized is, or as wide as ``width`` — what a box a person has
+        given a width is, so that the box they drew is the box they get.  A
+        single character wider than the width widens it either way.
 
     Returns
     -------
@@ -136,10 +157,8 @@ def text_block(text: str, width: float, line_height: float = LABEL_LINE_HEIGHT):
     if not lines:
         return QPainterPath(), QSizeF(0.0, 0.0)
 
-    box = QSizeF(
-        max(metrics.horizontalAdvance(line) for line in lines) * scale,
-        len(lines) * line_height,
-    )
+    widest = max(metrics.horizontalAdvance(line) for line in lines) * scale
+    box = QSizeF(widest if fit else max(width, widest), len(lines) * line_height)
 
     glyphs = QPainterPath()
     for row, line in enumerate(lines):

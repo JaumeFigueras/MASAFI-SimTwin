@@ -28,32 +28,32 @@
 </context><context>
     <name>Arc</name>
     <message>
-        <location filename="../documents/arc.py" line="399" />
+        <location filename="../documents/arc.py" line="392" />
         <source>Straight</source>
         <translation>Recta</translation>
     </message>
     <message>
-        <location filename="../documents/arc.py" line="400" />
+        <location filename="../documents/arc.py" line="393" />
         <source>Curved</source>
         <translation>Corba</translation>
     </message>
     <message>
-        <location filename="../documents/arc.py" line="401" />
+        <location filename="../documents/arc.py" line="394" />
         <source>S-Curved</source>
         <translation>Corba en S</translation>
     </message>
     <message>
-        <location filename="../documents/arc.py" line="402" />
+        <location filename="../documents/arc.py" line="395" />
         <source>L-Shaped</source>
         <translation>Forma de L</translation>
     </message>
     <message>
-        <location filename="../documents/arc.py" line="465" />
+        <location filename="../documents/arc.py" line="458" />
         <source>Normal</source>
         <translation>Normal</translation>
     </message>
     <message>
-        <location filename="../documents/arc.py" line="466" />
+        <location filename="../documents/arc.py" line="459" />
         <source>Inhibitor</source>
         <translation>Inhibidor</translation>
     </message>
@@ -87,32 +87,32 @@
 </context><context>
     <name>CanvasView</name>
     <message>
-        <location filename="../documents/canvas.py" line="740" />
+        <location filename="../documents/canvas.py" line="746" />
         <source>Add Point</source>
         <translation>Afegeix un punt</translation>
     </message>
     <message>
-        <location filename="../documents/canvas.py" line="743" />
+        <location filename="../documents/canvas.py" line="749" />
         <source>Delete Point</source>
         <translation>Suprimeix el punt</translation>
     </message>
     <message>
-        <location filename="../documents/canvas.py" line="747" />
+        <location filename="../documents/canvas.py" line="753" />
         <source>Delete Arc</source>
         <translation>Suprimeix l'arc</translation>
     </message>
     <message>
-        <location filename="../documents/canvas.py" line="858" />
+        <location filename="../documents/canvas.py" line="864" />
         <source>Rotate</source>
         <translation>Gira</translation>
     </message>
     <message>
-        <location filename="../documents/canvas.py" line="899" />
+        <location filename="../documents/canvas.py" line="905" />
         <source>Delete Guide</source>
         <translation>Suprimeix la guia</translation>
     </message>
     <message>
-        <location filename="../documents/canvas.py" line="901" />
+        <location filename="../documents/canvas.py" line="907" />
         <source>Delete All Guides</source>
         <translation>Suprimeix totes les guies</translation>
     </message>
@@ -883,107 +883,112 @@
 </context><context>
     <name>PetriNetEditor</name>
     <message>
-        <location filename="../documents/petri_net.py" line="420" />
+        <location filename="../documents/petri_net.py" line="433" />
         <source>Drag an element out of the Libraries pane</source>
         <translation>Arrossegueu un element des del plafó de Biblioteques</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1217" />
+        <location filename="../documents/petri_net.py" line="1253" />
         <source>Add Element</source>
         <translation>Afegeix un element</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1218" />
+        <location filename="../documents/petri_net.py" line="1254" />
         <source>Draw Arc</source>
         <translation>Dibuixa un arc</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1219" />
+        <location filename="../documents/petri_net.py" line="1255" />
         <source>Change Weight</source>
         <translation>Canvia el pes</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1220" />
+        <location filename="../documents/petri_net.py" line="1256" />
         <source>Change Arc Shape</source>
         <translation>Canvia la forma de l'arc</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1221" />
+        <location filename="../documents/petri_net.py" line="1257" />
         <source>Change Arc Type</source>
         <translation>Canvia el tipus d'arc</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1222" />
+        <location filename="../documents/petri_net.py" line="1258" />
         <source>Add Point</source>
         <translation>Afegeix un punt</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1223" />
+        <location filename="../documents/petri_net.py" line="1259" />
         <source>Delete Point</source>
         <translation>Suprimeix el punt</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1224" />
+        <location filename="../documents/petri_net.py" line="1260" />
         <source>Move</source>
         <translation>Mou</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1225" />
+        <location filename="../documents/petri_net.py" line="1261" />
         <source>Move Guide</source>
         <translation>Mou la guia</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1226" />
+        <location filename="../documents/petri_net.py" line="1262" />
         <source>Move Label</source>
         <translation>Mou l'etiqueta</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1227" />
+        <location filename="../documents/petri_net.py" line="1263" />
+        <source>Resize Label</source>
+        <translation>Redimensiona l'etiqueta</translation>
+    </message>
+    <message>
+        <location filename="../documents/petri_net.py" line="1264" />
         <source>Add Guide</source>
         <translation>Afegeix una guia</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1228" />
+        <location filename="../documents/petri_net.py" line="1265" />
         <source>Shape Arc</source>
         <translation>Dona forma a l'arc</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1229" />
+        <location filename="../documents/petri_net.py" line="1266" />
         <source>Move Arc End</source>
         <translation>Mou l'extrem de l'arc</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1230" />
+        <location filename="../documents/petri_net.py" line="1267" />
         <source>Delete</source>
         <translation>Suprimeix</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1231" />
+        <location filename="../documents/petri_net.py" line="1268" />
         <source>Rename</source>
         <translation>Canvia el nom</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1232" />
+        <location filename="../documents/petri_net.py" line="1269" />
         <source>Change Tokens</source>
         <translation>Canvia els testimonis</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1233" />
+        <location filename="../documents/petri_net.py" line="1270" />
         <source>Change Description</source>
         <translation>Canvia la descripció</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1234" />
+        <location filename="../documents/petri_net.py" line="1271" />
         <source>Rotate</source>
         <translation>Gira</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1235" />
+        <location filename="../documents/petri_net.py" line="1272" />
         <source>Cut</source>
         <translation>Retalla</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1236" />
+        <location filename="../documents/petri_net.py" line="1273" />
         <source>Paste</source>
         <translation>Enganxa</translation>
     </message>

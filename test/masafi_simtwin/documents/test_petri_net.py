@@ -37,6 +37,7 @@ from simtwin_core.operations import (
     SetArcShape,
     SetArcWeight,
     SetDescription,
+    SetLabelWidth,
     SetNodeName,
     SetTokens,
     SetVertical,
@@ -535,6 +536,7 @@ def operations_for(editor) -> dict:
         SetDescription(transition.uuid, '', 'Fill a bottle'),
         SetVertical(transition.uuid, False, True),
         MoveLabel(place.uuid, None, (4.5, 11.0)),
+        SetLabelWidth(transition.uuid, None, 22.5),
         AddArc(
             ArcData(
                 'new-arc',
@@ -907,7 +909,7 @@ def test_a_press_and_a_release_are_what_note_and_report_a_drag(editor):
     assert editor.undo_stack.command(count).text() == 'Move'
 
 
-def drag_label(view, label, by: QPointF) -> None:
+def drag_label(view, label, by: QPointF, at: QPointF | None = None) -> None:
     """Drag a caption through the view, the way a person's hand does.
 
     A press, a move and a release, each carrying a real global position, since a
@@ -921,10 +923,14 @@ def drag_label(view, label, by: QPointF) -> None:
         The caption.
     by : PyQt6.QtCore.QPointF
         How far to drag it, in scene millimetres.
+    at : PyQt6.QtCore.QPointF, optional
+        Where to press, in scene millimetres — one of its handles, say.  Its
+        middle when not given.
     """
 
-    start = QPointF(view.mapFromScene(label.scenePos()))
-    end = QPointF(view.mapFromScene(label.scenePos() + by))
+    origin = label.scenePos() if at is None else at
+    start = QPointF(view.mapFromScene(origin))
+    end = QPointF(view.mapFromScene(origin + by))
     for kind, spot, button, buttons in (
         (QEvent.Type.MouseButtonPress, start, Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton),
         (QEvent.Type.MouseMove, end, Qt.MouseButton.NoButton, Qt.MouseButton.LeftButton),
@@ -983,6 +989,54 @@ def test_a_caption_that_has_been_moved_goes_with_its_item_and_stays_put_as_it_gr
 
     assert place.label.pos() == QPointF(15.0, -4.0)
     assert place.label.scenePos() == QPointF(75.0, 66.0)
+
+
+def test_a_caption_resized_by_its_handle_is_one_recorded_change(editor):
+    """The side follows the pointer — a box centred under a place grows both ways
+    — the box keeps its place, and *Undo* gives back the editor's own width."""
+
+    place, _free, _transition, _arc = little_net(editor)
+    editor.describe([place.uuid], 'Bottles waiting to be filled')
+    before = editor.to_document()
+    label = place.label
+    label.select()
+    was_width = label.size.width()
+    was_centre = label.pos().x()
+    count = editor.undo_stack.count()
+
+    drag_label(editor.view, label, QPointF(-4.0, 0.0), at=label.mapToScene(label.handles()[1]))
+
+    assert editor.undo_stack.count() == count + 1
+    assert editor.undo_stack.command(count).text() == 'Resize Label'
+    assert place.label_width == round(place.label_width)
+    assert abs(place.label_width - (was_width - 8.0)) <= 1.0
+    assert label.size.width() == place.label_width
+    assert label.pos().x() == was_centre
+    assert place.label_offset is None
+    assert editor.to_document().places[0].label_width == place.label_width
+
+    editor.undo_stack.undo()
+
+    assert place.label_width is None
+    assert editor.to_document() == before
+
+
+def test_a_caption_beside_an_upright_bar_has_no_handle_on_the_side_by_the_bar(editor):
+    """That side stays by the bar whatever the width, so there is nothing to drag;
+    the far side grows away from it."""
+
+    _place, _free, transition, _arc = little_net(editor)
+    editor.rotate([transition.uuid])
+    label = transition.label
+    label.select()
+    near = label.mapRectToScene(label.box()).left()
+
+    assert list(label.handles()) == [1]
+
+    transition.label_width = 40.0
+
+    assert label.mapRectToScene(label.box()).left() == pytest.approx(near)
+    assert label.size.width() == 40.0
 
 
 def test_a_moved_caption_survives_a_document_round_trip(editor):

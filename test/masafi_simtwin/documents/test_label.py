@@ -12,7 +12,8 @@ import pytest
 from PyQt6.QtCore import QEvent, QPointF, Qt
 from PyQt6.QtGui import QColor, QMouseEvent, QPainterPath
 
-from masafi_simtwin.documents.label import LABEL_PADDING, Label
+from masafi_simtwin.documents.ink import HANDLE_GRAB, LABEL_LINE_HEIGHT
+from masafi_simtwin.documents.label import LABEL_PADDING, MIN_LABEL_WIDTH, Label
 from masafi_simtwin.theme import DARK_COLORS, LIGHT_COLORS
 
 #: The two schemes every pixel test is run against.
@@ -117,6 +118,46 @@ def test_a_label_dragged_off_the_sheet_is_held_on_it_whole(editor, place):
     assert box.left() >= sheet.left() - 1e-9
     assert box.top() >= sheet.top() - 1e-9
     assert box.left() - sheet.left() < 1.0
+
+
+def test_a_box_given_a_width_is_that_wide_and_wraps_to_it(place):
+    """A box nobody resized fits its text; a resized one is the box drawn, and
+    a narrower one is taller, the height following the lines."""
+
+    place.description = 'Bottles waiting to be filled'
+    fitted = place.label.size
+
+    place.label_width = 50.0
+    assert place.label.size.width() == 50.0
+    assert place.label.size.height() == LABEL_LINE_HEIGHT
+
+    place.label_width = 12.0
+    assert place.label.size.width() == 12.0
+    assert place.label.size.height() > fitted.height()
+
+
+def test_a_label_carries_handles_only_while_it_is_selected(editor, place):
+    """And they are part of what can be taken hold of."""
+
+    assert place.label.handles() == {}
+
+    place.label.select()
+
+    handles = place.label.handles()
+    assert sorted(handles) == [-1, 1]
+    assert handles[1].x() == pytest.approx(place.label.size.width() / 2.0 + LABEL_PADDING)
+    assert place.label.shape().contains(handles[1] + QPointF(HANDLE_GRAB * 0.9, 0.0))
+    assert place.label.handle_at(handles[-1] + QPointF(0.2, 0.3)) == -1
+
+
+def test_a_box_is_never_squeezed_below_its_narrowest(editor, place):
+    """Dragging a side past the other one leaves a narrow box, not a negative one."""
+
+    place.label.select()
+
+    place.label.resize_to(1, place.label.pos().x() - 20.0)
+
+    assert place.label_width == MIN_LABEL_WIDTH
 
 
 def test_a_label_says_what_it_is_given(place):

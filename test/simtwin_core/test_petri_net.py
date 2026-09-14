@@ -378,6 +378,25 @@ def test_a_caption_nobody_has_moved_has_no_offset():
     assert TransitionData('t', 'T1', (60.0, 20.0), '', False, [1, 2]).label_offset == (1.0, 2.0)
 
 
+def test_a_caption_nobody_has_resized_has_no_width():
+    """``None`` is the editor's own width; a number is the width it was made."""
+
+    assert PlaceData('p', 'P1', (20.0, 20.0)).label_width is None
+    assert TransitionData('t', 'T1', (0.0, 0.0), '', False, None, 12).label_width == 12.0
+
+
+@pytest.mark.parametrize(
+    'width',
+    [0, -3.0, 'wide', True, float('nan')],
+    ids=['nought', 'negative', 'text', 'bool', 'nan'],
+)
+def test_a_caption_width_that_is_not_one_is_refused(width):
+    """A width is a number above nought, or nothing."""
+
+    with pytest.raises(InvalidNet, match='not a width'):
+        PlaceData('p', 'P1', (20.0, 20.0), 0, '', None, width)
+
+
 @pytest.mark.parametrize('offset', [(1.0,), 'far', 3.0], ids=['one', 'text', 'number'])
 def test_a_caption_moved_somewhere_that_is_not_a_place_is_refused(offset):
     """An offset is two numbers or nothing."""

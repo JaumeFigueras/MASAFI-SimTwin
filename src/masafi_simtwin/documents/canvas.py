@@ -234,7 +234,12 @@ class CanvasView(QGraphicsView):
         :attr:`~masafi_simtwin.documents.net_item.NetItem.label_offset` before —
         ``None`` for a caption nobody had moved — and where the caption is now,
         relative to the item.  A caption carried along by its item is not
-        moved.
+        moved, and nor is one that shifted because it was resized.
+    labels_resized : PyQt6.QtCore.pyqtSignal
+        The same for the captions a handle was dragged on, as ``(item, before,
+        after)``: the item and its
+        :attr:`~masafi_simtwin.documents.net_item.NetItem.label_width` before
+        and after, ``None`` being the editor's own width.
     arcs_shaped : PyQt6.QtCore.pyqtSignal
         The same for the arcs a shaping handle was dragged on, as ``(arc,
         before controls, before points, after controls, after points)`` in each
@@ -267,6 +272,7 @@ class CanvasView(QGraphicsView):
     items_moved = pyqtSignal(object)
     guides_moved = pyqtSignal(object)
     labels_moved = pyqtSignal(object)
+    labels_resized = pyqtSignal(object)
     arcs_shaped = pyqtSignal(object)
     arc_point_asked = pyqtSignal(object, QPointF)
     arc_point_removal_asked = pyqtSignal(object, int)
@@ -1787,7 +1793,11 @@ class CanvasView(QGraphicsView):
             },
             'guides': {guide: guide.position for guide in self.guides},
             'labels': {
-                item: (item.label_offset, (item.label.pos().x(), item.label.pos().y()))
+                item: (
+                    item.label_offset,
+                    (item.label.pos().x(), item.label.pos().y()),
+                    item.label_width,
+                )
                 for item in self.scene().items()
                 if isinstance(item, NetItem)
             },
@@ -1826,13 +1836,23 @@ class CanvasView(QGraphicsView):
         if guides:
             self.guides_moved.emit(guides)
 
+        resized = [
+            (item, width, item.label_width)
+            for item, (_offset, _at, width) in before['labels'].items()
+            if item.scene() is self.scene() and width != item.label_width
+        ]
+        stretched = {entry[0] for entry in resized}
         labels = [
             (item, was, (item.label.pos().x(), item.label.pos().y()))
-            for item, (was, at) in before['labels'].items()
-            if item.scene() is self.scene() and at != (item.label.pos().x(), item.label.pos().y())
+            for item, (was, at, _width) in before['labels'].items()
+            if item.scene() is self.scene()
+            and item not in stretched
+            and at != (item.label.pos().x(), item.label.pos().y())
         ]
         if labels:
             self.labels_moved.emit(labels)
+        if resized:
+            self.labels_resized.emit(resized)
 
         shaped = [
             (arc, was[0], was[1], arc.control_frames, arc.point_frames)

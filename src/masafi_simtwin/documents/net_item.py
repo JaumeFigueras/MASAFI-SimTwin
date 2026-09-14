@@ -200,7 +200,8 @@ class NetItem(QGraphicsItem):
         self._name = ''
         self._description = ''
         self._label_offset: tuple[float, float] | None = None
-        self._label = Label(self, snap, bounds)
+        self._label_width: float | None = None
+        self._label = Label(self, snap, bounds, resizable=True)
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
@@ -308,11 +309,47 @@ class NetItem(QGraphicsItem):
         across.
         """
 
+        self._label.width = self._label_width
         self._label.text = self.label_text()
+        self._label.place(self.label_centre(self._label.size))
+
+    @property
+    def label_width(self) -> float | None:
+        """float, optional: How wide the box has been made, in millimetres.
+
+        ``None`` for a box nobody has resized, which wraps to
+        :data:`~masafi_simtwin.documents.ink.LABEL_WIDTH` and fits its text.
+        Taken exactly as it is given: snapping is for a drag of a handle.
+        """
+
+        return self._label_width
+
+    @label_width.setter
+    def label_width(self, width) -> None:
+        width = None if width is None else float(width)
+        if width == self._label_width:
+            return
+        self._label_width = width
+        self.show_label()
+
+    def label_centre(self, size: QSizeF) -> QPointF:
+        """Say where the centre of a box of this size goes.
+
+        Parameters
+        ----------
+        size : PyQt6.QtCore.QSizeF
+            How big the box is, in millimetres.
+
+        Returns
+        -------
+        PyQt6.QtCore.QPointF
+            Where it was moved to, when it has been, and otherwise where
+            :meth:`label_anchor` puts it — in the item's own coordinates.
+        """
+
         if self._label_offset is not None:
-            self._label.place(QPointF(*self._label_offset))
-        else:
-            self._label.place(self.label_anchor(self._label.size))
+            return QPointF(*self._label_offset)
+        return self.label_anchor(size)
 
     def label_anchor(self, size: QSizeF) -> QPointF:
         """Say where a box of this size belongs, in the item's own coordinates.

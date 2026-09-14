@@ -782,14 +782,20 @@ there, what its rate means, and where the number came from, which is a paragraph
 
 ---
 
-## A label is moved by hand, and nothing puts it back or out of the way
+## A label is moved and resized by hand, and nothing puts it back or out of the way
 
 **Now.** A node's name and description are written in one box, `Name: Description`, wrapped to
 `LABEL_WIDTH`. Until it is moved the box is in a fixed place: under a place, centred; across a
 transition, which is under a bar lying across the sheet and beside one standing up. It can be
 **selected** and **dragged**, and a dragged box keeps a `label_offset` — its centre relative to the
-node's — which is written where PNML keeps one (`<name><graphics><offset>`). It cannot yet be **given
-another width**; that is the next step of this work.
+node's — which is written where PNML keeps one (`<name><graphics><offset>`). It can be **given another
+width** by the handles on its sides, which keeps a `label_width` in SimTwin's own tool data, PNML having
+no width for a label. Only the width: the height is what the wrap makes of it.
+
+A resized box is **drawn as wide as it was made**, however little text is in it, and is **not held on
+the paper** while it is resized — only while it is moved — so a box widened at the edge of the sheet can
+reach off it. It cannot be made narrower than `MIN_LABEL_WIDTH` (5 mm), and a word wider than the box is
+broken. Like a move, there is no way back to the editor's own width except *Undo*.
 
 A moved box is **where the person put it, and nothing moves it again**: not a longer description (the
 box grows about its centre, so it can grow over its own node), not a transition turned (a box put beside
@@ -816,8 +822,11 @@ stood up; and anybody who wants a box back where it started long after *Undo* ha
 
 **Options.**
 
-- **A *Reset Label Position* entry** on the item's context menu, recording a `MoveLabel` to `None`.
-  Small, and the obvious first addition if a person asks for it.
+- **A *Reset Label Position* entry** on the item's context menu, recording a `MoveLabel` to `None`
+  (and a *Reset Label Width* beside it, a `SetLabelWidth` to `None`, or one entry doing both). Small,
+  and the obvious first addition if a person asks for it.
+- **Holding a resized box on the paper**, by capping the width at what reaches the sheet's edge from
+  the side held still. Left while a box off the edge is something nobody has met.
 - **Keeping the offset from the fixed place** rather than from the node's centre, so a moved box follows
   its text and its bar the way an unmoved one does. It would no longer be PNML's offset, which is from
   the node, so the file would have to convert both ways.

@@ -403,6 +403,28 @@ def test_a_moved_caption_is_written_where_pnml_keeps_one():
     assert [place.name for place in library_reads(written.decode('utf-8')).places] == ['P1', 'P2']
 
 
+def test_a_resized_caption_rides_in_the_tools_own_data():
+    """PNML has no width for a label, so it is ours — written only for a caption
+    that was resized, and read back."""
+
+    resized = replace(
+        DRAWN,
+        places=(DRAWN.places[0], replace(DRAWN.places[1], label_width=12.5)),
+        transitions=(replace(DRAWN.transitions[0], label_width=40.0),),
+    )
+    written = pnml.to_pnml(resized)
+    root = tree_of(written)
+    namespace = f'{{{pnml.TOOL_NAMESPACE}}}'
+
+    def node_of(name):
+        return element_for(root, name).find(qname('toolspecific')).find(f'{namespace}node')
+
+    assert node_of('P2').get('label-width') == '12.5'
+    assert node_of('T1').get('label-width') == '40'
+    assert 'label-width' not in node_of('P1').attrib
+    assert pnml.from_pnml(written) == resized
+
+
 def test_a_caption_offset_another_tool_writes_is_read():
     """PNML's place for it is everybody's."""
 

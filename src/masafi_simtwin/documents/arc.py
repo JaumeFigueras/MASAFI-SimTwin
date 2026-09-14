@@ -130,7 +130,13 @@ from PyQt6.QtCore import QCoreApplication, QLineF, QPointF, QRectF, Qt
 from PyQt6.QtGui import QPainterPath, QPainterPathStroker, QPen
 from PyQt6.QtWidgets import QGraphicsItem
 
-from masafi_simtwin.documents.ink import glyph_path, ink_colour, paper_colour
+from masafi_simtwin.documents.ink import (
+    HANDLE_GRAB,
+    HANDLE_SIZE,
+    glyph_path,
+    ink_colour,
+    paper_colour,
+)
 from masafi_simtwin.documents.net_item import (
     ARC_Z,
     ITEM_PEN,
@@ -187,19 +193,6 @@ DEFAULT_CONTROLS = (
     (1.0 / 3.0, CURVE_BOW * 2.0 / 3.0),
     (2.0 / 3.0, CURVE_BOW * 2.0 / 3.0),
 )
-
-#: How big a handle is drawn, in millimetres of side.  A square, so that a
-#: handle is never mistaken for a connecting point, which is a ring; and as
-#: small as a connecting point is, because both are marks put on the drawing to
-#: be aimed at rather than parts of the drawing itself.
-HANDLE_SIZE = 0.7
-
-#: How far from a handle, in millimetres, the pointer may be and still take hold
-#: of it.  Well beyond the square it is drawn as: a handle is aimed at, and a
-#: handle that has to be hit exactly is a handle nobody can use.  Drawing it
-#: smaller is a change to the picture and not to the aiming, which is why the
-#: two are separate numbers.
-HANDLE_GRAB = 1.3
 
 #: Where the points of an untouched S sit, in the chord's own frame: one bowed
 #: :data:`CURVE_BOW` to the left a third of the way along and one the same to

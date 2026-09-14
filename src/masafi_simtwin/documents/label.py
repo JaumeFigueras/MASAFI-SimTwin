@@ -34,17 +34,33 @@ paper, as its owner is.  Those two rules are for a *person's* drag only: where
 the owner puts the box — :meth:`Label.place` — is taken exactly as it is given,
 since a box laid out under a place, or an offset read back from a file, is
 already where it is meant to be.
+
+**A resizable label is made wider or narrower by a handle on each side**, shown
+while it is selected and drawn the way an arc's handles are.  Only the width
+changes; the text wraps to it and the box is as tall as the lines that makes.
+The side dragged follows the pointer and **where the box then goes is still its
+owner's to say**: the owner is asked where a box of any width would be centred
+(``label_centre``), so a box centred under a place grows both ways, and a box
+beside an upright transition grows away from the bar with its near side held
+still — which is why that side carries no handle at all.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 
-from PyQt6.QtCore import QPointF, QRectF, QSizeF, Qt
+from PyQt6.QtCore import QLineF, QPointF, QRectF, QSizeF, Qt
 from PyQt6.QtGui import QPainterPath, QPen
 from PyQt6.QtWidgets import QGraphicsItem
 
-from masafi_simtwin.documents.ink import LABEL_WIDTH, ink_colour, text_block
+from masafi_simtwin.documents.ink import (
+    HANDLE_GRAB,
+    HANDLE_SIZE,
+    LABEL_WIDTH,
+    ink_colour,
+    paper_colour,
+    text_block,
+)
 
 #: How far a label stands off the item it belongs to, in millimetres.
 LABEL_GAP = 1.0
@@ -56,6 +72,15 @@ LABEL_SEPARATOR = ': '
 #: is selected, in millimetres.  A frame tight on the ink reads as a box that is
 #: too small for what is in it.
 LABEL_PADDING = 0.5
+
+#: How narrow a caption may be made, in millimetres.  Narrower than any word
+#: worth writing, so a person can squeeze a box a long way; not so narrow that
+#: every letter goes onto a line of its own.
+MIN_LABEL_WIDTH = 5.0
+
+#: Which way each side of a box lies from its centre: the left side and the
+#: right side, which are the two a resizable label carries handles on.
+LABEL_EDGES = (-1, 1)
 
 
 class Label(QGraphicsItem):
@@ -72,12 +97,19 @@ class Label(QGraphicsItem):
     bounds : collections.abc.Callable, optional
         Where the label may be dragged, as something returning a rectangle in
         scene coordinates — the sheet, asked for at every move.
+    resizable : bool, optional
+        Whether it carries handles to be made wider or narrower by.  Its owner
+        then keeps the width, as ``label_width``, and says where a box of any
+        size is centred, as ``label_centre(size)``.
 
     Attributes
     ----------
     text : str
         What is written in it.  Nothing at all for a thing with nothing to say,
         which draws no box and cannot be selected.
+    width : float, optional
+        How wide it has been made, or ``None`` for :data:`LABEL_WIDTH` with the
+        box fitted to the text.
     """
 
     def __init__(
@@ -85,15 +117,19 @@ class Label(QGraphicsItem):
         parent: QGraphicsItem,
         snap: Callable[[float], float] | None = None,
         bounds: Callable[[], QRectF] | None = None,
+        resizable: bool = False,
     ) -> None:
         super().__init__(parent)
         self._text = ''
+        self._width: float | None = None
         self._glyphs = QPainterPath()
         self._size = QSizeF(0.0, 0.0)
         self._asked = False
         self._snap = snap
         self._bounds = bounds
         self._placing = False
+        self._resizable = resizable
+        self._resizing: int | None = None
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
@@ -121,11 +157,42 @@ class Label(QGraphicsItem):
         text = str(text)
         if text == self._text:
             return
-        self.prepareGeometryChange()
         self._text = text
-        self._glyphs, self._size = text_block(text, LABEL_WIDTH)
+        self._lay_out()
         if not self._text:
             self.setSelected(False)
+
+    @property
+    def width(self) -> float | None:
+        """float, optional: How wide the box has been made.
+
+        ``None`` wraps the text to :data:`LABEL_WIDTH` and fits the box to it;
+        a width wraps it there and draws the box that wide.
+        """
+
+        return self._width
+
+    @width.setter
+    def width(self, width: float | None) -> None:
+        width = None if width is None else float(width)
+        if width == self._width:
+            return
+        self._width = width
+        self._lay_out()
+
+    def _lay_out(self) -> None:
+        """Lay the text out again, at the width the box has.
+
+        A change of geometry and not merely of paint: the box is as big as what
+        is in it, so the view is told before it changes size or it repaints the
+        new box and leaves the old one on the sheet.
+        """
+
+        self.prepareGeometryChange()
+        if self._width is None:
+            self._glyphs, self._size = text_block(self._text, LABEL_WIDTH)
+        else:
+            self._glyphs, self._size = text_block(self._text, self._width, fit=False)
         self.update()
 
     @property
@@ -186,6 +253,8 @@ class Label(QGraphicsItem):
         if box.isEmpty():
             return box
         reach = LABEL_PADDING * 2.0
+        if self.handles():
+            reach = LABEL_PADDING + max(LABEL_PADDING, HANDLE_GRAB)
         return box.adjusted(-reach, -reach, reach, reach)
 
     def shape(self) -> QPainterPath:
@@ -194,15 +263,21 @@ class Label(QGraphicsItem):
         Returns
         -------
         PyQt6.QtGui.QPainterPath
-            The padded box, and nothing at all for a label with nothing in it —
-            a thing with no name is a thing with nothing to click on.
+            The padded box and, while it carries handles, a reach of
+            :data:`~masafi_simtwin.documents.ink.HANDLE_GRAB` round each — a
+            press is sent to the item whose shape it falls in, so a handle
+            outside the shape could never be taken hold of.  Nothing at all for
+            a label with nothing in it: a thing with no name is a thing with
+            nothing to click on.
         """
 
         path = QPainterPath()
         box = self.box()
         if not box.isEmpty():
             path.addRect(box.adjusted(-LABEL_PADDING, -LABEL_PADDING, LABEL_PADDING, LABEL_PADDING))
-        return path
+            for where in self.handles().values():
+                path.addEllipse(where, HANDLE_GRAB, HANDLE_GRAB)
+        return path.simplified()
 
     def paint(self, painter, option, widget=None) -> None:
         """Write the text, and frame it while it is selected.
@@ -242,6 +317,121 @@ class Label(QGraphicsItem):
             self.box().adjusted(-LABEL_PADDING, -LABEL_PADDING, LABEL_PADDING, LABEL_PADDING)
         )
 
+        painter.setPen(QPen(ink, 0.0))
+        painter.setBrush(paper_colour(option))
+        half = HANDLE_SIZE / 2.0
+        for where in self.handles().values():
+            painter.drawRect(QRectF(where.x() - half, where.y() - half, HANDLE_SIZE, HANDLE_SIZE))
+
+    # ------------------------------------------------------------------
+    # Making it wider or narrower
+    # ------------------------------------------------------------------
+
+    def _edge_rule(self, edge: int) -> tuple[float, float] | None:
+        """Say where one side of the box is for a box of any width.
+
+        The owner decides where a box is centred, and for both owners there are
+        that is a straight line in the width — fixed for a box centred under a
+        place or moved by hand, half the width out for a box put beside an
+        upright transition — so it is asked at two widths and the line drawn
+        through them.
+
+        Parameters
+        ----------
+        edge : int
+            ``-1`` for the left side, ``1`` for the right, as :data:`LABEL_EDGES`.
+
+        Returns
+        -------
+        tuple of float, optional
+            ``(start, rate)`` such that the side is at ``start + rate * width``
+            in the owner's coordinates, or ``None`` for a side that does not move
+            whatever the width — the one that is held still.
+        """
+
+        height = self._size.height()
+        centre_for = getattr(self.parentItem(), 'label_centre', None)
+        if centre_for is None:
+            start, turn = self.pos().x(), 0.0
+        else:
+            narrow = centre_for(QSizeF(MIN_LABEL_WIDTH, height)).x()
+            wide = centre_for(QSizeF(MIN_LABEL_WIDTH + 10.0, height)).x()
+            turn = (wide - narrow) / 10.0
+            start = narrow - turn * MIN_LABEL_WIDTH
+        rate = turn + edge / 2.0
+        if abs(rate) < 1e-9:
+            return None
+        return start, rate
+
+    def handles(self) -> dict[int, QPointF]:
+        """Give the handles the box is resized by, while it carries any.
+
+        Returns
+        -------
+        dict
+            Where the handle of each side is, in the label's own coordinates, by
+            the side: the middle of that side of the frame.  Empty for a label
+            that is not resizable, not selected or has nothing in it, and
+            without the side that is held still.
+        """
+
+        if not (self._resizable and self.isSelected()) or self.is_empty():
+            return {}
+        half = self._size.width() / 2.0 + LABEL_PADDING
+        return {
+            edge: QPointF(edge * half, 0.0)
+            for edge in LABEL_EDGES
+            if self._edge_rule(edge) is not None
+        }
+
+    def handle_at(self, point: QPointF) -> int | None:
+        """Find the handle a position falls on.
+
+        Parameters
+        ----------
+        point : PyQt6.QtCore.QPointF
+            Where to look, in the label's own coordinates.
+
+        Returns
+        -------
+        int, optional
+            The side whose handle is nearest within
+            :data:`~masafi_simtwin.documents.ink.HANDLE_GRAB`, or ``None``.
+        """
+
+        near = [
+            (QLineF(point, where).length(), edge)
+            for edge, where in self.handles().items()
+            if QLineF(point, where).length() <= HANDLE_GRAB
+        ]
+        return min(near)[1] if near else None
+
+    def resize_to(self, edge: int, x: float) -> None:
+        """Make the box as wide as puts one side under a place.
+
+        Parameters
+        ----------
+        edge : int
+            Which side is being dragged.
+        x : float
+            Where the pointer is across the sheet, in the owner's coordinates.
+            The handle is on the frame, a padding outside the box.
+        """
+
+        rule = self._edge_rule(edge)
+        if rule is None:
+            return
+        start, rate = rule
+        width = (x - edge * LABEL_PADDING - start) / rate
+        if self._snap is not None:
+            width = self._snap(width)
+        width = max(width, MIN_LABEL_WIDTH)
+        owner = self.parentItem()
+        if self._resizable and owner is not None and hasattr(owner, 'label_width'):
+            owner.label_width = width
+        else:
+            self.width = width
+
     # ------------------------------------------------------------------
     # Taking hold of one
     # ------------------------------------------------------------------
@@ -262,11 +452,13 @@ class Label(QGraphicsItem):
             self._asked = False
 
     def mousePressEvent(self, event) -> None:  # noqa: N802  (Qt naming)
-        """Let the press through, and let it select the label.
+        """Take hold of a handle, or let the press through and let it select the
+        label.
 
         Qt's own handler is what selects an item that is pressed, so the flag
         that :meth:`itemChange` looks for is raised around it and lowered again
-        afterwards.
+        afterwards.  A press on a handle never reaches it: the label is already
+        selected, and what is wanted is a resize rather than a move.
 
         Parameters
         ----------
@@ -274,11 +466,46 @@ class Label(QGraphicsItem):
             The press.
         """
 
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._resizing = self.handle_at(event.pos())
+            if self._resizing is not None:
+                event.accept()
+                return
         self._asked = True
         try:
             super().mousePressEvent(event)
         finally:
             self._asked = False
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802  (Qt naming)
+        """Drag the handle that was taken hold of, or move the label.
+
+        Parameters
+        ----------
+        event : PyQt6.QtWidgets.QGraphicsSceneMouseEvent
+            The mouse event.
+        """
+
+        if self._resizing is not None:
+            self.resize_to(self._resizing, self.mapToParent(event.pos()).x())
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802  (Qt naming)
+        """Let go of the handle.
+
+        Parameters
+        ----------
+        event : PyQt6.QtWidgets.QGraphicsSceneMouseEvent
+            The mouse event.
+        """
+
+        if self._resizing is not None:
+            self._resizing = None
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
 
     def place(self, position: QPointF) -> None:
         """Put the label where its owner says, exactly.
@@ -364,6 +591,10 @@ class Label(QGraphicsItem):
             and not self._asked
         ):
             return False
+        if change == QGraphicsItem.GraphicsItemChange.ItemSelectedChange:
+            # The handles are in the rectangle only while it is selected, so the
+            # area last painted is repainted — the reason Arc.itemChange gives.
+            self.prepareGeometryChange()
         if (
             change == QGraphicsItem.GraphicsItemChange.ItemPositionChange
             and not self._placing

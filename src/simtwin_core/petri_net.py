@@ -33,7 +33,9 @@ Nor does a node hold tokens that are not a whole number of nought or more, or a
 description of more than one line.  A place's **tokens** are its initial
 marking, which a backend runs from; a node's **description** is a person's words
 about it, which no backend ever sees; and a node's **label offset** is where the
-box holding both has been moved to, or ``None`` for where the editor puts it.
+box holding both has been moved to, or ``None`` for where the editor puts it; and
+its **label width** how wide that box has been made, or ``None`` for the editor's
+own width.
 
 **A document holds everything in one order**, whatever order it is given in:
 nodes by name with numbers counted as numbers (:func:`reading_order`), arcs by
@@ -63,6 +65,7 @@ nothing of the chord frame, which is every other PNML tool.
 from __future__ import annotations
 
 import keyword
+import math
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
@@ -321,6 +324,40 @@ def _offset(value, what: str) -> Point | None:
     return None if value is None else _point(value, f'the caption of {what}')
 
 
+def _width(value, what: str) -> float | None:
+    """Check how wide a node's caption has been made.
+
+    Parameters
+    ----------
+    value : float, optional
+        The width in millimetres, or ``None`` for the editor's own.
+    what : str
+        Whose caption it is, for the message when it is not a width.
+
+    Returns
+    -------
+    float, optional
+        The width as a float, or ``None``.
+
+    Raises
+    ------
+    InvalidNet
+        When it is neither ``None`` nor a finite number above nought.  A
+        ``bool`` is not a width, though Python counts it as a number.
+    """
+
+    if value is None:
+        return None
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or value <= 0
+    ):
+        raise InvalidNet(f'the caption of {what} is not a width: {value!r}')
+    return float(value)
+
+
 def _points(values, what: str) -> tuple[Point, ...]:
     """Make a tuple of points of anything that holds some.
 
@@ -363,12 +400,17 @@ class PlaceData:
         centre of the box relative to the centre of the place, in millimetres.
         ``None`` for a box nobody has moved, which goes where the editor puts
         it — under the place, however tall the text makes it.
+    label_width : float, optional
+        How wide that box has been made, in millimetres: the text wraps to it
+        and the box is drawn that wide.  ``None`` for a box nobody has resized,
+        which wraps to the editor's own width and fits its text.
 
     Raises
     ------
     InvalidNet
         When the tokens are not a whole number of nought or more, the
-        description is not one line of text, or the offset is not a pair.
+        description is not one line of text, the offset is not a pair, or the
+        width is not a number above nought.
     """
 
     uuid: str
@@ -377,6 +419,7 @@ class PlaceData:
     tokens: int = 0
     description: str = ''
     label_offset: Point | None = None
+    label_width: float | None = None
 
     def __post_init__(self) -> None:
         what = f'place {self.name!r}'
@@ -384,6 +427,7 @@ class PlaceData:
         object.__setattr__(self, 'tokens', _tokens(self.tokens, what))
         object.__setattr__(self, 'description', _description(self.description, what))
         object.__setattr__(self, 'label_offset', _offset(self.label_offset, what))
+        object.__setattr__(self, 'label_width', _width(self.label_width, what))
 
 
 @dataclass(frozen=True)
@@ -410,12 +454,16 @@ class TransitionData:
         relative to the centre of the transition, in millimetres; ``None`` for
         where the editor puts it.  A box that has been moved stays where it was
         put when the bar is turned.
+    label_width : float, optional
+        How wide that box has been made, in millimetres, or ``None`` for the
+        editor's own width.
 
     Raises
     ------
     InvalidNet
         When the description is not one line of text, the bar is neither
-        upright nor lying across, or the offset is not a pair.
+        upright nor lying across, the offset is not a pair, or the width is not
+        a number above nought.
     """
 
     uuid: str
@@ -424,6 +472,7 @@ class TransitionData:
     description: str = ''
     vertical: bool = False
     label_offset: Point | None = None
+    label_width: float | None = None
 
     def __post_init__(self) -> None:
         what = f'transition {self.name!r}'
@@ -431,6 +480,7 @@ class TransitionData:
         object.__setattr__(self, 'description', _description(self.description, what))
         object.__setattr__(self, 'vertical', _upright(self.vertical, what))
         object.__setattr__(self, 'label_offset', _offset(self.label_offset, what))
+        object.__setattr__(self, 'label_width', _width(self.label_width, what))
 
 
 @dataclass(frozen=True)
