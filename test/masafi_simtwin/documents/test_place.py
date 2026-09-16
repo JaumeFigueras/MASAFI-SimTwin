@@ -26,7 +26,9 @@ from masafi_simtwin.documents.place import (
     TOKEN_NUMBER_WIDTH,
     TOKEN_RADIUS,
 )
+from masafi_simtwin.preferences import DEFAULT_LINE_WIDTH
 from masafi_simtwin.theme import DARK_COLORS, LIGHT_COLORS
+from simtwin_core.petri_net import LineStyle
 
 #: The two schemes every pixel test is run against.
 SCHEMES = [LIGHT_COLORS, DARK_COLORS]
@@ -286,6 +288,40 @@ def test_a_places_label_is_under_it_and_centred(place):
 
     assert box.center().x() == pytest.approx(0.0)
     assert box.top() == pytest.approx(place.boundingRect().bottom() + LABEL_GAP)
+
+
+@pytest.mark.parametrize('colors', SCHEMES, ids=SCHEME_NAMES)
+def test_the_tokens_are_drawn_in_the_places_line_colour(place, ink, colors):
+    """Decided with Jaume: the dots and the number take the colour of the rim,
+    not of the caption — they are part of the drawing rather than a word about
+    it."""
+
+    place.tokens = 1
+    place.line_style = LineStyle('#aa0000', DEFAULT_LINE_WIDTH)
+    place.restyle()
+    image = ink.painted(place, colors)
+
+    assert ink.nearest(
+        ink.at(image), QColor('#aa0000'), QColor(colors.text), QColor(colors.editor)
+    ) == QColor('#aa0000')
+    assert ink.nearest(
+        ink.at(image, across=PLACE_RADIUS), QColor('#aa0000'), QColor(colors.editor)
+    ) == QColor('#aa0000')
+
+
+@pytest.mark.parametrize('colors', SCHEMES, ids=SCHEME_NAMES)
+def test_a_number_of_tokens_takes_the_line_colour_too(place, ink, colors):
+    """The number is the same marking as the dots, written instead of drawn."""
+
+    place.tokens = 88
+    place.line_style = LineStyle('#aa0000', DEFAULT_LINE_WIDTH)
+    place.restyle()
+
+    written = ink.window(
+        ink.painted(place, colors), 0.0, 0.0, TOKEN_NUMBER_HEIGHT / 2.0
+    )
+
+    assert ink.holds(written, QColor('#aa0000'))
 
 
 def test_a_place_letters_as_a_place(place):

@@ -54,8 +54,6 @@ from PyQt6.QtGui import QPainterPath
 from masafi_simtwin import preferences
 from masafi_simtwin.documents.ink import glyph_path, ink_colour, paper_colour
 from masafi_simtwin.documents.net_item import (
-    ITEM_PEN,
-    ITEM_PEN_SELECTED,
     PORT_RADIUS,
     NetItem,
 )
@@ -232,7 +230,7 @@ class Place(NetItem):
             stand on the circle and so reach half their own width beyond it.
         """
 
-        reach = PLACE_RADIUS + max(PORT_RADIUS, ITEM_PEN_SELECTED / 2.0)
+        reach = PLACE_RADIUS + max(PORT_RADIUS, self.drawn_width() / 2.0)
         return QRectF(-reach, -reach, reach * 2.0, reach * 2.0)
 
     def shape(self) -> QPainterPath:
@@ -248,7 +246,7 @@ class Place(NetItem):
         """
 
         path = QPainterPath()
-        reach = PLACE_RADIUS + ITEM_PEN / 2.0
+        reach = PLACE_RADIUS + self.outline_width() / 2.0
         path.addEllipse(QPointF(0.0, 0.0), reach, reach)
         return path
 
@@ -270,5 +268,7 @@ class Place(NetItem):
         marks = self.token_marks()
         if not marks.isEmpty():
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(ink_colour(self.isSelected(), option))
+            painter.setBrush(
+                ink_colour(self.isSelected(), option, self.line_appearance().colour)
+            )
             painter.drawPath(marks)

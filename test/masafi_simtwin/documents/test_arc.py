@@ -342,6 +342,64 @@ def test_a_weight_that_is_not_one_is_a_caption_beside_the_line(editor, net):
     )
 
 
+def test_an_arc_is_drawn_at_the_default_width_and_thickens_when_selected(editor, net):
+    """The same rule an item keeps: the width, and a fixed 0.3 mm more."""
+
+    from masafi_simtwin.documents.net_item import SELECTED_EXTRA
+    from masafi_simtwin.preferences import DEFAULT_LINE_WIDTH
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+
+    assert arc.line_appearance().width == DEFAULT_LINE_WIDTH
+    assert arc.outline_width() == DEFAULT_LINE_WIDTH
+
+    arc.setSelected(True)
+    assert arc.outline_width() == pytest.approx(DEFAULT_LINE_WIDTH + SELECTED_EXTRA)
+
+
+def test_an_arc_with_a_line_style_of_its_own_is_drawn_with_it(editor, net):
+    """And the room it takes follows, a thick line reaching further than a thin
+    one."""
+
+    from simtwin_core.petri_net import AUTOMATIC, LineStyle
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    was = arc.boundingRect()
+
+    arc.line_style = LineStyle(AUTOMATIC, 3.0)
+    arc.restyle()
+
+    assert arc.outline_width() == 3.0
+    assert arc.boundingRect().width() >= was.width()
+    assert arc.boundingRect().height() >= was.height()
+
+
+@pytest.mark.parametrize('colors', [LIGHT_COLORS, DARK_COLORS], ids=['light', 'dark'])
+def test_the_line_and_the_head_take_the_arcs_own_colour(editor, net, ink, colors):
+    """One colour for the whole of an arc: the line it is drawn with and the
+    head it ends in, which is what the settings page says it covers."""
+
+    from simtwin_core.petri_net import LineStyle
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    arc.line_style = LineStyle('#aa0000', 1.0)
+    arc.restyle()
+
+    middle = arc.curve_middle()
+    aimed = ink.close_up(middle.x(), middle.y(), 8.0)
+    along = aimed.window(aimed.painted(arc, colors), 0.0, 0.0, 0.6)
+
+    tip = arc.head().boundingRect().center()
+    at_head = ink.close_up(tip.x(), tip.y(), 8.0)
+    around = at_head.window(at_head.painted(arc, colors), 0.0, 0.0, 0.4)
+
+    assert ink.holds(along, QColor('#aa0000'))
+    assert ink.holds(around, QColor('#aa0000'))
+
+
 def test_a_weight_is_never_bold_italic_or_aligned(editor, net):
     """A weight takes the font, the size and the colour of everything else, and
     nothing of the typeface — the rule ``ArcData`` keeps as well."""

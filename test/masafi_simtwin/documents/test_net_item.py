@@ -20,11 +20,22 @@ import pytest
 from PyQt6.QtCore import QMimeData, QPointF, QSizeF, Qt
 from PyQt6.QtGui import QDragMoveEvent, QDropEvent
 
+from PyQt6.QtGui import QColor
+from PyQt6.QtWidgets import QStyleOptionGraphicsItem
+
 from masafi_simtwin.documents.label import LABEL_GAP
-from masafi_simtwin.documents.net_item import PORT_GRAB, PORT_RADIUS, NetItem
+from masafi_simtwin.documents.net_item import (
+    PORT_GRAB,
+    PORT_RADIUS,
+    SELECTED_EXTRA,
+    NetItem,
+)
 from masafi_simtwin.documents.place import Place
 from masafi_simtwin.documents.transition import Transition
 from masafi_simtwin.library_tree import element_mime_data
+from masafi_simtwin.preferences import DEFAULT_LINE_WIDTH
+from masafi_simtwin.theme import DARK_COLORS, LIGHT_COLORS, build_palette
+from simtwin_core.petri_net import AUTOMATIC, LineStyle
 
 #: The elements of the P/T library this editor can draw, and what each becomes.
 ELEMENTS = [('place', Place), ('transition', Transition)]
@@ -535,6 +546,110 @@ def test_changing_the_name_or_the_description_writes_the_label_again(item):
     item.description = ''
 
     assert item.label_rect() == was
+
+
+# ----------------------------------------------------------------------
+# How thick a line is, and what colour
+# ----------------------------------------------------------------------
+
+
+def option_for(colors):
+    """Give what a painter is told about a scheme.
+
+    Parameters
+    ----------
+    colors : masafi_simtwin.theme.ThemeColors
+        The scheme.
+
+    Returns
+    -------
+    PyQt6.QtWidgets.QStyleOptionGraphicsItem
+        The option, carrying that scheme's palette.
+    """
+
+    option = QStyleOptionGraphicsItem()
+    option.palette = build_palette(colors)
+    return option
+
+
+def test_an_item_is_drawn_at_the_default_width_until_it_is_given_one(item):
+    """Which is what every item on every sheet was drawn with before there were
+    styles at all."""
+
+    assert item.line_appearance().width == DEFAULT_LINE_WIDTH == 0.3
+    assert item.outline_width() == DEFAULT_LINE_WIDTH
+
+
+def test_a_selected_item_is_drawn_a_fixed_amount_thicker(item):
+    """Decided with Jaume: the width and a fixed 0.3 mm more, whatever the width
+    is — so a thin line and a thick one both say the same thing by thickening."""
+
+    was = item.outline_width()
+    item.setSelected(True)
+
+    assert SELECTED_EXTRA == 0.3
+    assert item.outline_width() == pytest.approx(was + SELECTED_EXTRA)
+
+
+def test_a_width_of_the_items_own_is_what_it_is_drawn_with(item):
+    """And the selected rule follows it rather than a constant."""
+
+    item.line_style = LineStyle(AUTOMATIC, 1.5)
+
+    assert item.outline_width() == 1.5
+
+    item.setSelected(True)
+    assert item.outline_width() == pytest.approx(1.5 + SELECTED_EXTRA)
+
+
+@pytest.mark.parametrize('colors', [LIGHT_COLORS, DARK_COLORS], ids=['light', 'dark'])
+def test_an_item_is_outlined_in_the_colour_it_was_given(item, colors):
+    """*Automatic* is the sheet's own ink; a colour chosen is that colour in
+    either scheme."""
+
+    option = option_for(colors)
+
+    assert item.outline_colour(option) == QColor(colors.text)
+
+    item.line_style = LineStyle('#aa0000', DEFAULT_LINE_WIDTH)
+    assert item.outline_colour(option) == QColor('#aa0000')
+
+
+@pytest.mark.parametrize('colors', [LIGHT_COLORS, DARK_COLORS], ids=['light', 'dark'])
+def test_a_selected_item_keeps_the_accent_whatever_colour_it_was_given(item, colors):
+    """As agreed: a thing drawn in its own red while it is in hand would say
+    nothing about being in hand."""
+
+    item.line_style = LineStyle('#aa0000', DEFAULT_LINE_WIDTH)
+    item.setSelected(True)
+
+    assert item.outline_colour(option_for(colors)) == QColor(colors.accent)
+
+
+def test_the_room_an_item_takes_follows_the_width_it_is_drawn_with(item):
+    """A line three millimetres thick reaches a millimetre and a half beyond the
+    shape, and the rectangle the view repaints has to know it."""
+
+    was = item.boundingRect()
+
+    item.line_style = LineStyle(AUTOMATIC, 3.0)
+    item.restyle()
+
+    assert item.boundingRect().width() > was.width()
+    assert item.boundingRect().height() > was.height()
+    assert item.boundingRect().contains(item.shape().boundingRect())
+
+
+def test_the_room_does_not_change_when_an_item_is_selected(item):
+    """It is measured from the *thickest* the item is ever drawn, so selecting
+    one is a repaint and never a change of geometry — which Qt would have to be
+    told about separately."""
+
+    was = item.boundingRect()
+
+    item.setSelected(True)
+
+    assert item.boundingRect() == was
 
 
 def test_the_label_is_not_held_on_the_sheet_the_way_the_item_is(editor, item):

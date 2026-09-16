@@ -103,13 +103,13 @@ PORT_RADIUS = 0.35
 #: the one taken, so reaches that overlap still pick the one aimed at.
 PORT_GRAB = 0.7
 
-#: How thick an outline is, in millimetres.  A real stroke rather than Qt's
-#: cosmetic hairline: these are things drawn on paper, so an outline grows with
-#: the zoom the way the shape it draws does.
-ITEM_PEN = 0.3
-
-#: How thick it is while the item is selected.
-ITEM_PEN_SELECTED = 0.6
+#: How much thicker, in millimetres, a thing is drawn while it is selected.
+#: Decided with Jaume: a fixed amount **more** rather than a width of its own,
+#: so that a hairline and a heavy line both say the same thing by thickening.
+#: How thick a line is to begin with is the item's own style — a real stroke
+#: rather than Qt's cosmetic hairline, since these are things drawn on paper, so
+#: an outline grows with the zoom the way the shape it draws does.
+SELECTED_EXTRA = 0.3
 
 #: The net sits on the sheet, under the guides the sheet is lined up against.
 ITEM_Z = 10.0
@@ -846,10 +846,45 @@ class NetItem(QGraphicsItem):
             and the arcs alike.
         """
 
-        return ink_colour(self.isSelected(), option)
+        return ink_colour(
+            self.isSelected(), option, self.line_appearance().colour
+        )
+
+    def line_appearance(self):
+        """Give the style the item's lines are actually drawn with.
+
+        The item's own style where it has one, and the application's defaults
+        otherwise — the line half of :meth:`appearance`, through the one
+        resolver, :func:`masafi_simtwin.preferences.line_appearance`.
+
+        Returns
+        -------
+        simtwin_core.petri_net.LineStyle
+            A complete style.
+        """
+
+        return preferences.line_appearance(self.line_style)
 
     def outline_width(self) -> float:
-        """Give how thick the outline is, which says whether it is selected.
+        """Give how thick the outline is drawn, selection included.
+
+        Returns
+        -------
+        float
+            Millimetres: the item's own width, and :data:`SELECTED_EXTRA` more
+            while it is selected.
+        """
+
+        width = self.line_appearance().width
+        return width + SELECTED_EXTRA if self.isSelected() else width
+
+    def drawn_width(self) -> float:
+        """Give the thickest the item is ever drawn, whatever it is doing now.
+
+        This is what a rectangle is measured from rather than
+        :meth:`outline_width`, so that selecting an item is a repaint and never
+        a change of geometry — which Qt would have to be told about separately,
+        and which would make every selection cost a re-measure.
 
         Returns
         -------
@@ -857,7 +892,22 @@ class NetItem(QGraphicsItem):
             Millimetres.
         """
 
-        return ITEM_PEN_SELECTED if self.isSelected() else ITEM_PEN
+        return self.line_appearance().width + SELECTED_EXTRA
+
+    def restyle(self) -> None:
+        """Take in that the item is drawn in a different style than it was.
+
+        A width is **geometry**: a line three millimetres thick reaches a
+        millimetre and a half beyond the shape, so the view is told before the
+        rectangle changes rather than after, or it repaints the new rectangle
+        and leaves what was drawn outside the old one on the sheet.  The caption
+        is lettered again here too, since a size is geometry for the same
+        reason — see :meth:`~masafi_simtwin.documents.canvas.Canvas.restyle`.
+        """
+
+        self.prepareGeometryChange()
+        self.show_label()
+        self.update()
 
     def pen(self, option) -> QPen:
         """Build the pen an item is outlined with.
@@ -865,7 +915,7 @@ class NetItem(QGraphicsItem):
         The join is **mitered**, which is what takes a corner to a point.  Qt's
         default is a bevel, and a bevel chamfers every corner by the width of
         the pen — on a bar two millimetres high drawn with a stroke of
-        :data:`ITEM_PEN` that is a visible cut across each corner, and a
+        an ordinary width that is a visible cut across each corner, and a
         transition is a rectangle rather than a rectangle with its corners taken
         off.  A circle has no joins, so this costs a place nothing.
 

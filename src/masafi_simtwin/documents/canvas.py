@@ -2251,9 +2251,9 @@ class Canvas(QWidget):
         if scene is None:  # pragma: no cover - a canvas always has a scene
             return
         for item in scene.items():
-            letters = getattr(item, 'show_label', None)
-            if callable(letters):
-                letters()
+            drawn = getattr(item, 'restyle', None)
+            if callable(drawn):
+                drawn()
         scene.update()
 
     # ------------------------------------------------------------------

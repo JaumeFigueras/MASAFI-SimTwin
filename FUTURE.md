@@ -966,6 +966,34 @@ is, opening one by hand is how a person gets something back.
 
 ---
 
+## The mark an arc ends in does not grow with the line it is drawn with
+
+**Now.** An arc's line takes the width it is given — anything from a tenth of a millimetre to three —
+but the arrowhead and the inhibitor ring stay the size they always were: `ARROW_LENGTH` 2.4 mm by
+`ARROW_WIDTH` 1.8 mm, and a ring of half that across. So a hairline arc ends in a head that looks large
+for it, and an arc drawn three millimetres thick ends in a head barely wider than its own line, which
+at that width reads as the line simply stopping.
+
+**Why it was done this way.** The head is *what an arc is* rather than how it was drawn: one size on
+every arc of a net is what makes a normal arc and an inhibitor arc tell themselves apart at a glance,
+and it is the rule that was decided when the heads were built — a curved arc's head must be neither
+stubbier nor longer than a straight one's. Widths arrived afterwards, and making the head follow the
+width would have changed every net drawn so far. Line patterns and arrow sizes were named from the
+start as a later piece of work, so this is where that piece begins.
+
+**When it will not be enough.** A net drawn thick for a projector or a poster, where the heads
+disappear into the lines; a net drawn hairline-fine, where they overwhelm them.
+
+**Options.**
+
+- **Measure the head from the width**, as a multiple of it, held between a smallest and a largest size
+  so that a hairline arc still ends in something visible.
+- **Give the head its own size** in the line style, beside the width, which is what a drawing program
+  usually offers and what the *line patterns and arrow sizes* work will need anyway.
+- **Leave it**, and let a person who wants a heavier head say so when arrow sizes exist.
+
+---
+
 ## A place's tokens take the family its caption is written in and nothing else
 
 **Now.** The number of tokens inside a place is lettered in the **family** of that place's caption and

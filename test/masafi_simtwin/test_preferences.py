@@ -474,7 +474,8 @@ def test_the_default_size_keeps_a_caption_the_size_it_is_today():
 
 
 def test_the_default_width_is_what_an_item_is_drawn_with_today():
-    """``ITEM_PEN``, so a net drawn before the defaults existed is unchanged."""
+    """What every item and arc was drawn with before there were styles, so a net
+    drawn then is drawn the same way now."""
 
     declaration = BY_KEY['petri_net/line_width']
 

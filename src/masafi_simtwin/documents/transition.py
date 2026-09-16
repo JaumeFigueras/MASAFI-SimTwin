@@ -69,8 +69,6 @@ from PyQt6.QtGui import QPainterPath
 from masafi_simtwin import preferences
 from masafi_simtwin.documents.label import LABEL_GAP
 from masafi_simtwin.documents.net_item import (
-    ITEM_PEN,
-    ITEM_PEN_SELECTED,
     PORT_RADIUS,
     NetItem,
 )
@@ -285,7 +283,7 @@ class Transition(NetItem):
             on the edges and so reach half their own width beyond them.
         """
 
-        reach = max(PORT_RADIUS, ITEM_PEN_SELECTED / 2.0)
+        reach = max(PORT_RADIUS, self.drawn_width() / 2.0)
         return self.bar().adjusted(-reach, -reach, reach, reach)
 
     def shape(self) -> QPainterPath:
@@ -301,7 +299,7 @@ class Transition(NetItem):
         """
 
         path = QPainterPath()
-        reach = ITEM_PEN / 2.0
+        reach = self.outline_width() / 2.0
         path.addRect(self.bar().adjusted(-reach, -reach, reach, reach))
         return path
 

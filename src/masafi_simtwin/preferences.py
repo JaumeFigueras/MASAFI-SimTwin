@@ -195,7 +195,7 @@ def within(low: float, high: float) -> Callable[[Any], bool]:
 DEFAULT_FONT_SIZE = 2.4
 
 #: How thick a net's lines are drawn by default, in millimetres, which is
-#: ``documents.net_item.ITEM_PEN``: what every item is drawn with today.
+#: what every item and every arc was drawn with before there were styles.
 DEFAULT_LINE_WIDTH = 0.3
 
 #: The kinds of text a net holds, each of which has a typeface of its own.  A

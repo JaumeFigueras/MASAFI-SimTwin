@@ -144,8 +144,7 @@ from masafi_simtwin.documents.ink import (
 from masafi_simtwin.documents.label import Label
 from masafi_simtwin.documents.net_item import (
     ARC_Z,
-    ITEM_PEN,
-    ITEM_PEN_SELECTED,
+    SELECTED_EXTRA,
     NetItem,
 )
 
@@ -1969,6 +1968,56 @@ class Arc(QGraphicsItem):
 
         return preferences.text_appearance(self.text_style, preferences.ARC)
 
+    def line_appearance(self):
+        """Give the style the arc is actually drawn with.
+
+        Returns
+        -------
+        simtwin_core.petri_net.LineStyle
+            A complete style — the arc's own where it has one, and the
+            application's defaults otherwise.
+        """
+
+        return preferences.line_appearance(self.line_style)
+
+    def outline_width(self) -> float:
+        """Give how thick the arc is drawn, selection included.
+
+        Returns
+        -------
+        float
+            Millimetres: its own width, and
+            :data:`~masafi_simtwin.documents.net_item.SELECTED_EXTRA` more while
+            it is selected — the rule an item keeps.
+        """
+
+        width = self.line_appearance().width
+        return width + SELECTED_EXTRA if self.isSelected() else width
+
+    def drawn_width(self) -> float:
+        """Give the thickest the arc is ever drawn, whatever it is doing now.
+
+        Returns
+        -------
+        float
+            Millimetres, which is what its rectangle is measured from so that
+            selecting one is a repaint rather than a change of geometry.
+        """
+
+        return self.line_appearance().width + SELECTED_EXTRA
+
+    def restyle(self) -> None:
+        """Take in that the arc is drawn in a different style than it was.
+
+        A width is geometry, for the reason
+        :meth:`~masafi_simtwin.documents.net_item.NetItem.restyle` gives, and
+        the weight beside it is lettered again.
+        """
+
+        self.prepareGeometryChange()
+        self.show_label()
+        self.update()
+
     def _sheet(self) -> QRectF:
         """Give where the weight's box may be dragged: the sheet the arc is on.
 
@@ -2112,7 +2161,7 @@ class Arc(QGraphicsItem):
         area = self.path().boundingRect().normalized()
         for where in self.handles().values():
             area = area.united(self.handle_rect(where))
-        reach = max(ARC_GRAB, ARROW_WIDTH, ITEM_PEN_SELECTED, HANDLE_GRAB)
+        reach = max(ARC_GRAB, ARROW_WIDTH, self.drawn_width(), HANDLE_GRAB)
         return area.adjusted(-reach, -reach, reach, reach)
 
     def shape(self) -> QPainterPath:
@@ -2159,8 +2208,10 @@ class Arc(QGraphicsItem):
             The widget being painted on.
         """
 
-        colour = ink_colour(self.isSelected(), option)
-        width = ITEM_PEN_SELECTED if self.isSelected() else ITEM_PEN
+        colour = ink_colour(
+            self.isSelected(), option, self.line_appearance().colour
+        )
+        width = self.outline_width()
 
         pen = QPen(colour, width)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)

@@ -12,7 +12,8 @@ from PyQt6.QtCore import QPointF
 from PyQt6.QtGui import QColor
 
 from masafi_simtwin.documents.label import LABEL_GAP
-from masafi_simtwin.documents.net_item import ITEM_PEN, PORT_RADIUS
+from masafi_simtwin.documents.net_item import PORT_RADIUS
+from masafi_simtwin.preferences import DEFAULT_LINE_WIDTH
 from masafi_simtwin.documents.transition import (
     PORT_COUNT,
     PORT_SPACING,
@@ -331,6 +332,23 @@ def test_a_transition_is_not_the_colour_of_the_sheet(transition, ink, colors):
 
 
 @pytest.mark.parametrize('colors', SCHEMES, ids=SCHEME_NAMES)
+def test_a_bar_given_a_colour_is_solid_in_that_colour(transition, ink, colors):
+    """The fill follows the outline wherever the outline goes, so a transition
+    given a colour of its own is a solid bar of it rather than a rim."""
+
+    from simtwin_core.petri_net import LineStyle
+
+    transition.line_style = LineStyle('#aa0000', DEFAULT_LINE_WIDTH)
+    transition.restyle()
+    image = ink.painted(transition, colors)
+
+    assert ink.nearest(
+        ink.at(image), QColor('#aa0000'), QColor(colors.text), QColor(colors.editor)
+    ) == QColor('#aa0000')
+    assert ink.distance(ink.at(image), ink.at(image, across=TRANSITION_HALF_LENGTH - 0.5)) == 0
+
+
+@pytest.mark.parametrize('colors', SCHEMES, ids=SCHEME_NAMES)
 def test_a_selected_transition_is_a_solid_bar_of_the_accent(transition, ink, colors):
     """The fill follows the outline wherever it goes.
 
@@ -354,7 +372,7 @@ CORNER_SCALE = 120.0
 #: chamfered one is, in millimetres.  Two thirds of the way out along the
 #: diagonal of the stroke's own corner: inside a mitered join and outside a
 #: bevelled one.
-CORNER_PROBE = ITEM_PEN / 3.0
+CORNER_PROBE = DEFAULT_LINE_WIDTH / 3.0
 
 
 @pytest.mark.parametrize('colors', SCHEMES, ids=SCHEME_NAMES)
