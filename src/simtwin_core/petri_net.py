@@ -441,6 +441,32 @@ def _measure(value, low: float, high: float, what: str) -> float:
     return float(value)
 
 
+def is_colour(value) -> bool:
+    """Say whether something is a colour a style may be drawn in.
+
+    The rule is written here, beside the styles that keep it, because the
+    application's **defaults** keep it too: a colour held in the settings file
+    and a colour held in a document are the same thing, and one rule in one
+    place is what makes them so.
+
+    Parameters
+    ----------
+    value : object
+        What is offered as a colour.
+
+    Returns
+    -------
+    bool
+        True for :data:`AUTOMATIC` and for ``#rrggbb`` written either way round
+        in case, false for anything else — a colour named in words included,
+        there being no list of names here to look one up in.
+    """
+
+    if value == AUTOMATIC:
+        return True
+    return isinstance(value, str) and re.fullmatch(r'#[0-9a-fA-F]{6}', value) is not None
+
+
 def _colour(value, what: str) -> str:
     """Check a colour.
 
@@ -463,11 +489,9 @@ def _colour(value, what: str) -> str:
         When it is neither.
     """
 
-    if value == AUTOMATIC:
-        return value
-    if not isinstance(value, str) or not re.fullmatch(r'#[0-9a-fA-F]{6}', value):
+    if not is_colour(value):
         raise InvalidNet(f'{what} is not a colour: {value!r}')
-    return value.lower()
+    return value if value == AUTOMATIC else value.lower()
 
 
 def _style(value, kind: type, what: str):

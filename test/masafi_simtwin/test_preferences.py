@@ -2,28 +2,38 @@
 
 from __future__ import annotations
 
+import dataclasses
 import uuid
 
 import pytest
 from PyQt6.QtCore import QSettings, QSizeF
 
-from masafi_simtwin import paper
+from masafi_simtwin import fonts, paper
 from masafi_simtwin.preferences import (
+    APPEARANCE_KEYS,
     AUTOSAVE_INTERVALS,
     AUTOSAVE_KEY,
     BY_KEY,
+    DEFAULT_FONT_SIZE,
+    DEFAULT_LINE_WIDTH,
     INSTALL_KEY,
     PAGE_KEYS,
     PREFERENCES,
+    ROLES,
     install_id,
+    line_appearance,
     needs_restart,
     page,
+    text_appearance,
+    within,
+    SYSTEM_FONT,
     SYSTEM_LANGUAGE,
     SYSTEM_PAGE_SIZE,
     SYSTEM_THEME,
     Preference,
     Preferences,
 )
+from simtwin_core.petri_net import AUTOMATIC, LineStyle, TextStyle
 
 #: Every declared key, so a new preference is covered without touching a test.
 KEYS = [declaration.key for declaration in PREFERENCES]
@@ -98,6 +108,20 @@ def test_the_keys_are_grouped_like_the_settings_tree():
         'appearance/theme',
         'appearance/page_size',
         'appearance/page_orientation',
+        'petri_net/font',
+        'petri_net/font_size',
+        'petri_net/alignment',
+        'petri_net/text_colour',
+        'petri_net/place_bold',
+        'petri_net/place_italic',
+        'petri_net/transition_bold',
+        'petri_net/transition_italic',
+        'petri_net/guard_bold',
+        'petri_net/guard_italic',
+        'petri_net/time_function_bold',
+        'petri_net/time_function_italic',
+        'petri_net/line_colour',
+        'petri_net/line_width',
         'units/time',
         'units/distance',
         'units/surface',
@@ -413,3 +437,235 @@ def test_a_hand_written_interval_that_is_not_one_falls_back(path, stored):
     reread = Preferences(QSettings(str(path), QSettings.Format.IniFormat))
 
     assert reread.value(AUTOSAVE_KEY) == 5
+
+
+# ----------------------------------------------------------------------
+# What a net is drawn like
+# ----------------------------------------------------------------------
+
+
+def test_the_appearance_of_a_net_is_a_group_of_its_own():
+    """One group, so the file and the settings tree read the same way."""
+
+    assert APPEARANCE_KEYS == tuple(key for key in KEYS if key.startswith('petri_net/'))
+    assert APPEARANCE_KEYS
+
+
+def test_no_appearance_setting_waits_for_a_restart():
+    """A sheet is drawn again where it stands, as it is ruled again where it stands."""
+
+    assert not needs_restart(APPEARANCE_KEYS)
+
+
+def test_an_unset_font_means_whatever_this_machine_offers():
+    """The idiom the page size already uses: unset is a question, not a value."""
+
+    assert BY_KEY['petri_net/font'].default == SYSTEM_FONT == ''
+    assert BY_KEY['petri_net/font'].choices == ()
+
+
+def test_the_default_size_keeps_a_caption_the_size_it_is_today():
+    """Agreed with Jaume: nothing changes size until he has printed a net."""
+
+    declaration = BY_KEY['petri_net/font_size']
+
+    assert declaration.default == DEFAULT_FONT_SIZE == 2.4
+    assert declaration.type is float
+
+
+def test_the_default_width_is_what_an_item_is_drawn_with_today():
+    """``ITEM_PEN``, so a net drawn before the defaults existed is unchanged."""
+
+    declaration = BY_KEY['petri_net/line_width']
+
+    assert declaration.default == DEFAULT_LINE_WIDTH == 0.3
+    assert declaration.type is float
+
+
+def test_a_guard_and_a_time_function_are_italic_and_nothing_else_is():
+    """They do not exist yet; the typefaces they will take are decided."""
+
+    italic = {key for key in APPEARANCE_KEYS if BY_KEY[key].default is True}
+
+    assert italic == {'petri_net/guard_italic', 'petri_net/time_function_italic'}
+
+
+def test_every_colour_follows_the_theme_until_one_is_chosen():
+    """Only *Automatic* reads on both schemes, so only it can be the default."""
+
+    assert BY_KEY['petri_net/text_colour'].default == AUTOMATIC
+    assert BY_KEY['petri_net/line_colour'].default == AUTOMATIC
+
+
+def test_the_alignment_is_one_of_the_four_there_are():
+    """The core's list, so a hand-edited file cannot invent a fifth."""
+
+    from simtwin_core.petri_net import ALIGNMENTS
+
+    assert BY_KEY['petri_net/alignment'].default == 'left'
+    assert BY_KEY['petri_net/alignment'].choices == ALIGNMENTS
+
+
+def test_a_size_reads_back_as_a_number(preferences, path):
+    """The first preference that is not a whole number."""
+
+    preferences.set_value('petri_net/font_size', 3.5)
+
+    assert '3.5' in written(preferences, path)
+    reread = Preferences(QSettings(str(path), QSettings.Format.IniFormat))
+    assert reread.value('petri_net/font_size') == 3.5
+
+
+@pytest.mark.parametrize(
+    'stored',
+    ['abc', '', '0.5', '99', '2,4', 'true'],
+    ids=['words', 'nothing', 'too-small', 'too-large', 'comma', 'flag'],
+)
+def test_a_hand_written_size_that_is_not_one_falls_back(path, stored):
+    """A number Qt refuses to convert, one outside the limits, or a list.
+
+    ``font_size=2,4`` is the one worth naming: Qt reads a comma as a separator
+    and gives back ``[2.0, 4.0]`` rather than refusing, so what checks the
+    limits has to refuse what is not a number rather than compare it.
+    """
+
+    path.write_text(f'[petri_net]\nfont_size={stored}\n', encoding='utf-8')
+    reread = Preferences(QSettings(str(path), QSettings.Format.IniFormat))
+
+    assert reread.value('petri_net/font_size') == DEFAULT_FONT_SIZE
+
+
+@pytest.mark.parametrize('stored', ['red', '#12345', '#aabbccdd', ''])
+def test_a_hand_written_colour_that_is_not_one_falls_back(path, stored):
+    """The core says what a colour is; this is the settings file held to it."""
+
+    path.write_text(f'[petri_net]\ntext_colour={stored}\n', encoding='utf-8')
+    reread = Preferences(QSettings(str(path), QSettings.Format.IniFormat))
+
+    assert reread.value('petri_net/text_colour') == AUTOMATIC
+
+
+def test_a_colour_may_be_chosen(preferences):
+    """Automatic is the default, not the only thing allowed."""
+
+    preferences.set_value('petri_net/line_colour', '#aa0000')
+
+    assert preferences.value('petri_net/line_colour') == '#aa0000'
+
+
+def test_a_size_outside_the_limits_is_refused(preferences):
+    """As a value outside a list of choices is, and for the same reason."""
+
+    with pytest.raises(ValueError, match='petri_net/font_size'):
+        preferences.set_value('petri_net/font_size', 40.0)
+    with pytest.raises(ValueError, match='petri_net/line_width'):
+        preferences.edit().set_value('petri_net/line_width', 0.0)
+
+
+def test_a_range_refuses_what_is_not_a_number():
+    """Which is what a hand-edited file hands it, and a ``bool`` is not a size."""
+
+    allowed = within(1.0, 20.0)
+
+    assert allowed(1.0) and allowed(20.0) and allowed(3)
+    assert not allowed(0.9) and not allowed(20.1)
+    assert not allowed([2.0, 4.0])
+    assert not allowed('3')
+    assert not allowed(True)
+    assert not allowed(float('nan'))
+
+
+# ----------------------------------------------------------------------
+# The defaults and an item's own style, resolved into what is drawn
+# ----------------------------------------------------------------------
+
+
+def test_an_item_with_no_style_of_its_own_is_drawn_the_default_way(preferences):
+    """Which is the whole of what ``None`` on an item means."""
+
+    assert text_appearance(None, 'place', preferences) == TextStyle(
+        fonts.default_family(), DEFAULT_FONT_SIZE, False, False, 'left', AUTOMATIC
+    )
+    assert line_appearance(None, preferences) == LineStyle(AUTOMATIC, DEFAULT_LINE_WIDTH)
+
+
+def test_the_defaults_are_what_the_user_chose(preferences):
+    """One resolved style out of the several keys it is stored in."""
+
+    edit = preferences.edit()
+    edit.set_value('petri_net/font', 'DejaVu Sans')
+    edit.set_value('petri_net/font_size', 4.0)
+    edit.set_value('petri_net/alignment', 'center')
+    edit.set_value('petri_net/text_colour', '#AA00FF')
+    edit.set_value('petri_net/place_bold', True)
+    edit.set_value('petri_net/line_colour', '#00aa00')
+    edit.set_value('petri_net/line_width', 1.5)
+    edit.commit()
+
+    assert text_appearance(None, 'place', preferences) == TextStyle(
+        'DejaVu Sans', 4.0, True, False, 'center', '#aa00ff'
+    )
+    assert line_appearance(None, preferences) == LineStyle('#00aa00', 1.5)
+
+
+def test_each_kind_of_text_takes_its_own_typeface(preferences):
+    """A guard and a time function are italic; a place and a transition are not."""
+
+    preferences.set_value('petri_net/transition_bold', True)
+
+    assert not text_appearance(None, 'place', preferences).italic
+    assert text_appearance(None, 'transition', preferences).bold
+    assert text_appearance(None, 'guard', preferences).italic
+    assert text_appearance(None, 'time_function', preferences).italic
+
+
+def test_an_arcs_weight_is_written_normally_whatever_the_defaults_say(preferences):
+    """A weight is never bold, italic or aligned — the rule ``ArcData`` keeps."""
+
+    edit = preferences.edit()
+    edit.set_value('petri_net/alignment', 'justified')
+    edit.set_value('petri_net/place_bold', True)
+    edit.commit()
+
+    style = text_appearance(None, 'arc', preferences)
+
+    assert style.normal
+    assert style.font == fonts.default_family()
+    assert 'arc' in ROLES
+
+
+def test_a_role_that_is_not_one_says_so(preferences):
+    """A mistyped role is a mistake, like a mistyped key."""
+
+    with pytest.raises(ValueError, match='not a kind of text'):
+        text_appearance(None, 'transitions', preferences)
+
+
+def test_an_item_with_a_style_of_its_own_is_drawn_in_it(preferences):
+    """The defaults are what an item without one follows, and nothing more."""
+
+    preferences.set_value('petri_net/font_size', 6.0)
+    own = TextStyle('DejaVu Sans', 2.0, italic=True, colour='#123456')
+    line = LineStyle('#654321', 2.0)
+
+    assert text_appearance(own, 'place', preferences) == own
+    assert line_appearance(line, preferences) == line
+
+
+def test_a_font_this_machine_lacks_is_fallen_back_on_silently(preferences):
+    """A net drawn elsewhere opens here, lettered in something that exists."""
+
+    own = TextStyle('No Such Font At All', 3.0, bold=True, colour='#123456')
+
+    drawn = text_appearance(own, 'place', preferences)
+
+    assert drawn == dataclasses.replace(own, font=fonts.default_family())
+    assert drawn.font == fonts.default_family()
+
+
+def test_a_default_font_that_has_gone_is_fallen_back_on_too(preferences):
+    """The settings file outlives the fonts that were installed when it was written."""
+
+    preferences.set_value('petri_net/font', 'No Such Font At All')
+
+    assert text_appearance(None, 'place', preferences).font == fonts.default_family()

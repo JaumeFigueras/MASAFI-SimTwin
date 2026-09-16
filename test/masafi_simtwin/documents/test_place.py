@@ -12,6 +12,7 @@ import pytest
 from PyQt6.QtCore import QPointF
 from PyQt6.QtGui import QColor
 
+from masafi_simtwin.documents.ink import glyph_path
 from masafi_simtwin.documents.label import LABEL_GAP
 from masafi_simtwin.documents.net_item import PORT_RADIUS
 from masafi_simtwin.documents.place import (
@@ -285,3 +286,22 @@ def test_a_places_label_is_under_it_and_centred(place):
 
     assert box.center().x() == pytest.approx(0.0)
     assert box.top() == pytest.approx(place.boundingRect().bottom() + LABEL_GAP)
+
+
+def test_a_place_letters_as_a_place(place):
+    """Which is what decides the typeface its caption is written in."""
+
+    assert place.ROLE == 'place'
+    assert place.appearance().font
+
+
+def test_a_number_of_tokens_takes_the_familys_of_the_caption(place):
+    """Agreed with Jaume: the family of the caption, at a size and a typeface of
+    the number's own — a count inside a circle is not a caption, and a bold or
+    slanted one would read as something else."""
+
+    place.tokens = 88
+
+    assert place.token_marks() == glyph_path(
+        '88', TOKEN_NUMBER_HEIGHT, TOKEN_NUMBER_WIDTH, family=place.appearance().font
+    )

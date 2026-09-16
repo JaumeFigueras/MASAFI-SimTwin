@@ -1798,6 +1798,41 @@ def test_a_settings_change_that_is_not_the_page_leaves_the_sheets_alone(
     assert editor.page == before
 
 
+def test_new_drawing_defaults_reach_the_documents_that_are_open(
+    window, opened, monkeypatch
+):
+    """How a net is drawn is not a preference that waits for a restart.
+
+    Nothing is drawn with those defaults yet, so what is checked here is the
+    wiring: the settings that say how a net looks reach the sheets, and the ones
+    that do not say anything about it leave them alone.
+    """
+
+    add_model(window, monkeypatch)
+    redrawn = []
+    monkeypatch.setattr(
+        type(window), '_redraw_documents', lambda self: redrawn.append(self)
+    )
+
+    window._apply_appearance(('petri_net/font_size',))
+    assert redrawn == [window]
+
+    window._apply_appearance(('units/time',))
+    assert redrawn == [window]
+
+
+def test_drawing_every_sheet_again_reaches_every_open_sheet(
+    window, opened, monkeypatch, qtbot
+):
+    """The repaint is asked of the scene, which is what holds the drawing."""
+
+    add_model(window, monkeypatch)
+    editor = window.document_area.tabs.currentWidget()
+
+    with qtbot.waitSignal(editor.scene().changed, timeout=1000):
+        window._redraw_documents()
+
+
 @pytest.mark.parametrize('which', ['recent menu', 'top bar'])
 def test_a_recent_project_survives_being_clicked(window, make_project, which):
     """Opening a project rebuilds the very menus the click came from.

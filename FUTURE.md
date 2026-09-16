@@ -963,3 +963,100 @@ is, opening one by hand is how a person gets something back.
   the project, itself keeping a version first) or *Open a copy* (a new UUID, somewhere else) rather than
   opening it in place.
 - Open a version read-only: no lock, no journal, no history entry, nothing saved.
+
+---
+
+## A place's tokens take the family its caption is written in and nothing else
+
+**Now.** The number of tokens inside a place is lettered in the **family** of that place's caption and
+in nothing else of its style: the size is `TOKEN_NUMBER_HEIGHT` (4 mm, narrowed to
+`TOKEN_NUMBER_WIDTH` when the number is long), it is always upright and unemphasised, and it is drawn
+in the place's *line* colour rather than its text colour. So giving a place bigger, bold or coloured
+lettering changes the caption beside it and leaves the number in the circle where it was.
+
+**Why it was done this way.** Decided with Jaume. A count inside a circle is not a caption: it is sized
+to fit the circle it sits in, and a number at whatever size a description happens to be would run out
+of the place or shrink to nothing. Bold and italic say something about a *name*; on a count they read
+as a different count. The family is taken so that a net lettered in one family does not show a second
+one inside its places, which is the one part of the style a number can honour without fighting the
+circle.
+
+**When it will not be enough.** A net whose places are drawn much larger or much smaller than a
+centimetre; a house style that wants the marking set apart from the drawing; a printed net where 4 mm
+is not the right size for a number.
+
+**Options.**
+
+- **Measure the number from the place** rather than from a constant — a fraction of the diameter — so
+  that it follows if a place's size ever becomes a thing that can be chosen.
+- **Give the tokens a style of their own** on the item, as a guard would have, which is the same answer
+  as the entry above and the same cost.
+- **Take the size from the caption** and clamp it to what the circle holds, which honours the choice as
+  far as it can be honoured and silently stops honouring it after that.
+
+---
+
+## A guard and a time function are written one way for the whole application
+
+**Now.** `petri_net/guard_bold`, `petri_net/guard_italic`, `petri_net/time_function_bold` and
+`petri_net/time_function_italic` say how a guard and a time function are written, and they say it for
+every transition of every model. Italic for both is what they start as. Neither exists yet: a
+transition has no guard and no time function to write, so these are stored and shown and nothing reads
+them, which is deliberate — the typefaces were decided with Jaume while the decision was being made,
+and storing them now is what keeps them from being decided twice.
+
+**Why it was done this way.** A guard is a piece of code and a time function is a piece of mathematics,
+and both are conventionally set apart from a plain name by being written in italics; that is a
+typographic convention of the whole drawing rather than a property of one transition. An item's own
+`TextStyle` covers its **name and description** — one style per item, which is what the Properties pane
+offers — so there is nowhere on a single transition for a *second* style to live without either a second
+style field on every node or a style that knows which of an item's several texts it applies to.
+
+**When it will not be enough.** Marking one transition's guard out from the others — a guard under
+discussion, a time function that is provisional — or a model whose guards should read as plain text
+because they are being shown to people who do not read code.
+
+**Options.**
+
+- **A second style on a transition**, `guard_style`, `None` meaning the application's default, written
+  to the file beside the item's own `lettering`. It is the existing mechanism once more, at the cost of
+  a second *Use app default …* pair on the Properties pane for transitions alone.
+- **Give a style a part to apply to**, so one item may carry several, each naming the text it dresses.
+  More general and more to explain; it is what a word processor's character styles are.
+- **Leave it application-wide** and let a person who wants one guard to stand out say so in the guard
+  itself, when guards have a syntax that allows it.
+
+---
+
+## How a net is drawn by default is settled per machine, not per model
+
+**Now.** The defaults a net is drawn the way of — the font, its size, the typefaces of each kind
+of text, the alignment, the two colours and the line width — are preferences, under `petri_net/` in
+this user's settings file on this machine. A model carries only what an item was given **of its
+own**. So a project opened on another desk is drawn in that desk's defaults, and a net that reads one
+way here can read another way there with nothing in the file having changed. A font is the sharpest
+case: one this machine has not got is fallen back on silently, so even an item's *own* style is drawn
+in something else here.
+
+**Why it was done this way.** Decided with Jaume, option *c* of three. Defaults are a way of working
+rather than a property of a net — a person who likes large lettering likes it in every model they
+open — and the thing they are read against, the fonts a machine has, is a property of the machine and
+not of the document. Keeping them per machine is also what lets the settings dialog stay one dialog:
+a preference that could be set in two places needs to say which one is in force.
+
+**When it will not be enough.** Handing a model to students or to a colleague and wanting it to look
+as it looked here; a house style that belongs to a project rather than to whoever opens it; printing
+from a machine other than the one the net was drawn on.
+
+**Options.**
+
+- **Keep the defaults in the project**, in the manifest, with the preferences becoming what a *new*
+  project starts from. A model would then be drawn the same anywhere, and the settings dialog would
+  grow a second column or a second page for *this project*.
+- **Keep them with the model**, in SimTwin's own tool data beside the per-item styles, which is where
+  the per-item ones already are. It is the same answer one model at a time rather than one project at
+  a time, and it costs a net nothing where nobody has chosen anything.
+- **Leave them per machine and add *Apply my defaults to this model***, which fills in every item's
+  own style once. The drawing becomes explicit and travels intact, and the defaults go on being a way
+  of working; the cost is that every item then carries a style, and a later change to the defaults
+  reaches none of them.

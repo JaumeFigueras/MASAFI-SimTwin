@@ -1795,6 +1795,7 @@ class MainWindow(QMainWindow):
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         self._apply_page(dialog.written)
+        self._apply_appearance(dialog.written)
         self._apply_autosave(dialog.written)
         if needs_restart(dialog.written) and ask_to_restart(self):
             application = QApplication.instance()
@@ -1822,6 +1823,40 @@ class MainWindow(QMainWindow):
         for document in self._document_area.documents:
             if isinstance(document, Canvas):
                 document.set_page(page)
+
+    def _apply_appearance(self, written: tuple[str, ...]) -> None:
+        """Draw every open sheet again in the defaults that have just been chosen.
+
+        How a net is drawn is not a preference that waits for a restart either:
+        the sheet is where the choice can be judged, so it is shown there at
+        once.  Nothing is **drawn** with these defaults yet — the items read
+        them at the next steps of the appearance work — so today this repaints
+        sheets that will come out exactly as they were; it is the wiring, put in
+        with the settings that need it rather than left for the drawing to
+        remember.
+
+        Parameters
+        ----------
+        written : tuple of str
+            The keys the settings dialog wrote, so that nothing is touched when
+            none of them says how a net is drawn.
+        """
+
+        if not any(key in written for key in preferences.APPEARANCE_KEYS):
+            return
+        self._redraw_documents()
+
+    def _redraw_documents(self) -> None:
+        """Letter and paint every open sheet again, whatever is drawn on it.
+
+        A caption is laid out rather than merely painted, so this is more than a
+        repaint: the boxes are wrapped again at whatever size the defaults now
+        say — see :meth:`~masafi_simtwin.documents.canvas.Canvas.restyle`.
+        """
+
+        for document in self._document_area.documents:
+            if isinstance(document, Canvas):
+                document.restyle()
 
     def _apply_autosave(self, written: tuple[str, ...]) -> None:
         """Start the autosave timer again at the interval that has just been chosen.

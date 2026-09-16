@@ -327,18 +327,30 @@ def test_a_weight_that_is_not_one_is_a_caption_beside_the_line(editor, net):
     the number is lettered like every other caption on the sheet."""
 
     from masafi_simtwin.documents.arc import WEIGHT_OFFSET
-    from masafi_simtwin.documents.ink import LABEL_LINE_HEIGHT
+    from masafi_simtwin.documents.ink import line_height
+
+    place, transition = net
+    arc = editor.add_arc(place, transition)
+    arc.weight = 4
+    tall = line_height(arc.appearance())
+
+    assert arc.label.text == '4'
+    assert arc.label.size.height() == pytest.approx(tall)
+    middle = arc.curve_middle()
+    assert QLineF(arc.label.pos(), middle).length() == pytest.approx(
+        WEIGHT_OFFSET + tall / 2.0
+    )
+
+
+def test_a_weight_is_never_bold_italic_or_aligned(editor, net):
+    """A weight takes the font, the size and the colour of everything else, and
+    nothing of the typeface — the rule ``ArcData`` keeps as well."""
 
     place, transition = net
     arc = editor.add_arc(place, transition)
     arc.weight = 4
 
-    assert arc.label.text == '4'
-    assert arc.label.size.height() == LABEL_LINE_HEIGHT
-    middle = arc.curve_middle()
-    assert QLineF(arc.label.pos(), middle).length() == pytest.approx(
-        WEIGHT_OFFSET + LABEL_LINE_HEIGHT / 2.0
-    )
+    assert arc.appearance().normal
 
 
 def test_a_weight_that_goes_back_to_one_goes_and_is_let_go_of(editor, net):

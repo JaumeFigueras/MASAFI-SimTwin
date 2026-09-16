@@ -236,6 +236,38 @@ class Ink:
 
         return any(self.distance(pixel, colour) <= INK_TOLERANCE for pixel in pixels)
 
+    def leans(self, pixels: list[QColor], colour: QColor, *others: QColor) -> bool:
+        """Say whether any of some pixels is nearer one colour than the others.
+
+        :meth:`holds` asks whether a pixel comes within :data:`INK_TOLERANCE` of
+        a colour, which is the right question for a fill and the wrong one for a
+        **hairline**: a cosmetic line is one device pixel wide and lands where
+        the geometry puts it, so one that falls on a pixel boundary is split
+        evenly over two rows and neither of them is ever as near its own colour
+        as one that falls inside a pixel.  That is not a fault in the drawing and
+        it must not be a fault in the test — it moves when anything on the sheet
+        changes size — so what is asked of a hairline is the question
+        :meth:`nearest` asks: is this the accent rather than the paper?
+
+        Parameters
+        ----------
+        pixels : list of PyQt6.QtGui.QColor
+            What was read, usually from :meth:`window`.
+        colour : PyQt6.QtGui.QColor
+            What to look for.
+        *others : PyQt6.QtGui.QColor
+            What it would otherwise be — the paper it is drawn on, above all.
+
+        Returns
+        -------
+        bool
+            Whether one of them leans that way.
+        """
+
+        return any(
+            self.nearest(pixel, colour, *others) == colour for pixel in pixels
+        )
+
     def nearest(self, colour: QColor, *candidates: QColor) -> QColor:
         """Say which of some colours a pixel is closest to.
 

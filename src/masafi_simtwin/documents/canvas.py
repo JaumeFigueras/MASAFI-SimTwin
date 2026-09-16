@@ -2232,6 +2232,30 @@ class Canvas(QWidget):
 
         return self.horizontal_ruler, self.vertical_ruler
 
+    def restyle(self) -> None:
+        """Letter the sheet again, in whatever the defaults are now.
+
+        A caption is **laid out** rather than merely painted: it is wrapped to a
+        width, and the box is as tall as the lines that makes.  So a repaint
+        alone would leave every box the size the old defaults gave it, with the
+        text drawn at the new size inside the old box.  Everything on the sheet
+        that letters itself is asked to do it again, and then the sheet is
+        painted.
+
+        The sheet knows nothing of places or arcs here on purpose: it asks for
+        what it wants — *say what you are called again* — of whatever can answer,
+        the way it asks a guide nothing and a node everything.
+        """
+
+        scene = self.scene()
+        if scene is None:  # pragma: no cover - a canvas always has a scene
+            return
+        for item in scene.items():
+            letters = getattr(item, 'show_label', None)
+            if callable(letters):
+                letters()
+        scene.update()
+
     # ------------------------------------------------------------------
     # Guides
     # ------------------------------------------------------------------

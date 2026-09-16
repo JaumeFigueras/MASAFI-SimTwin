@@ -51,6 +51,7 @@ import math
 from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QPainterPath
 
+from masafi_simtwin import preferences
 from masafi_simtwin.documents.ink import glyph_path, ink_colour, paper_colour
 from masafi_simtwin.documents.net_item import (
     ITEM_PEN,
@@ -106,6 +107,9 @@ class Place(NetItem):
     #: What a place counts as when an arc is drawn to it.
     GROUP = 'place'
 
+    #: Which kind of text its caption is, and so how it is written.
+    ROLE = preferences.PLACE
+
     def __init__(self, *arguments, **keywords) -> None:
         super().__init__(*arguments, **keywords)
         self._tokens = 0
@@ -152,7 +156,12 @@ class Place(NetItem):
             for across, down in TOKEN_LAYOUTS[self._tokens]:
                 marks.addEllipse(QPointF(across, down), TOKEN_RADIUS, TOKEN_RADIUS)
             return marks
-        return glyph_path(str(self._tokens), TOKEN_NUMBER_HEIGHT, TOKEN_NUMBER_WIDTH)
+        return glyph_path(
+            str(self._tokens),
+            TOKEN_NUMBER_HEIGHT,
+            TOKEN_NUMBER_WIDTH,
+            family=self.appearance().font,
+        )
 
     #: What it may be joined to.  A Petri net is bipartite.
     CONNECTS_TO = ('transition',)

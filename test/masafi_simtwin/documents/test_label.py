@@ -13,9 +13,10 @@ from PyQt6.QtCore import QEvent, QPointF, Qt
 from PyQt6.QtGui import QColor, QMouseEvent, QPainterPath
 from PyQt6.QtWidgets import QApplication
 
-from masafi_simtwin.documents.ink import HANDLE_GRAB, LABEL_LINE_HEIGHT
+from masafi_simtwin.documents.ink import HANDLE_GRAB, line_height
 from masafi_simtwin.documents.label import LABEL_PADDING, MIN_LABEL_WIDTH, Label
 from masafi_simtwin.theme import DARK_COLORS, LIGHT_COLORS
+from simtwin_core.petri_net import TextStyle
 
 #: The two schemes every pixel test is run against.
 SCHEMES = [LIGHT_COLORS, DARK_COLORS]
@@ -247,7 +248,7 @@ def test_a_box_given_a_width_is_that_wide_and_wraps_to_it(place):
 
     place.label_width = 50.0
     assert place.label.size.width() == 50.0
-    assert place.label.size.height() == LABEL_LINE_HEIGHT
+    assert place.label.size.height() == pytest.approx(line_height(place.appearance()))
 
     place.label_width = 12.0
     assert place.label.size.width() == 12.0
@@ -415,7 +416,15 @@ def test_a_caption_of_a_selected_item_is_the_accent(place, ink, colors):
 @pytest.mark.parametrize('colors', SCHEMES, ids=SCHEME_NAMES)
 def test_a_selected_label_is_the_accent_and_is_framed(editor, place, ink, colors):
     """The frame is what tells *this caption is in hand* from *the thing it
-    belongs to is in hand*, both being drawn in the accent."""
+    belongs to is in hand*, both being drawn in the accent.
+
+    The frame is a **hairline**, so it is asked after with
+    :meth:`Ink.leans` rather than :meth:`Ink.holds`: one device pixel of dashed
+    line lands where the box's geometry puts it, and a box half a millimetre
+    taller moves it onto a pixel boundary, where it is split over two rows and
+    neither is within a fixed tolerance of the accent.  What is true either way
+    is that it is the accent rather than the paper.
+    """
 
     press(editor.view, place.label)
     box = place.label.box()
@@ -425,7 +434,7 @@ def test_a_selected_label_is_the_accent_and_is_framed(editor, place, ink, colors
     above = ink.window(image, 0.0, box.top() - LABEL_PADDING, 1.0)
 
     assert ink.holds(written, QColor(colors.accent))
-    assert ink.holds(above, QColor(colors.accent))
+    assert ink.leans(above, QColor(colors.accent), QColor(colors.editor))
 
 
 @pytest.mark.parametrize('colors', SCHEMES, ids=SCHEME_NAMES)
@@ -448,3 +457,67 @@ def test_a_label_can_be_taken_hold_of_outright(editor, place):
     place.label.select()
 
     assert place.label.isSelected()
+
+
+# ----------------------------------------------------------------------
+# Lettered in its owner's style
+# ----------------------------------------------------------------------
+
+
+def test_a_label_is_lettered_in_the_style_its_owner_resolves(place):
+    """The label is dumb: what it is written in is set on it, as its text is."""
+
+    assert place.label.style == place.appearance()
+    assert place.label.size.height() == pytest.approx(line_height(place.appearance()))
+
+
+def test_a_style_of_the_items_own_letters_its_caption(place):
+    """Which is the whole of what giving a place an appearance of its own means."""
+
+    was = place.label.size.height()
+
+    place.text_style = TextStyle(place.appearance().font, 6.0)
+    place.show_label()
+
+    assert place.label.style.size == 6.0
+    assert place.label.size.height() > was
+
+
+@pytest.mark.parametrize('colors', SCHEMES, ids=SCHEME_NAMES)
+def test_a_caption_with_a_colour_of_its_own_is_written_in_it(place, ink, colors):
+    """A colour chosen is that colour in either scheme, unlike *Automatic*."""
+
+    place.text_style = TextStyle(place.appearance().font, 2.4, colour='#aa0000')
+    place.show_label()
+
+    written = ink.window(ink.painted(place.label, colors), 0.0, 0.0, 1.0)
+
+    assert ink.holds(written, QColor('#aa0000'))
+
+
+def test_new_defaults_reach_the_captions_already_drawn(editor, place):
+    """A caption is **laid out** rather than merely painted, so a repaint alone
+    would leave the old box on the sheet: the sheet is lettered again."""
+
+    from masafi_simtwin.preferences import Preferences
+
+    was = place.label.size.height()
+    Preferences().set_value('petri_net/font_size', 6.0)
+
+    editor.restyle()
+
+    assert place.label.size.height() > was
+    assert place.label.style.size == 6.0
+
+
+@pytest.mark.parametrize('colors', SCHEMES, ids=SCHEME_NAMES)
+def test_a_selected_caption_of_its_own_colour_is_still_the_accent(place, ink, colors):
+    """The selection keeps the accent, as agreed, whatever the caption's colour."""
+
+    place.text_style = TextStyle(place.appearance().font, 2.4, colour='#aa0000')
+    place.show_label()
+    place.setSelected(True)
+
+    written = ink.window(ink.painted(place.label, colors), 0.0, 0.0, 1.0)
+
+    assert ink.holds(written, QColor(colors.accent))

@@ -38,18 +38,23 @@ from __future__ import annotations
 from html import escape
 from typing import Any, Iterator
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QCoreApplication, Qt
+from PyQt6.QtGui import QColor, QFontDatabase, QIcon, QPalette, QPixmap
 from PyQt6.QtWidgets import (
+    QCheckBox,
+    QColorDialog,
     QComboBox,
     QDialog,
+    QDoubleSpinBox,
     QLabel,
+    QPushButton,
     QRadioButton,
     QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
-from masafi_simtwin import paper
+from masafi_simtwin import fonts, paper
 from masafi_simtwin.dialogs.forms.ui_settings import Ui_SettingsDialog
 from masafi_simtwin.dialogs.restart import warn_restart_needed
 from masafi_simtwin.preferences import (
@@ -57,13 +62,23 @@ from masafi_simtwin.preferences import (
     AUTOSAVE_KEY,
     DISTANCE_UNITS,
     SURFACE_UNITS,
+    SYSTEM_FONT,
     SYSTEM_LANGUAGE,
     SYSTEM_THEME,
     TIME_UNITS,
+    TYPEFACES,
     Preferences,
 )
-from masafi_simtwin.theme import ColorScheme
+from masafi_simtwin.theme import COLORS, ColorScheme
 from masafi_simtwin.translations import LANGUAGE_NAMES, LANGUAGES
+from simtwin_core.petri_net import (
+    ALIGNMENTS,
+    AUTOMATIC,
+    MAX_FONT_SIZE,
+    MAX_LINE_WIDTH,
+    MIN_FONT_SIZE,
+    MIN_LINE_WIDTH,
+)
 
 #: Where the index of the page of a category is kept, on the item itself.
 PAGE_ROLE = Qt.ItemDataRole.UserRole
@@ -80,6 +95,75 @@ THEME_VALUES: tuple[str, ...] = (
     SYSTEM_THEME,
     *(scheme.value for scheme in ColorScheme),
 )
+
+#: What ``petri_net/alignment`` is worth for each entry of the alignment combo
+#: box, in the order the entries are in the form.  They are the core's own
+#: names, so the dialog and a document cannot come to mean different things by
+#: the same word.
+ALIGNMENT_VALUES: tuple[str, ...] = tuple(ALIGNMENTS)
+
+#: Each colour a net is drawn in: the preference it is stored under, the box
+#: that says it follows the theme, the button a colour is chosen on, and the
+#: label warning that the colour chosen will not follow the theme.
+COLOUR_CONTROLS: tuple[tuple[str, str, str, str], ...] = (
+    (
+        'petri_net/text_colour',
+        'text_colour_automatic',
+        'text_colour_button',
+        'text_colour_note',
+    ),
+    (
+        'petri_net/line_colour',
+        'line_colour_automatic',
+        'line_colour_button',
+        'line_colour_note',
+    ),
+)
+
+#: The inks the two themes write in, which are the colours *Automatic* stands
+#: for.  Choosing one of them outright is what the warning is about: it looks
+#: right in the scheme it was chosen in and wrong in the other, and it is the
+#: one choice a person is most likely to make by accident.
+THEME_INKS: frozenset[str] = frozenset(
+    colours.text.lower() for colours in COLORS.values()
+)
+
+#: How big the square of colour on a colour button is drawn, in pixels.
+SWATCH_SIZE = 14
+
+
+def ask_for_colour(parent: QWidget, current: str) -> str | None:
+    """Ask the user for a colour, through Qt's own colour dialog.
+
+    It is a function rather than a method so that a test can answer it without a
+    modal dialog opening on the screen, which is what
+    :func:`~masafi_simtwin.dialogs.restart.warn_restart_needed` is for the
+    restart notice.
+
+    Parameters
+    ----------
+    parent : PyQt6.QtWidgets.QWidget
+        What the dialog is modal over.
+    current : str
+        The colour to open on, or :data:`~simtwin_core.petri_net.AUTOMATIC`,
+        which is no colour and opens on the ink of the scheme in force.
+
+    Returns
+    -------
+    str, optional
+        The colour as ``#rrggbb``, or ``None`` when the dialog was given up.
+    """
+
+    if current == AUTOMATIC:
+        initial = parent.palette().color(QPalette.ColorRole.Text)
+    else:
+        initial = QColor(current)
+    chosen = QColorDialog.getColor(
+        initial,
+        parent,
+        QCoreApplication.translate('SettingsDialog', 'Choose a Colour'),
+    )
+    return chosen.name() if chosen.isValid() else None
 
 
 class SettingsDialog(QDialog, Ui_SettingsDialog):
@@ -120,14 +204,32 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
         self._bind_language()
         self._bind_paper()
         self._bind_orientation()
+        self._bind_fonts()
         for combo, key, values in (
             (self.theme_combo, 'appearance/theme', THEME_VALUES),
+            (self.alignment_combo, 'petri_net/alignment', ALIGNMENT_VALUES),
             (self.time_combo, 'units/time', TIME_UNITS),
             (self.distance_combo, 'units/distance', DISTANCE_UNITS),
             (self.surface_combo, 'units/surface', SURFACE_UNITS),
             (self.autosave_combo, AUTOSAVE_KEY, AUTOSAVE_INTERVALS),
         ):
             self._bind_choice(combo, key, values)
+        self._bind_size(
+            self.font_size_spin,
+            self.font_size_points,
+            'petri_net/font_size',
+            MIN_FONT_SIZE,
+            MAX_FONT_SIZE,
+        )
+        self._bind_size(
+            self.line_width_spin,
+            self.line_width_points,
+            'petri_net/line_width',
+            MIN_LINE_WIDTH,
+            MAX_LINE_WIDTH,
+        )
+        self._bind_typefaces()
+        self._bind_colours()
 
         self._warned_about_restart = False
 
@@ -454,6 +556,266 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
         combo.currentIndexChanged.connect(
             lambda index, combo=combo, key=key: self._on_choice(key, combo, index)
         )
+
+    def _bind_fonts(self) -> None:
+        """Fill the font combo box from this machine, and follow it from there.
+
+        The entries are built here rather than in the form for the reason the
+        paper sizes are: what there is to choose from is what this machine has,
+        which is a different list on a different desk.  The first entry is what
+        leaving ``petri_net/font`` unset means, and it names the family that
+        would be used, so the choice is between *whatever this machine has* and
+        one family in particular rather than between a word and a list.
+
+        A family stored that this machine has not got — a settings file carried
+        from another desk — is added rather than dropped, so the dialog shows
+        what is actually in force, exactly as a paper size does.
+
+        Raises
+        ------
+        RuntimeError
+            When the form already holds entries, which would be duplicated by
+            the ones added here.
+        """
+
+        combo: QComboBox = self.font_combo
+        if combo.count():
+            raise RuntimeError(
+                'font_combo is filled from the families this machine has, so it '
+                f'has to be left empty in settings.ui; it holds {combo.count()} '
+                f'entries.'
+            )
+        combo.addItem(
+            self.tr('Default ({0})', 'the font a net is lettered in when none is chosen')
+            .format(fonts.default_family()),
+            SYSTEM_FONT,
+        )
+        for family in QFontDatabase.families():
+            combo.addItem(family, family)
+
+        stored = self.edit.value('petri_net/font')
+        if stored and combo.findData(stored) < 0:
+            combo.addItem(stored, stored)
+        combo.setCurrentIndex(combo.findData(stored))
+        combo.currentIndexChanged.connect(
+            lambda index: self._on_choice('petri_net/font', combo, index)
+        )
+
+    def _bind_size(
+        self, spin: QDoubleSpinBox, points: QLabel, key: str, low: float, high: float
+    ) -> None:
+        """Put a length in a spin box, with its size in points beside it.
+
+        The limits are set here rather than in the form because they are the
+        core's, and a number typed into Designer could drift away from the rule
+        a document is actually held to.  The points are shown because a font is
+        chosen in points everywhere else in the world, while the sheet — and so
+        everything drawn on it — is measured in millimetres.
+
+        Parameters
+        ----------
+        spin : PyQt6.QtWidgets.QDoubleSpinBox
+            The spin box in the form.
+        points : PyQt6.QtWidgets.QLabel
+            The label beside it, which says the same size in points.
+        key : str
+            The preference it edits.
+        low, high : float
+            The smallest and the largest it may be, in millimetres.
+        """
+
+        spin.setRange(low, high)
+        spin.setValue(self.edit.value(key))
+        self._show_points(spin, points)
+        spin.valueChanged.connect(
+            lambda value, spin=spin, points=points, key=key: self._on_size(
+                key, value, spin, points
+            )
+        )
+
+    def _show_points(self, spin: QDoubleSpinBox, points: QLabel) -> None:
+        """Say in points what a spin box holds in millimetres.
+
+        Parameters
+        ----------
+        spin : PyQt6.QtWidgets.QDoubleSpinBox
+            The spin box, in millimetres.
+        points : PyQt6.QtWidgets.QLabel
+            The label to write in.
+        """
+
+        points.setText(self.tr('≈ {0} pt').format(f'{spin.value() / 25.4 * 72.0:.1f}'))
+
+    def _on_size(self, key: str, value: float, spin: QDoubleSpinBox, points: QLabel) -> None:
+        """Hold a length that has just been typed or stepped to.
+
+        Parameters
+        ----------
+        key : str
+            The preference the spin box edits.
+        value : float
+            What it now holds, in millimetres.
+        spin : PyQt6.QtWidgets.QDoubleSpinBox
+            The spin box that moved.
+        points : PyQt6.QtWidgets.QLabel
+            The label beside it.
+        """
+
+        self.edit.set_value(key, float(value))
+        self._show_points(spin, points)
+        self._warn_once_about_restart()
+
+    def _bind_typefaces(self) -> None:
+        """Set the Bold and Italic boxes of every kind of text, and follow them.
+
+        The kinds are :data:`~masafi_simtwin.preferences.TYPEFACES`, and the
+        boxes of each are named after it, so a kind of text added there and
+        forgotten in the form is a failure rather than a pair of controls that
+        quietly edits nothing.  An arc is the one kind with no boxes: a weight
+        is never bold, italic or aligned.
+
+        Raises
+        ------
+        RuntimeError
+            When a kind of text has no pair of boxes in the form.
+        """
+
+        for role, keys in TYPEFACES.items():
+            if keys is None:
+                continue
+            for key, name in zip(keys, (f'{role}_bold_check', f'{role}_italic_check')):
+                box: QCheckBox | None = self.findChild(QCheckBox, name)
+                if box is None:
+                    raise RuntimeError(
+                        f'{key} is a typeface preference with no {name} in '
+                        f'settings.ui to edit it.'
+                    )
+                box.setChecked(self.edit.value(key))
+                box.toggled.connect(lambda ticked, key=key: self._on_flag(key, ticked))
+
+    def _on_flag(self, key: str, ticked: bool) -> None:
+        """Hold a yes-or-no preference that has just been ticked or unticked.
+
+        Parameters
+        ----------
+        key : str
+            The preference the box edits.
+        ticked : bool
+            Whether it is now ticked.
+        """
+
+        self.edit.set_value(key, bool(ticked))
+        self._warn_once_about_restart()
+
+    def _bind_colours(self) -> None:
+        """Set both colour controls, and follow them from there."""
+
+        for key, automatic, button, note in COLOUR_CONTROLS:
+            box: QCheckBox = getattr(self, automatic)
+            chooser: QPushButton = getattr(self, button)
+            warning: QLabel = getattr(self, note)
+            box.setChecked(self.edit.value(key) == AUTOMATIC)
+            self._show_colour(key, chooser, warning)
+            box.toggled.connect(
+                lambda ticked, key=key, box=box, chooser=chooser, warning=warning: (
+                    self._on_automatic(key, ticked, box, chooser, warning)
+                )
+            )
+            chooser.clicked.connect(
+                lambda _checked=False, key=key, chooser=chooser, warning=warning: (
+                    self._choose_colour(key, chooser, warning)
+                )
+            )
+
+    def _on_automatic(
+        self, key: str, ticked: bool, box: QCheckBox, button: QPushButton, note: QLabel
+    ) -> None:
+        """Follow the theme, or ask for the colour to use instead of it.
+
+        Unticking the box is the gesture that says *not the theme's colour, this
+        one*, so it opens the colour dialog rather than leaving the user to find
+        the button: a box unticked and no colour chosen would be a state that
+        means nothing.  Giving that dialog up therefore puts the tick back.
+
+        Parameters
+        ----------
+        key : str
+            The preference the control edits.
+        ticked : bool
+            Whether *Automatic* is now ticked.
+        box : PyQt6.QtWidgets.QCheckBox
+            The box itself, to be put back when the dialog is given up.
+        button : PyQt6.QtWidgets.QPushButton
+            The button the colour is chosen on.
+        note : PyQt6.QtWidgets.QLabel
+            The warning under them.
+        """
+
+        if ticked:
+            self.edit.set_value(key, AUTOMATIC)
+            self._show_colour(key, button, note)
+            self._warn_once_about_restart()
+            return
+
+        colour = ask_for_colour(self, self.edit.value(key))
+        if colour is None:
+            box.blockSignals(True)
+            box.setChecked(True)
+            box.blockSignals(False)
+            return
+        self.edit.set_value(key, colour)
+        self._show_colour(key, button, note)
+        self._warn_once_about_restart()
+
+    def _choose_colour(self, key: str, button: QPushButton, note: QLabel) -> None:
+        """Ask for a colour and hold it, leaving it alone if the dialog is given up.
+
+        Parameters
+        ----------
+        key : str
+            The preference the control edits.
+        button : PyQt6.QtWidgets.QPushButton
+            The button that was pressed.
+        note : PyQt6.QtWidgets.QLabel
+            The warning under it.
+        """
+
+        colour = ask_for_colour(self, self.edit.value(key))
+        if colour is None:
+            return
+        self.edit.set_value(key, colour)
+        self._show_colour(key, button, note)
+        self._warn_once_about_restart()
+
+    def _show_colour(self, key: str, button: QPushButton, note: QLabel) -> None:
+        """Show what a colour is worth, and warn where the warning is due.
+
+        The swatch is an icon built here rather than a style sheet, which a form
+        may not carry and which could not follow the theme anyway.  The warning
+        is raised for the inks the themes themselves write in: such a colour
+        looks right in the scheme it was chosen in, is wrong in the other, and
+        *Automatic* is what the person almost certainly meant.
+
+        Parameters
+        ----------
+        key : str
+            The preference the control edits.
+        button : PyQt6.QtWidgets.QPushButton
+            The button the colour is chosen on.
+        note : PyQt6.QtWidgets.QLabel
+            The warning under it.
+        """
+
+        colour = self.edit.value(key)
+        chosen = colour != AUTOMATIC
+        button.setEnabled(chosen)
+        if chosen:
+            swatch = QPixmap(SWATCH_SIZE, SWATCH_SIZE)
+            swatch.fill(QColor(colour))
+            button.setIcon(QIcon(swatch))
+        else:
+            button.setIcon(QIcon())
+        note.setVisible(chosen and colour.lower() in THEME_INKS)
 
     def _on_choice(self, key: str, combo: QComboBox, index: int) -> None:
         """Hold a chosen value in the edit, and say a restart is coming if it is.

@@ -85,6 +85,7 @@ from PyQt6.QtCore import QPointF, QRectF, QSizeF, Qt
 from PyQt6.QtGui import QColor, QPainterPath, QPalette, QPen
 from PyQt6.QtWidgets import QGraphicsItem
 
+from masafi_simtwin import preferences
 from masafi_simtwin.documents.ink import ink_colour, paper_colour
 from masafi_simtwin.documents.label import LABEL_GAP, LABEL_SEPARATOR, Label
 
@@ -178,6 +179,11 @@ class NetItem(QGraphicsItem):
 
     #: What a name invented for one begins with.
     NAME_PREFIX: str = ''
+
+    #: Which kind of text this item's caption is, which is what decides the
+    #: typeface it is written in.  Declared here rather than asked of the class,
+    #: the way :attr:`GROUP` and :attr:`CONNECTS_TO` are.
+    ROLE: str = preferences.PLACE
 
     #: Whether the item can be turned the other way round on the sheet.  It is
     #: declared here rather than asked of the class, the way :attr:`GROUP` and
@@ -313,9 +319,26 @@ class NetItem(QGraphicsItem):
         across.
         """
 
+        self._label.style = self.appearance()
         self._label.width = self._label_width
         self._label.text = self.label_text()
         self._label.place(self.label_centre(self._label.size))
+
+    def appearance(self):
+        """Give the style the item's caption is actually written in.
+
+        The item's own style where it has one, and the application's defaults
+        for its kind of text where it has not — which is the one resolver,
+        :func:`masafi_simtwin.preferences.text_appearance`, asked here rather
+        than anywhere a caption is drawn.
+
+        Returns
+        -------
+        simtwin_core.petri_net.TextStyle
+            A complete style, its family one this machine can letter in.
+        """
+
+        return preferences.text_appearance(self.text_style, self.ROLE)
 
     @property
     def label_width(self) -> float | None:

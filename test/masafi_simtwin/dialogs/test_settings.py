@@ -6,13 +6,21 @@ import pytest
 from PyQt6.QtCore import QSettings, Qt
 from PyQt6.QtWidgets import QDialogButtonBox, QLabel
 
-from masafi_simtwin import paper
-from masafi_simtwin.dialogs.settings import THEME_VALUES, SettingsDialog
+from masafi_simtwin import fonts, paper
+from masafi_simtwin.dialogs.settings import (
+    ALIGNMENT_VALUES,
+    THEME_VALUES,
+    SettingsDialog,
+)
 from masafi_simtwin.preferences import (
+    APPEARANCE_KEYS,
     AUTOSAVE_INTERVALS,
     AUTOSAVE_KEY,
+    DEFAULT_FONT_SIZE,
+    DEFAULT_LINE_WIDTH,
     DISTANCE_UNITS,
     SURFACE_UNITS,
+    SYSTEM_FONT,
     SYSTEM_LANGUAGE,
     SYSTEM_THEME,
     TIME_UNITS,
@@ -20,11 +28,21 @@ from masafi_simtwin.preferences import (
     Preferences,
     needs_restart,
 )
+from masafi_simtwin.theme import DARK_COLORS, LIGHT_COLORS
 from masafi_simtwin.translations import LANGUAGE_NAMES, LANGUAGES
+from simtwin_core.petri_net import (
+    ALIGNMENTS,
+    AUTOMATIC,
+    MAX_FONT_SIZE,
+    MAX_LINE_WIDTH,
+    MIN_FONT_SIZE,
+    MIN_LINE_WIDTH,
+)
 
 #: The tree the form declares, parents with their children.
 CATEGORIES = {
     'Appearance': ['Language', 'Themes', 'Page'],
+    'Petri Net': ['Text Appearance', 'Line Appearance'],
     'Default Units': ['Time', 'Space'],
     'Saving': [],
 }
@@ -692,3 +710,323 @@ def test_choosing_an_interval_is_pending_until_the_dialog_is_accepted(
 
     assert preferences.value(AUTOSAVE_KEY) == 15
     assert dialog.written == (AUTOSAVE_KEY,)
+
+
+# ----------------------------------------------------------------------
+# How a net is drawn: the lettering
+# ----------------------------------------------------------------------
+
+
+@pytest.fixture
+def chosen_colour(monkeypatch):
+    """Answer the colour dialog instead of opening one.
+
+    A modal colour dialog in a test run is a test run that stops, so the asking
+    is one function and this is what stands in for it.
+
+    Parameters
+    ----------
+    monkeypatch : pytest.MonkeyPatch
+        The patcher.
+
+    Returns
+    -------
+    list
+        One entry per colour asked for; append a colour to it to be given that
+        colour next, the default being a plain red.
+    """
+
+    answers = ['#aa0000']
+    monkeypatch.setattr(
+        'masafi_simtwin.dialogs.settings.ask_for_colour',
+        lambda parent, current: answers[-1],
+    )
+    return answers
+
+
+def test_the_font_combo_is_filled_from_this_machine(dialog):
+    """Built here rather than in the form: a different desk, a different list."""
+
+    combo = dialog.font_combo
+
+    assert combo.count() > 1
+    assert combo.itemData(0) == SYSTEM_FONT
+    assert fonts.default_family() in combo.itemText(0)
+
+
+def test_a_form_that_fills_the_font_combo_is_refused(qtbot, preferences, monkeypatch):
+    """The entries come from the machine, so the form has to leave it empty."""
+
+    original = SettingsDialog._bind_fonts
+
+    def fill_it_first(self):
+        self.font_combo.addItem('Nimbus Sans', 'Nimbus Sans')
+        original(self)
+
+    monkeypatch.setattr(SettingsDialog, '_bind_fonts', fill_it_first)
+
+    with pytest.raises(RuntimeError, match='font_combo'):
+        SettingsDialog(preferences=preferences)
+
+
+def test_the_font_combo_opens_on_what_the_machine_offers(dialog):
+    """Which is what leaving ``petri_net/font`` unset means."""
+
+    assert dialog.font_combo.currentData() == SYSTEM_FONT
+
+
+def test_a_stored_font_this_machine_lacks_is_still_shown(qtbot, preferences):
+    """A settings file carried from another desk says what is in force."""
+
+    preferences.set_value('petri_net/font', 'No Such Font At All')
+    dialog = SettingsDialog(preferences=preferences)
+    qtbot.addWidget(dialog)
+
+    assert dialog.font_combo.currentData() == 'No Such Font At All'
+
+
+def test_the_size_is_in_millimetres_with_its_points_beside_it(dialog):
+    """Millimetres are what the sheet is measured in; points are what a font is."""
+
+    assert dialog.font_size_spin.value() == DEFAULT_FONT_SIZE
+    assert dialog.font_size_spin.minimum() == MIN_FONT_SIZE
+    assert dialog.font_size_spin.maximum() == MAX_FONT_SIZE
+    assert 'pt' in dialog.font_size_points.text()
+    assert '6.8' in dialog.font_size_points.text()
+
+
+def test_the_points_follow_the_millimetres(dialog):
+    """So the two never disagree about the same size."""
+
+    dialog.font_size_spin.setValue(10.0)
+
+    assert '28.3' in dialog.font_size_points.text()
+
+
+def test_choosing_a_size_is_pending_until_the_dialog_is_accepted(dialog, preferences):
+    """The spin box writes to the edit, which is not the store."""
+
+    dialog.font_size_spin.setValue(4.0)
+
+    assert dialog.edit.value('petri_net/font_size') == 4.0
+    assert preferences.value('petri_net/font_size') == DEFAULT_FONT_SIZE
+
+    dialog.accept()
+
+    assert preferences.value('petri_net/font_size') == 4.0
+
+
+def test_the_alignment_entries_carry_the_values_they_stand_for(dialog):
+    """The entries of the form are paired with the core's names by order."""
+
+    combo = dialog.alignment_combo
+    values = [combo.itemData(i) for i in range(combo.count())]
+
+    assert values == list(ALIGNMENT_VALUES) == list(ALIGNMENTS)
+    assert combo.currentData() == 'left'
+
+
+#: Each typeface: the kind of text, and the two check boxes that say how it is
+#: written.  A guard and a time function do not exist yet and are stored anyway.
+TYPEFACE_CHECKS = [
+    ('place', 'place_bold_check', 'place_italic_check'),
+    ('transition', 'transition_bold_check', 'transition_italic_check'),
+    ('guard', 'guard_bold_check', 'guard_italic_check'),
+    ('time_function', 'time_function_bold_check', 'time_function_italic_check'),
+]
+
+
+@pytest.mark.parametrize(
+    ('role', 'bold', 'italic'), TYPEFACE_CHECKS, ids=[row[0] for row in TYPEFACE_CHECKS]
+)
+def test_every_kind_of_text_has_a_bold_and_an_italic(dialog, role, bold, italic):
+    """Two check boxes are the typeface, as agreed."""
+
+    assert getattr(dialog, bold).isChecked() is BY_KEY[f'petri_net/{role}_bold'].default
+    assert getattr(dialog, italic).isChecked() is BY_KEY[f'petri_net/{role}_italic'].default
+
+
+def test_a_guard_and_a_time_function_start_italic_and_nothing_else_does(dialog):
+    """Which is what was decided, and is visible on the page."""
+
+    assert dialog.guard_italic_check.isChecked()
+    assert dialog.time_function_italic_check.isChecked()
+    assert not dialog.place_italic_check.isChecked()
+    assert not dialog.transition_italic_check.isChecked()
+
+
+def test_ticking_a_typeface_is_pending_until_the_dialog_is_accepted(dialog, preferences):
+    """The check box writes to the edit, which is not the store."""
+
+    dialog.place_bold_check.setChecked(True)
+
+    assert dialog.edit.value('petri_net/place_bold') is True
+    assert preferences.value('petri_net/place_bold') is False
+
+    dialog.accept()
+
+    assert preferences.value('petri_net/place_bold') is True
+
+
+# ----------------------------------------------------------------------
+# The two colours
+# ----------------------------------------------------------------------
+
+#: Each colour: its preference, the *Automatic* box, the button and the note.
+COLOUR_CONTROLS = [
+    ('petri_net/text_colour', 'text_colour_automatic', 'text_colour_button', 'text_colour_note'),
+    ('petri_net/line_colour', 'line_colour_automatic', 'line_colour_button', 'line_colour_note'),
+]
+
+#: The same, named for the test report.
+COLOUR_IDS = [key.rsplit('/', 1)[1] for key, *_rest in COLOUR_CONTROLS]
+
+
+@pytest.mark.parametrize(
+    ('key', 'automatic', 'button', 'note'), COLOUR_CONTROLS, ids=COLOUR_IDS
+)
+def test_a_colour_starts_automatic_with_nothing_to_choose(dialog, key, automatic, button, note):
+    """Only *Automatic* reads on both schemes, so it is where a colour starts."""
+
+    assert getattr(dialog, automatic).isChecked()
+    assert not getattr(dialog, button).isEnabled()
+    assert getattr(dialog, note).isHidden()
+
+
+@pytest.mark.parametrize(
+    ('key', 'automatic', 'button', 'note'), COLOUR_CONTROLS, ids=COLOUR_IDS
+)
+def test_unticking_automatic_asks_for_a_colour(
+    dialog, preferences, chosen_colour, key, automatic, button, note
+):
+    """The button is what a colour is chosen on, so it is what unticking opens."""
+
+    getattr(dialog, automatic).setChecked(False)
+
+    assert getattr(dialog, button).isEnabled()
+    assert dialog.edit.value(key) == '#aa0000'
+
+    dialog.accept()
+
+    assert preferences.value(key) == '#aa0000'
+
+
+@pytest.mark.parametrize(
+    ('key', 'automatic', 'button', 'note'), COLOUR_CONTROLS, ids=COLOUR_IDS
+)
+def test_ticking_automatic_again_gives_the_colour_up(
+    dialog, preferences, chosen_colour, key, automatic, button, note
+):
+    """Automatic is a value like any other, and it is the one that follows the theme."""
+
+    getattr(dialog, automatic).setChecked(False)
+    getattr(dialog, automatic).setChecked(True)
+
+    assert dialog.edit.value(key) == AUTOMATIC
+    assert not getattr(dialog, button).isEnabled()
+
+
+@pytest.mark.parametrize(
+    ('key', 'automatic', 'button', 'note'), COLOUR_CONTROLS, ids=COLOUR_IDS
+)
+def test_a_colour_that_is_the_theme_s_own_ink_is_warned_about(
+    dialog, chosen_colour, key, automatic, button, note
+):
+    """It would not change with the theme, and *Automatic* is what would.
+
+    The warning is asked after by :meth:`QWidget.isHidden` rather than by
+    ``isVisibleTo``: every page but the one the dialog opened on is hidden by
+    the stack it is in, so ``isVisibleTo`` answers *no* for everything on them
+    whatever the label itself was told.
+    """
+
+    chosen_colour.append(LIGHT_COLORS.text)
+    getattr(dialog, automatic).setChecked(False)
+
+    assert not getattr(dialog, note).isHidden()
+    assert getattr(dialog, note).property('error') is True
+
+    chosen_colour.append(DARK_COLORS.text)
+    getattr(dialog, button).click()
+
+    assert not getattr(dialog, note).isHidden()
+
+    chosen_colour.append('#aa0000')
+    getattr(dialog, button).click()
+
+    assert getattr(dialog, note).isHidden()
+
+
+@pytest.mark.parametrize(
+    ('key', 'automatic', 'button', 'note'), COLOUR_CONTROLS, ids=COLOUR_IDS
+)
+def test_giving_the_colour_dialog_up_changes_nothing(
+    dialog, monkeypatch, key, automatic, button, note
+):
+    """Cancelling the colour dialog is not choosing a colour."""
+
+    monkeypatch.setattr(
+        'masafi_simtwin.dialogs.settings.ask_for_colour', lambda parent, current: None
+    )
+    getattr(dialog, automatic).setChecked(False)
+
+    assert dialog.edit.value(key) == AUTOMATIC
+    assert getattr(dialog, automatic).isChecked()
+
+
+# ----------------------------------------------------------------------
+# The lines, and what the whole family asks of the application
+# ----------------------------------------------------------------------
+
+
+def test_the_width_is_in_millimetres_within_the_limits_of_the_core(dialog):
+    """0.1 to 3 mm, as agreed, and what every item is drawn with today."""
+
+    assert dialog.line_width_spin.value() == DEFAULT_LINE_WIDTH
+    assert dialog.line_width_spin.minimum() == MIN_LINE_WIDTH
+    assert dialog.line_width_spin.maximum() == MAX_LINE_WIDTH
+    assert 'pt' in dialog.line_width_points.text()
+
+
+def test_choosing_a_width_is_pending_until_the_dialog_is_accepted(dialog, preferences):
+    """The spin box writes to the edit, which is not the store."""
+
+    dialog.line_width_spin.setValue(1.5)
+
+    assert preferences.value('petri_net/line_width') == DEFAULT_LINE_WIDTH
+
+    dialog.accept()
+
+    assert preferences.value('petri_net/line_width') == 1.5
+
+
+def test_the_two_pages_hold_their_own_controls(dialog):
+    """The lettering on one page, the drawing on the other."""
+
+    text_page = dialog.page_of(category(dialog, 'Text Appearance'))
+    line_page = dialog.page_of(category(dialog, 'Line Appearance'))
+
+    for name in ('font_combo', 'font_size_spin', 'alignment_combo', 'place_bold_check'):
+        assert getattr(dialog, name).parent() is text_page
+    for name in ('line_width_spin', 'line_colour_button'):
+        assert getattr(dialog, name).parent() is line_page
+
+
+def test_nothing_about_how_a_net_is_drawn_asks_for_a_restart(
+    dialog, preferences, chosen_colour, silent_warning
+):
+    """A sheet is drawn again where it stands, as it is ruled again where it stands."""
+
+    dialog.font_size_spin.setValue(5.0)
+    dialog.place_bold_check.setChecked(True)
+    dialog.alignment_combo.setCurrentIndex(dialog.alignment_combo.findData('center'))
+    dialog.text_colour_automatic.setChecked(False)
+    dialog.line_width_spin.setValue(1.0)
+
+    assert not dialog.edit.needs_restart
+    assert silent_warning == []
+
+    dialog.accept()
+
+    assert set(dialog.written) <= set(APPEARANCE_KEYS)
+    assert not needs_restart(dialog.written)

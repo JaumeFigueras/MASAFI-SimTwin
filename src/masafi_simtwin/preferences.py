@@ -37,20 +37,51 @@ One preference is not a value but a question put to the machine:
 ``appearance/page_size`` is unset by default, and unset means *whatever this
 machine prints on*.  :func:`page` is where the two page preferences and the
 machine's own answer are resolved into the one thing every caller wants — a
-page in millimetres, the right way round.
+page in millimetres, the right way round.  ``petri_net/font`` is the same idiom
+for lettering: unset means whatever this machine offers, which
+:mod:`~masafi_simtwin.fonts` answers.
+
+**How a net is drawn** is the ``petri_net`` group, and it is the application's
+half of the styles in :mod:`simtwin_core.petri_net`: an item with no style of
+its own is drawn the way these say.  :func:`text_appearance` and
+:func:`line_appearance` are where the several keys and an item's own style
+become the one thing a painter wants — a complete ``TextStyle`` or
+``LineStyle``.  The defaults are kept per machine, which is decision *c*; a
+model that carries its own is in ``FUTURE.md``.
+
+Two of these are the first preferences that are not a string or a whole number,
+and they are why a :class:`Preference` can say more than a list of ``choices``:
+a size is any number between two limits and a colour is *Automatic* or
+``#rrggbb``, neither of which is a list.  :attr:`Preference.allows` is that
+question, :func:`within` builds it for a range, and the colour asks the core's
+own :func:`~simtwin_core.petri_net.is_colour`, so the settings file and a
+document are held to one rule.
 """
 
 from __future__ import annotations
 
+import math
 import uuid
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from PyQt6.QtCore import QSettings, QSizeF
 
-from masafi_simtwin import paper
+from masafi_simtwin import fonts, paper
 from masafi_simtwin.theme import ColorScheme
 from masafi_simtwin.translations import LANGUAGES
+from simtwin_core.petri_net import (
+    ALIGNMENTS,
+    AUTOMATIC,
+    MAX_FONT_SIZE,
+    MAX_LINE_WIDTH,
+    MIN_FONT_SIZE,
+    MIN_LINE_WIDTH,
+    LineStyle,
+    TextStyle,
+    is_colour,
+)
 
 #: The value of ``appearance/language`` that means "whatever the desktop says".
 SYSTEM_LANGUAGE = ''
@@ -62,6 +93,12 @@ SYSTEM_THEME = 'system'
 #: prints on".  It is the default, so a machine that has never been told keeps
 #: following its own printer rather than a size written down here once.
 SYSTEM_PAGE_SIZE = ''
+
+#: The value of ``petri_net/font`` that means "whatever this machine offers".
+#: It is the default, for the reason the page size's is: a machine that has
+#: never been told letters in what it has rather than in a name written down
+#: here once, which the next machine may not have at all.
+SYSTEM_FONT = ''
 
 
 @dataclass(frozen=True)
@@ -86,6 +123,10 @@ class Preference:
         Whether the application has to be started again before a change to it
         takes effect.  The settings dialog says so when such a preference is
         changed, and offers the restart once it is closed.
+    allows : callable, optional
+        What it is allowed to be when that cannot be written as a list — a
+        length between two limits, a colour.  It is asked of every value read
+        and of every value written, exactly as ``choices`` is.
     """
 
     key: str
@@ -93,6 +134,7 @@ class Preference:
     type: type
     choices: tuple[Any, ...] = field(default=())
     restart: bool = False
+    allows: Callable[[Any], bool] | None = None
 
     def holds(self, value: Any) -> bool:
         """Say whether a value is one this preference is allowed to take.
@@ -105,11 +147,80 @@ class Preference:
         Returns
         -------
         bool
-            True when there are no choices, or the value is one of them.
+            True when it is one of the ``choices`` — or there are none — and
+            ``allows`` says so too.
         """
 
-        return not self.choices or value in self.choices
+        if self.choices and value not in self.choices:
+            return False
+        return self.allows is None or self.allows(value)
 
+
+def within(low: float, high: float) -> Callable[[Any], bool]:
+    """Build the question *is this a length between these two?*
+
+    It refuses what is **not a number** rather than comparing it, which is not
+    pedantry: a hand-edited ``font_size=2,4`` is read by Qt as the list
+    ``[2.0, 4.0]`` rather than refused, and a ``bool`` is an ``int`` in Python
+    while being no kind of size.
+
+    Parameters
+    ----------
+    low, high : float
+        The smallest and the largest it may be, both allowed.
+
+    Returns
+    -------
+    callable
+        The question, to be given to :attr:`Preference.allows`.
+    """
+
+    def allowed(value: Any) -> bool:
+        return (
+            not isinstance(value, bool)
+            and isinstance(value, (int, float))
+            and math.isfinite(value)
+            and low <= value <= high
+        )
+
+    return allowed
+
+
+#: How large a net's lettering is by default, in millimetres, measured as a word
+#: processor measures it: the font's own em size, not the height of a line.  It
+#: is the size at which today's captions come out the height they are now — the
+#: 2.8 mm line they are laid out on, divided by what the font makes of an em —
+#: so that nothing changes size until it is chosen to.  Agreed with Jaume, to be
+#: revisited once a net has been printed.
+DEFAULT_FONT_SIZE = 2.4
+
+#: How thick a net's lines are drawn by default, in millimetres, which is
+#: ``documents.net_item.ITEM_PEN``: what every item is drawn with today.
+DEFAULT_LINE_WIDTH = 0.3
+
+#: The kinds of text a net holds, each of which has a typeface of its own.  A
+#: guard and a time function do not exist yet; what they will be written in is
+#: decided, and is stored from now so that it is there when they do.
+PLACE = 'place'
+TRANSITION = 'transition'
+ARC = 'arc'
+GUARD = 'guard'
+TIME_FUNCTION = 'time_function'
+
+#: Which preferences say the typeface of each kind of text, and ``None`` for the
+#: one that is never anything but plain: an arc's weight takes the font, the size
+#: and the colour of everything else and is never bold, italic or aligned, which
+#: is the rule :class:`~simtwin_core.petri_net.ArcData` keeps as well.
+TYPEFACES: dict[str, tuple[str, str] | None] = {
+    PLACE: ('petri_net/place_bold', 'petri_net/place_italic'),
+    TRANSITION: ('petri_net/transition_bold', 'petri_net/transition_italic'),
+    GUARD: ('petri_net/guard_bold', 'petri_net/guard_italic'),
+    TIME_FUNCTION: ('petri_net/time_function_bold', 'petri_net/time_function_italic'),
+    ARC: None,
+}
+
+#: Every kind of text there are defaults for.
+ROLES: tuple[str, ...] = tuple(TYPEFACES)
 
 #: The time units a quantity may be shown in, smallest first.  The values are
 #: the symbols, kept to ASCII so that the settings file needs no encoding of its
@@ -153,6 +264,30 @@ PREFERENCES: tuple[Preference, ...] = (
     Preference('appearance/page_size', SYSTEM_PAGE_SIZE, str),
     Preference(
         'appearance/page_orientation', paper.PORTRAIT, str, paper.ORIENTATIONS
+    ),
+    Preference('petri_net/font', SYSTEM_FONT, str),
+    Preference(
+        'petri_net/font_size',
+        DEFAULT_FONT_SIZE,
+        float,
+        allows=within(MIN_FONT_SIZE, MAX_FONT_SIZE),
+    ),
+    Preference('petri_net/alignment', 'left', str, ALIGNMENTS),
+    Preference('petri_net/text_colour', AUTOMATIC, str, allows=is_colour),
+    Preference('petri_net/place_bold', False, bool),
+    Preference('petri_net/place_italic', False, bool),
+    Preference('petri_net/transition_bold', False, bool),
+    Preference('petri_net/transition_italic', False, bool),
+    Preference('petri_net/guard_bold', False, bool),
+    Preference('petri_net/guard_italic', True, bool),
+    Preference('petri_net/time_function_bold', False, bool),
+    Preference('petri_net/time_function_italic', True, bool),
+    Preference('petri_net/line_colour', AUTOMATIC, str, allows=is_colour),
+    Preference(
+        'petri_net/line_width',
+        DEFAULT_LINE_WIDTH,
+        float,
+        allows=within(MIN_LINE_WIDTH, MAX_LINE_WIDTH),
     ),
     Preference('units/time', 's', str, TIME_UNITS),
     Preference('units/distance', 'm', str, DISTANCE_UNITS),
@@ -220,6 +355,119 @@ def page(settings: Preferences | None = None) -> QSizeF:
 #: The preferences that decide what :func:`page` gives back, so that a caller
 #: watching for a change knows which keys to watch.
 PAGE_KEYS: tuple[str, ...] = ('appearance/page_size', 'appearance/page_orientation')
+
+#: The preferences that say how a net is drawn, so that a caller watching for a
+#: change — the window, which draws every open sheet again — knows which keys to
+#: watch.  None of them waits for a restart: a setting whose effect can be seen
+#: at once is a setting the user can judge.
+APPEARANCE_KEYS: tuple[str, ...] = tuple(
+    declaration.key
+    for declaration in PREFERENCES
+    if declaration.key.startswith('petri_net/')
+)
+
+
+def text_appearance(
+    style: TextStyle | None,
+    role: str = PLACE,
+    settings: Preferences | None = None,
+) -> TextStyle:
+    """Give the style a piece of a net's text is actually written in.
+
+    This is the one place the application's defaults and an item's own style
+    come together, so that everything which draws asks one question and nothing
+    has to know which half of the answer came from where.
+
+    An item **with a style of its own** is written in it: the defaults are what
+    an item without one follows, and nothing more.  The one thing that can still
+    stand in the way is a **font this machine has not got** — a net drawn on
+    another desk — and that is fallen back on silently, as agreed: the net opens
+    and is legible rather than refusing or complaining at every repaint.
+
+    Parameters
+    ----------
+    style : simtwin_core.petri_net.TextStyle, optional
+        The item's own style, or ``None`` to follow the defaults.
+    role : str, optional
+        Which kind of text it is, one of :data:`ROLES`.  It decides the typeface
+        alone; :data:`ARC` is never bold, italic or aligned, whatever is stored.
+    settings : Preferences, optional
+        Where to read the defaults from.  The application's own are used when it
+        is omitted.
+
+    Returns
+    -------
+    simtwin_core.petri_net.TextStyle
+        A complete style, its font one this machine can letter in.
+
+    Raises
+    ------
+    ValueError
+        When the role is not one there are defaults for, which is a mistyped
+        role rather than a kind of text with no typeface.
+    """
+
+    if role not in TYPEFACES:
+        raise ValueError(f'{role!r} is not a kind of text there are defaults for: {ROLES}')
+
+    if style is not None:
+        if fonts.installed(style.font):
+            return style
+        return replace(style, font=fonts.default_family())
+
+    store = settings if settings is not None else Preferences()
+    font = store.value('petri_net/font')
+    if not fonts.installed(font):
+        font = fonts.default_family()
+
+    typeface = TYPEFACES[role]
+    if typeface is None:
+        bold, italic, alignment = False, False, 'left'
+    else:
+        bold = store.value(typeface[0])
+        italic = store.value(typeface[1])
+        alignment = store.value('petri_net/alignment')
+
+    return TextStyle(
+        font,
+        store.value('petri_net/font_size'),
+        bold,
+        italic,
+        alignment,
+        store.value('petri_net/text_colour'),
+    )
+
+
+def line_appearance(
+    style: LineStyle | None, settings: Preferences | None = None
+) -> LineStyle:
+    """Give the style a piece of a net is actually drawn with.
+
+    The line half of :func:`text_appearance`, and simpler: there is nothing in a
+    line that the machine can fail to provide, so an item's own style is the
+    whole answer whenever it has one.
+
+    Parameters
+    ----------
+    style : simtwin_core.petri_net.LineStyle, optional
+        The item's own style, or ``None`` to follow the defaults.
+    settings : Preferences, optional
+        Where to read the defaults from.  The application's own are used when it
+        is omitted.
+
+    Returns
+    -------
+    simtwin_core.petri_net.LineStyle
+        A complete style.
+    """
+
+    if style is not None:
+        return style
+
+    store = settings if settings is not None else Preferences()
+    return LineStyle(
+        store.value('petri_net/line_colour'), store.value('petri_net/line_width')
+    )
 
 
 #: Where the identifier of this installation is kept.  It is not a

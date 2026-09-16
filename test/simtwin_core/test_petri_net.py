@@ -18,6 +18,7 @@ from simtwin_core.petri_net import (
     PlaceData,
     TextStyle,
     TransitionData,
+    is_colour,
     name_problem,
 )
 
@@ -450,6 +451,24 @@ def test_a_line_style_that_is_not_one_is_refused(fields):
 
     with pytest.raises(InvalidNet):
         LineStyle(**{'colour': '#000000', 'width': 0.3, **fields})
+
+
+def test_what_counts_as_a_colour_is_written_down_once():
+    """The application asks of a preference what a style asks of a field.
+
+    The defaults live in the shell, where ``QSettings`` is, and the rule they
+    have to keep lives here with the styles they fill in, so a colour a settings
+    file holds and a colour a document holds cannot come to mean two things.
+    """
+
+    assert is_colour(AUTOMATIC)
+    assert is_colour('#aa00ff')
+    assert is_colour('#AA00FF')
+    assert not is_colour('red')
+    assert not is_colour('#12345')
+    assert not is_colour('')
+    assert not is_colour(None)
+    assert not is_colour(0)
 
 
 def test_every_item_follows_the_defaults_unless_it_has_a_style_of_its_own():

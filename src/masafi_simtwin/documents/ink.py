@@ -4,8 +4,16 @@ A scene is **painted** rather than styled, so everything drawn on the sheet take
 its colours from the *palette* — one rule that reads on both schemes — and its
 lettering from a **path** rather than from a font drawn with a pen: the scene is
 measured in millimetres and a font is measured in points, so a path scaled to a
-height in millimetres is the same size on the paper at every zoom and on every
+size in millimetres is the same size on the paper at every zoom and on every
 machine.
+
+**A block of text is lettered in a style**, which is a
+:class:`~simtwin_core.petri_net.TextStyle` already resolved — the family, the
+size of its em in millimetres, the typeface, the alignment and the colour, with
+nothing left to look up.  Resolving one is
+:func:`masafi_simtwin.preferences.text_appearance`, and it is the *owner* of a
+caption that does it: this module is what a painter needs and nothing else, so
+it reads no preferences of its own.
 
 There are two kinds of lettering, and the difference matters.
 :func:`glyph_path` scales one piece of text so that **its own ink** is the height
@@ -14,6 +22,10 @@ tokens — and exactly what a block of several lines must not have, since a line
 with a ``g`` in it would then come out smaller than a line without one.
 :func:`text_block` scales the **font's own line height**, once, for the whole
 block, and wraps it to a width.
+
+**The size is the font's em, as a word processor measures it**, and the line it
+makes is the font's own business: :func:`line_height` is what a line of a style
+comes to, and two families at one size letter lines of different heights.
 
 **Both are filled by the winding rule.**  A path is filled odd-even unless it is
 told otherwise, and many fonts — Cantarell, the GNOME default, among them — draw
@@ -41,11 +53,14 @@ from PyQt6.QtGui import (
     QTransform,
 )
 
+from simtwin_core.petri_net import AUTOMATIC
 
-#: How tall one line of a label is, in millimetres — the font's whole line
-#: height, ascender to descender and the leading between two lines, so every
-#: line of every label is the same size whatever letters happen to be in it.
-LABEL_LINE_HEIGHT = 2.8
+#: How many units of a font one em is measured in while a block is laid out.
+#: A font is asked for at this pixel size and the whole layout is scaled from it,
+#: so the numbers a font gives back are integers big enough that rounding them
+#: costs nothing: a size in millimetres is a fraction of a pixel at any size a
+#: person would letter a net in.
+FONT_UNITS = 1000
 
 #: How wide a label may grow, in millimetres, before it goes onto another line.
 #: Three places across: wide enough for a few words, narrow enough that a box
@@ -65,6 +80,51 @@ HANDLE_SIZE = 0.7
 #: smaller is a change to the picture and not to the aiming, which is why the
 #: two are separate numbers.
 HANDLE_GRAB = 1.3
+
+
+def font_of(style) -> QFont:
+    """Build the font a style is lettered in.
+
+    Parameters
+    ----------
+    style : simtwin_core.petri_net.TextStyle
+        The style, already resolved: its family is one this machine has.
+
+    Returns
+    -------
+    PyQt6.QtGui.QFont
+        The font, at :data:`FONT_UNITS` to the em, so that everything measured
+        from it is scaled by one number.
+    """
+
+    font = QFont(style.font)
+    font.setPixelSize(FONT_UNITS)
+    font.setBold(style.bold)
+    font.setItalic(style.italic)
+    return font
+
+
+def line_height(style) -> float:
+    """Give how tall one line of a style is, in millimetres.
+
+    The **size** of a style is the font's em, which is how a size is chosen
+    everywhere else in the world; how tall a *line* of it is — ascender to
+    descender, with the leading between two lines — is the font's own business,
+    so two families at one size letter lines of different heights.
+
+    Parameters
+    ----------
+    style : simtwin_core.petri_net.TextStyle
+        The style.
+
+    Returns
+    -------
+    float
+        Millimetres.
+    """
+
+    return QFontMetricsF(font_of(style)).height() * style.size / FONT_UNITS
+
 
 def label_lines(text: str, width: float, metrics: QFontMetricsF, scale: float) -> list[str]:
     """Break a piece of text into the lines a box that wide holds.
@@ -117,9 +177,66 @@ def label_lines(text: str, width: float, metrics: QFontMetricsF, scale: float) -
     return lines
 
 
-def text_block(
-    text: str, width: float, line_height: float = LABEL_LINE_HEIGHT, fit: bool = True
-):
+def _justified(
+    glyphs: QPainterPath, line: str, baseline: float, room: float, font, metrics
+) -> None:
+    """Write one line with its words spread to both sides of the box.
+
+    Parameters
+    ----------
+    glyphs : PyQt6.QtGui.QPainterPath
+        What to add the line to.
+    line : str
+        The line, whose words are parted by single spaces.
+    baseline : float
+        Where the line sits, in font units.
+    room : float
+        How wide the box is, in font units.
+    font : PyQt6.QtGui.QFont
+        The font.
+    metrics : PyQt6.QtGui.QFontMetricsF
+        Its metrics.
+    """
+
+    words = line.split(' ')
+    space = metrics.horizontalAdvance(' ')
+    written = sum(metrics.horizontalAdvance(word) for word in words)
+    slack = (room - written - space * (len(words) - 1)) / (len(words) - 1)
+    along = 0.0
+    for word in words:
+        glyphs.addText(along, baseline, font, word)
+        along += metrics.horizontalAdvance(word) + space + slack
+
+
+def _laid(line: str, alignment: str, room: float, metrics) -> float:
+    """Say where a line starts, by the way the block is laid against its sides.
+
+    Parameters
+    ----------
+    line : str
+        The line.
+    alignment : str
+        One of :data:`~simtwin_core.petri_net.ALIGNMENTS`.
+    room : float
+        How wide the box is, in font units.
+    metrics : PyQt6.QtGui.QFontMetricsF
+        The font's metrics.
+
+    Returns
+    -------
+    float
+        Where the line starts, in font units.
+    """
+
+    slack = room - metrics.horizontalAdvance(line)
+    if alignment == 'right':
+        return slack
+    if alignment == 'center':
+        return slack / 2.0
+    return 0.0
+
+
+def text_block(text: str, width: float, style, fit: bool = True):
     """Lay a piece of text out as a path of however many lines it needs.
 
     A block of text is not :func:`glyph_path`: that scales one piece of text so
@@ -132,14 +249,21 @@ def text_block(
     The path is centred on the middle of the **box** rather than of the ink, so
     where a label sits does not depend on which letters are in it.
 
+    **Justified stretches every line but the last**, which is laid against the
+    left — as it is in any editor, a last line spread across the box being what
+    nobody wants.  A line of one word cannot be stretched and is left where it
+    starts.
+
     Parameters
     ----------
     text : str
         What to write.
     width : float
         How wide it may be, in millimetres, before it goes onto another line.
-    line_height : float, optional
-        How tall one line is, in millimetres.
+    style : simtwin_core.petri_net.TextStyle
+        What to write it in: the family, the size of the em in millimetres, the
+        typeface and the alignment.  Already resolved, so nothing here reads a
+        preference.
     fit : bool, optional
         Whether the box is as wide as its widest line, which is what a box
         nobody has resized is, or as wide as ``width`` — what a box a person has
@@ -155,30 +279,39 @@ def text_block(
         nothing.
     """
 
-    font = QFont()
+    font = font_of(style)
     metrics = QFontMetricsF(font)
     if metrics.height() <= 0.0:  # pragma: no cover - a font always has a height
         return QPainterPath(), QSizeF(0.0, 0.0)
 
-    scale = line_height / metrics.height()
+    scale = style.size / FONT_UNITS
+    tall = metrics.height() * scale
     lines = label_lines(text, width, metrics, scale)
     if not lines:
         return QPainterPath(), QSizeF(0.0, 0.0)
 
     widest = max(metrics.horizontalAdvance(line) for line in lines) * scale
-    box = QSizeF(widest if fit else max(width, widest), len(lines) * line_height)
+    box = QSizeF(widest if fit else max(width, widest), len(lines) * tall)
+    room = box.width() / scale
 
     glyphs = QPainterPath()
     for row, line in enumerate(lines):
-        along = (box.width() / scale - metrics.horizontalAdvance(line)) / 2.0
-        glyphs.addText(along, metrics.ascent() + row * metrics.height(), font, line)
+        baseline = metrics.ascent() + row * metrics.height()
+        last = row == len(lines) - 1
+        if style.alignment == 'justified' and not last and ' ' in line:
+            _justified(glyphs, line, baseline, room, font, metrics)
+            continue
+        alignment = 'left' if style.alignment == 'justified' else style.alignment
+        glyphs.addText(_laid(line, alignment, room, metrics), baseline, font, line)
     glyphs = QTransform().scale(scale, scale).map(glyphs)
     glyphs.translate(-box.width() / 2.0, -box.height() / 2.0)
     glyphs.setFillRule(Qt.FillRule.WindingFill)
     return glyphs, box
 
 
-def glyph_path(text: str, height: float, width: float | None = None) -> QPainterPath:
+def glyph_path(
+    text: str, height: float, width: float | None = None, family: str = ''
+) -> QPainterPath:
     """Build a piece of text as a path a height in millimetres, centred on nought.
 
     What is written on the sheet — an arc's weight, a place's tokens — is a
@@ -196,6 +329,11 @@ def glyph_path(text: str, height: float, width: float | None = None) -> QPainter
     width : float, optional
         How wide it may be.  Text that would be wider at that height is
         narrowed to it instead, keeping its proportions.
+    family : str, optional
+        What to letter it in.  A place's tokens take the family its caption is
+        written in — at a size and a typeface of the number's own, a count
+        inside a circle not being a caption — and nothing else is asked of the
+        style.  The application's own font is used when it is left out.
 
     Returns
     -------
@@ -205,7 +343,7 @@ def glyph_path(text: str, height: float, width: float | None = None) -> QPainter
     """
 
     glyphs = QPainterPath()
-    glyphs.addText(0.0, 0.0, QFont(), text)
+    glyphs.addText(0.0, 0.0, QFont(family) if family else QFont(), text)
     drawn = glyphs.boundingRect()
     if drawn.isEmpty():
         return QPainterPath()
@@ -219,7 +357,7 @@ def glyph_path(text: str, height: float, width: float | None = None) -> QPainter
     return lettering
 
 
-def ink_colour(selected: bool, option) -> QColor:
+def ink_colour(selected: bool, option, colour: str = AUTOMATIC) -> QColor:
     """Give the colour a thing of the net is drawn in.
 
     ``Text`` is the ink of the sheet and ``Link`` is the accent — where
@@ -227,6 +365,10 @@ def ink_colour(selected: bool, option) -> QColor:
     the pale wash behind selected text — so a selected thing is drawn in the
     accent.  It is one rule for the items and the arcs alike, which is why it is
     a function here rather than a method of either.
+
+    **A selected thing keeps the accent whatever colour it was given**, which was
+    decided with Jaume: the selection has to be visible, and a thing drawn in its
+    own red while selected would say nothing about being in hand.
 
     Parameters
     ----------
@@ -236,6 +378,9 @@ def ink_colour(selected: bool, option) -> QColor:
         What the view knows about drawing it, its palette included.  An item has
         no widget to take a palette from, so this is where the palette comes
         from.
+    colour : str, optional
+        :data:`~simtwin_core.petri_net.AUTOMATIC`, which follows the theme, or
+        the ``#rrggbb`` the thing was given.
 
     Returns
     -------
@@ -243,8 +388,11 @@ def ink_colour(selected: bool, option) -> QColor:
         The colour.
     """
 
-    role = QPalette.ColorRole.Link if selected else QPalette.ColorRole.Text
-    return option.palette.color(role)
+    if selected:
+        return option.palette.color(QPalette.ColorRole.Link)
+    if colour != AUTOMATIC:
+        return QColor(colour)
+    return option.palette.color(QPalette.ColorRole.Text)
 
 
 def paper_colour(option) -> QColor:

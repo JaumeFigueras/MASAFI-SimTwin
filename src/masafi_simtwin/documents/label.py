@@ -122,6 +122,7 @@ class Label(QGraphicsItem):
         super().__init__(parent)
         self._text = ''
         self._width: float | None = None
+        self._style = None
         self._glyphs = QPainterPath()
         self._size = QSizeF(0.0, 0.0)
         self._asked = False
@@ -168,6 +169,25 @@ class Label(QGraphicsItem):
             self.setSelected(False)
 
     @property
+    def style(self):
+        """simtwin_core.petri_net.TextStyle, optional: What it is lettered in.
+
+        Set by its owner, which is what resolves the application's defaults
+        against the style the item was given of its own — a label is dumb, and
+        what it is written in is told to it exactly as what it says is.  A label
+        nobody has told letters nothing at all.
+        """
+
+        return self._style
+
+    @style.setter
+    def style(self, style) -> None:
+        if style == self._style:
+            return
+        self._style = style
+        self._lay_out()
+
+    @property
     def width(self) -> float | None:
         """float, optional: How wide the box has been made.
 
@@ -194,10 +214,14 @@ class Label(QGraphicsItem):
         """
 
         self.prepareGeometryChange()
-        if self._width is None:
-            self._glyphs, self._size = text_block(self._text, LABEL_WIDTH)
+        if self._style is None:
+            self._glyphs, self._size = QPainterPath(), QSizeF(0.0, 0.0)
+        elif self._width is None:
+            self._glyphs, self._size = text_block(self._text, LABEL_WIDTH, self._style)
         else:
-            self._glyphs, self._size = text_block(self._text, self._width, fit=False)
+            self._glyphs, self._size = text_block(
+                self._text, self._width, self._style, fit=False
+            )
         self.update()
 
     @property
@@ -308,7 +332,7 @@ class Label(QGraphicsItem):
 
         owner = self.parentItem()
         chosen = self.isSelected() or (owner is not None and owner.isSelected())
-        ink = ink_colour(chosen, option)
+        ink = ink_colour(chosen, option, self._style.colour)
 
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(ink)

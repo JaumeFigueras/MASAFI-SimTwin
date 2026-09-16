@@ -134,6 +134,7 @@ from PyQt6.QtCore import QCoreApplication, QLineF, QPointF, QRectF, QSizeF, Qt
 from PyQt6.QtGui import QPainterPath, QPainterPathStroker, QPen
 from PyQt6.QtWidgets import QGraphicsItem
 
+from masafi_simtwin import preferences
 from masafi_simtwin.documents.ink import (
     HANDLE_GRAB,
     HANDLE_SIZE,
@@ -1946,8 +1947,27 @@ class Arc(QGraphicsItem):
         changed — which is whenever the arc is routed or reshaped.
         """
 
+        self._label.style = self.appearance()
         self._label.text = self.label_text()
         self._label.place(self.label_centre(self._label.size))
+
+    def appearance(self):
+        """Give the style the weight is actually written in.
+
+        The arc's own style where it has one, and the application's defaults
+        otherwise.  A weight takes the family, the size and the colour of
+        everything else on the sheet and **nothing of the typeface**: it is
+        never bold, italic or aligned, which is the rule
+        :class:`~simtwin_core.petri_net.ArcData` keeps as well and which
+        :func:`~masafi_simtwin.preferences.text_appearance` holds for the arc.
+
+        Returns
+        -------
+        simtwin_core.petri_net.TextStyle
+            A complete style, its family one this machine can letter in.
+        """
+
+        return preferences.text_appearance(self.text_style, preferences.ARC)
 
     def _sheet(self) -> QRectF:
         """Give where the weight's box may be dragged: the sheet the arc is on.

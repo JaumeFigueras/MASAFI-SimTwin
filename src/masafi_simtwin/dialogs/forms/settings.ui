@@ -74,6 +74,21 @@
      </item>
      <item>
       <property name="text">
+       <string extracomment="settings category: how a Petri net is drawn">Petri Net</string>
+      </property>
+     <item>
+      <property name="text">
+       <string extracomment="settings category: the lettering of a net">Text Appearance</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string extracomment="settings category: the lines of a net">Line Appearance</string>
+      </property>
+     </item>
+     </item>
+     <item>
+      <property name="text">
        <string>Default Units</string>
       </property>
      <item>
@@ -398,6 +413,603 @@
      </item>
      <item>
       <spacer name="page_spacer">
+       <property name="orientation">
+        <enum>Qt::Orientation::Vertical</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     </layout>
+    </widget>
+    <widget class="QWidget" name="petri_net_page">
+     <layout class="QVBoxLayout" name="petri_net_layout">
+      <property name="spacing">
+       <number>12</number>
+      </property>
+     <item>
+      <widget class="QLabel" name="petri_net_heading">
+       <property name="font">
+        <font>
+         <pointsize>13</pointsize>
+         <bold>true</bold>
+        </font>
+       </property>
+       <property name="text">
+        <string notr="true">Petri Net</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <layout class="QVBoxLayout" name="petri_net_links">
+       <property name="spacing">
+        <number>6</number>
+       </property>
+      </layout>
+     </item>
+     <item>
+      <widget class="QLabel" name="petri_net_note">
+       <property name="placeholder" stdset="0">
+        <bool>true</bool>
+       </property>
+       <property name="wordWrap">
+        <bool>true</bool>
+       </property>
+       <property name="text">
+        <string extracomment="on the Petri Net page, saying what these settings are the default for">These are how a net is drawn where nothing was chosen for a place, a transition or an arc of its own. An item given an appearance of its own keeps it.</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="petri_net_spacer">
+       <property name="orientation">
+        <enum>Qt::Orientation::Vertical</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     </layout>
+    </widget>
+    <widget class="QWidget" name="text_appearance_page">
+     <layout class="QVBoxLayout" name="text_appearance_layout">
+      <property name="spacing">
+       <number>12</number>
+      </property>
+     <item>
+      <widget class="QLabel" name="text_appearance_heading">
+       <property name="font">
+        <font>
+         <pointsize>13</pointsize>
+         <bold>true</bold>
+        </font>
+       </property>
+       <property name="text">
+        <string notr="true">Text Appearance</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <layout class="QFormLayout" name="text_appearance_form">
+       <property name="fieldGrowthPolicy">
+        <enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum>
+       </property>
+       <property name="horizontalSpacing">
+        <number>12</number>
+       </property>
+       <property name="verticalSpacing">
+        <number>8</number>
+       </property>
+       <item row="0" column="0">
+        <widget class="QLabel" name="font_label">
+         <property name="text">
+          <string extracomment="label of the font chooser for a net">Font:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="1">
+        <widget class="QComboBox" name="font_combo">
+         <property name="minimumSize">
+          <size>
+           <width>220</width>
+           <height>0</height>
+          </size>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="0">
+        <widget class="QLabel" name="font_size_label">
+         <property name="text">
+          <string extracomment="label of the font size chooser for a net">Size:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="1">
+        <layout class="QHBoxLayout" name="font_size_row">
+         <property name="spacing">
+          <number>8</number>
+         </property>
+         <item>
+          <widget class="QDoubleSpinBox" name="font_size_spin">
+           <property name="decimals">
+            <number>1</number>
+           </property>
+           <property name="singleStep">
+            <double>0.1</double>
+           </property>
+           <property name="suffix">
+            <string notr="true"> mm</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="font_size_points">
+           <property name="placeholder" stdset="0">
+            <bool>true</bool>
+           </property>
+           <property name="text">
+            <string notr="true"/>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="font_size_stretch">
+           <property name="orientation">
+            <enum>Qt::Orientation::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>0</width>
+             <height>0</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </item>
+       <item row="2" column="0">
+        <widget class="QLabel" name="alignment_label">
+         <property name="text">
+          <string extracomment="label of the chooser of how a caption's lines are laid against its sides">Alignment:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="1">
+        <widget class="QComboBox" name="alignment_combo">
+         <property name="minimumSize">
+          <size>
+           <width>180</width>
+           <height>0</height>
+          </size>
+         </property>
+         <item>
+          <property name="text">
+           <string extracomment="text alignment: against the left side">Left</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string extracomment="text alignment: against the right side">Right</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string extracomment="text alignment: in the middle">Centred</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string extracomment="text alignment: every line stretched but the last">Justified</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+       <item row="3" column="0">
+        <widget class="QLabel" name="text_colour_label">
+         <property name="text">
+          <string extracomment="label of the colour chooser for a net's lettering">Colour:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="3" column="1">
+        <layout class="QHBoxLayout" name="text_colour_row">
+         <property name="spacing">
+          <number>8</number>
+         </property>
+         <item>
+          <widget class="QCheckBox" name="text_colour_automatic">
+           <property name="text">
+            <string extracomment="colour that follows the light or dark theme">Automatic</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="text_colour_button">
+           <property name="text">
+            <string extracomment="button that opens the colour chooser">Choose…</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="text_colour_stretch">
+           <property name="orientation">
+            <enum>Qt::Orientation::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>0</width>
+             <height>0</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </item>
+       <item row="4" column="1">
+        <widget class="QLabel" name="text_colour_note">
+         <property name="error" stdset="0">
+          <bool>true</bool>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+         <property name="text">
+          <string extracomment="warning under the colour chooser when the colour chosen is the theme's own ink">This colour is the one the theme itself writes in, so it will not change when the theme does. Automatic is what follows the theme.</string>
+         </property>
+        </widget>
+       </item>
+       <item row="5" column="0">
+        <widget class="QLabel" name="place_label">
+         <property name="text">
+          <string extracomment="label of the typeface of a place's caption">Place:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="5" column="1">
+        <layout class="QHBoxLayout" name="place_typeface_row">
+         <property name="spacing">
+          <number>12</number>
+         </property>
+         <item>
+          <widget class="QCheckBox" name="place_bold_check">
+           <property name="text">
+            <string extracomment="typeface: heavier than normal">Bold</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QCheckBox" name="place_italic_check">
+           <property name="text">
+            <string extracomment="typeface: sloped">Italic</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="place_typeface_stretch">
+           <property name="orientation">
+            <enum>Qt::Orientation::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>0</width>
+             <height>0</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </item>
+       <item row="6" column="0">
+        <widget class="QLabel" name="transition_label">
+         <property name="text">
+          <string extracomment="label of the typeface of a transition's caption">Transition:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="6" column="1">
+        <layout class="QHBoxLayout" name="transition_typeface_row">
+         <property name="spacing">
+          <number>12</number>
+         </property>
+         <item>
+          <widget class="QCheckBox" name="transition_bold_check">
+           <property name="text">
+            <string extracomment="typeface: heavier than normal">Bold</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QCheckBox" name="transition_italic_check">
+           <property name="text">
+            <string extracomment="typeface: sloped">Italic</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="transition_typeface_stretch">
+           <property name="orientation">
+            <enum>Qt::Orientation::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>0</width>
+             <height>0</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </item>
+       <item row="7" column="0">
+        <widget class="QLabel" name="guard_label">
+         <property name="text">
+          <string extracomment="label of the typeface of a transition's guard, which does not exist yet">Guard:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="7" column="1">
+        <layout class="QHBoxLayout" name="guard_typeface_row">
+         <property name="spacing">
+          <number>12</number>
+         </property>
+         <item>
+          <widget class="QCheckBox" name="guard_bold_check">
+           <property name="text">
+            <string extracomment="typeface: heavier than normal">Bold</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QCheckBox" name="guard_italic_check">
+           <property name="text">
+            <string extracomment="typeface: sloped">Italic</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="guard_typeface_stretch">
+           <property name="orientation">
+            <enum>Qt::Orientation::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>0</width>
+             <height>0</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </item>
+       <item row="8" column="0">
+        <widget class="QLabel" name="time_function_label">
+         <property name="text">
+          <string extracomment="label of the typeface of a transition's time function, which does not exist yet">Time function:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="8" column="1">
+        <layout class="QHBoxLayout" name="time_function_typeface_row">
+         <property name="spacing">
+          <number>12</number>
+         </property>
+         <item>
+          <widget class="QCheckBox" name="time_function_bold_check">
+           <property name="text">
+            <string extracomment="typeface: heavier than normal">Bold</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QCheckBox" name="time_function_italic_check">
+           <property name="text">
+            <string extracomment="typeface: sloped">Italic</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="time_function_typeface_stretch">
+           <property name="orientation">
+            <enum>Qt::Orientation::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>0</width>
+             <height>0</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </item>
+     <item>
+      <widget class="QLabel" name="text_appearance_note">
+       <property name="placeholder" stdset="0">
+        <bool>true</bool>
+       </property>
+       <property name="wordWrap">
+        <bool>true</bool>
+       </property>
+       <property name="text">
+        <string extracomment="under the lettering settings, on what is not written yet and what an arc takes">A guard and a time function are not written on a net yet; how they will be written is settled here. An arc's weight takes the font, the size and the colour, and is never bold, italic or aligned.</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="text_appearance_spacer">
+       <property name="orientation">
+        <enum>Qt::Orientation::Vertical</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     </layout>
+    </widget>
+    <widget class="QWidget" name="line_appearance_page">
+     <layout class="QVBoxLayout" name="line_appearance_layout">
+      <property name="spacing">
+       <number>12</number>
+      </property>
+     <item>
+      <widget class="QLabel" name="line_appearance_heading">
+       <property name="font">
+        <font>
+         <pointsize>13</pointsize>
+         <bold>true</bold>
+        </font>
+       </property>
+       <property name="text">
+        <string notr="true">Line Appearance</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <layout class="QFormLayout" name="line_appearance_form">
+       <property name="fieldGrowthPolicy">
+        <enum>QFormLayout::FieldGrowthPolicy::FieldsStayAtSizeHint</enum>
+       </property>
+       <property name="horizontalSpacing">
+        <number>12</number>
+       </property>
+       <property name="verticalSpacing">
+        <number>8</number>
+       </property>
+       <item row="0" column="0">
+        <widget class="QLabel" name="line_colour_label">
+         <property name="text">
+          <string extracomment="label of the colour chooser for a net's lines">Colour:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="1">
+        <layout class="QHBoxLayout" name="line_colour_row">
+         <property name="spacing">
+          <number>8</number>
+         </property>
+         <item>
+          <widget class="QCheckBox" name="line_colour_automatic">
+           <property name="text">
+            <string extracomment="colour that follows the light or dark theme">Automatic</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="line_colour_button">
+           <property name="text">
+            <string extracomment="button that opens the colour chooser">Choose…</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="line_colour_stretch">
+           <property name="orientation">
+            <enum>Qt::Orientation::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>0</width>
+             <height>0</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </item>
+       <item row="1" column="1">
+        <widget class="QLabel" name="line_colour_note">
+         <property name="error" stdset="0">
+          <bool>true</bool>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+         <property name="text">
+          <string extracomment="warning under the colour chooser when the colour chosen is the theme's own ink">This colour is the one the theme itself draws in, so it will not change when the theme does. Automatic is what follows the theme.</string>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="0">
+        <widget class="QLabel" name="line_width_label">
+         <property name="text">
+          <string extracomment="label of the line width chooser for a net">Width:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="1">
+        <layout class="QHBoxLayout" name="line_width_row">
+         <property name="spacing">
+          <number>8</number>
+         </property>
+         <item>
+          <widget class="QDoubleSpinBox" name="line_width_spin">
+           <property name="decimals">
+            <number>2</number>
+           </property>
+           <property name="singleStep">
+            <double>0.05</double>
+           </property>
+           <property name="suffix">
+            <string notr="true"> mm</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="line_width_points">
+           <property name="placeholder" stdset="0">
+            <bool>true</bool>
+           </property>
+           <property name="text">
+            <string notr="true"/>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="line_width_stretch">
+           <property name="orientation">
+            <enum>Qt::Orientation::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>0</width>
+             <height>0</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </item>
+     <item>
+      <widget class="QLabel" name="line_appearance_note">
+       <property name="placeholder" stdset="0">
+        <bool>true</bool>
+       </property>
+       <property name="wordWrap">
+        <bool>true</bool>
+       </property>
+       <property name="text">
+        <string extracomment="under the line settings, saying what the width and the colour cover">The width and the colour are a place's outline, a transition's bar, an arc's line and the head or ring it ends in. A selected item is drawn a little thicker than this.</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="line_appearance_spacer">
        <property name="orientation">
         <enum>Qt::Orientation::Vertical</enum>
        </property>

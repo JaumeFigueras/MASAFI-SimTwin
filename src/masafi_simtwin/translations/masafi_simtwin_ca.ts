@@ -464,7 +464,7 @@
         <translation>Propietats</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1969" />
+        <location filename="../main_window.py" line="1999" />
         <location filename="../main_window.py" line="516" />
         <source>No document</source>
         <translation>Cap document</translation>
@@ -883,112 +883,112 @@
 </context><context>
     <name>PetriNetEditor</name>
     <message>
-        <location filename="../documents/petri_net.py" line="458" />
+        <location filename="../documents/petri_net.py" line="466" />
         <source>Drag an element out of the Libraries pane</source>
         <translation>Arrossegueu un element des del plafó de Biblioteques</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1284" />
+        <location filename="../documents/petri_net.py" line="1292" />
         <source>Add Element</source>
         <translation>Afegeix un element</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1285" />
+        <location filename="../documents/petri_net.py" line="1293" />
         <source>Draw Arc</source>
         <translation>Dibuixa un arc</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1286" />
+        <location filename="../documents/petri_net.py" line="1294" />
         <source>Change Weight</source>
         <translation>Canvia el pes</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1287" />
+        <location filename="../documents/petri_net.py" line="1295" />
         <source>Change Arc Shape</source>
         <translation>Canvia la forma de l'arc</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1288" />
+        <location filename="../documents/petri_net.py" line="1296" />
         <source>Change Arc Type</source>
         <translation>Canvia el tipus d'arc</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1289" />
+        <location filename="../documents/petri_net.py" line="1297" />
         <source>Add Point</source>
         <translation>Afegeix un punt</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1290" />
+        <location filename="../documents/petri_net.py" line="1298" />
         <source>Delete Point</source>
         <translation>Suprimeix el punt</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1291" />
+        <location filename="../documents/petri_net.py" line="1299" />
         <source>Move</source>
         <translation>Mou</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1292" />
+        <location filename="../documents/petri_net.py" line="1300" />
         <source>Move Guide</source>
         <translation>Mou la guia</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1293" />
+        <location filename="../documents/petri_net.py" line="1301" />
         <source>Move Label</source>
         <translation>Mou l'etiqueta</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1294" />
+        <location filename="../documents/petri_net.py" line="1302" />
         <source>Resize Label</source>
         <translation>Redimensiona l'etiqueta</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1295" />
+        <location filename="../documents/petri_net.py" line="1303" />
         <source>Add Guide</source>
         <translation>Afegeix una guia</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1296" />
+        <location filename="../documents/petri_net.py" line="1304" />
         <source>Shape Arc</source>
         <translation>Dona forma a l'arc</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1297" />
+        <location filename="../documents/petri_net.py" line="1305" />
         <source>Move Arc End</source>
         <translation>Mou l'extrem de l'arc</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1298" />
+        <location filename="../documents/petri_net.py" line="1306" />
         <source>Delete</source>
         <translation>Suprimeix</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1299" />
+        <location filename="../documents/petri_net.py" line="1307" />
         <source>Rename</source>
         <translation>Canvia el nom</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1300" />
+        <location filename="../documents/petri_net.py" line="1308" />
         <source>Change Tokens</source>
         <translation>Canvia els testimonis</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1301" />
+        <location filename="../documents/petri_net.py" line="1309" />
         <source>Change Description</source>
         <translation>Canvia la descripció</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1302" />
+        <location filename="../documents/petri_net.py" line="1310" />
         <source>Rotate</source>
         <translation>Gira</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1303" />
+        <location filename="../documents/petri_net.py" line="1311" />
         <source>Cut</source>
         <translation>Retalla</translation>
     </message>
     <message>
-        <location filename="../documents/petri_net.py" line="1304" />
+        <location filename="../documents/petri_net.py" line="1312" />
         <source>Paste</source>
         <translation>Enganxa</translation>
     </message>
@@ -1251,10 +1251,26 @@
 </context><context>
     <name>SettingsDialog</name>
     <message>
-        <location filename="../dialogs/settings.py" line="331" />
+        <location filename="../dialogs/settings.py" line="164" />
+        <source>Choose a Colour</source>
+        <translation>Tria un color</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/settings.py" line="433" />
         <source>System default</source>
         <comment>language, not theme</comment>
         <translation>Predeterminat del sistema</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/settings.py" line="589" />
+        <source>Default ({0})</source>
+        <comment>the font a net is lettered in when none is chosen</comment>
+        <translation>Per defecte ({0})</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/settings.py" line="647" />
+        <source>≈ {0} pt</source>
+        <translation>≈ {0} pt</translation>
     </message>
     <message>
         <location filename="../dialogs/forms/settings.ui" line="0" />
@@ -1281,6 +1297,24 @@
         <source>Page</source>
         <extracomment>settings category: the paper a model is drawn on</extracomment>
         <translation>Pàgina</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>Petri Net</source>
+        <extracomment>settings category: how a Petri net is drawn</extracomment>
+        <translation>Xarxa de Petri</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>Text Appearance</source>
+        <extracomment>settings category: the lettering of a net</extracomment>
+        <translation>Aparença del text</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>Line Appearance</source>
+        <extracomment>settings category: the lines of a net</extracomment>
+        <translation>Aparença de les línies</translation>
     </message>
     <message>
         <location filename="../dialogs/forms/settings.ui" line="0" />
@@ -1374,6 +1408,152 @@
         <source>The sizes offered are the ones this machine prints on. A model is drawn on a sheet ruled into pages of the size chosen here.</source>
         <extracomment>under the paper chooser, saying where the list of sizes comes from</extracomment>
         <translation>Les mides que s'ofereixen són les que imprimeix aquesta màquina. Un model es dibuixa sobre un full dividit en pàgines de la mida triada aquí.</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>These are how a net is drawn where nothing was chosen for a place, a transition or an arc of its own. An item given an appearance of its own keeps it.</source>
+        <extracomment>on the Petri Net page, saying what these settings are the default for</extracomment>
+        <translation>Així és com es dibuixa una xarxa quan no s'ha triat res per a una plaça, una transició o un arc en concret. Un element amb una aparença pròpia la conserva.</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>Font:</source>
+        <extracomment>label of the font chooser for a net</extracomment>
+        <translation>Tipus de lletra:</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>Size:</source>
+        <extracomment>label of the font size chooser for a net</extracomment>
+        <translation>Mida:</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>Alignment:</source>
+        <extracomment>label of the chooser of how a caption's lines are laid against its sides</extracomment>
+        <translation>Alineació:</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>Left</source>
+        <extracomment>text alignment: against the left side</extracomment>
+        <translation>Esquerra</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>Right</source>
+        <extracomment>text alignment: against the right side</extracomment>
+        <translation>Dreta</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>Centred</source>
+        <extracomment>text alignment: in the middle</extracomment>
+        <translation>Centrat</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>Justified</source>
+        <extracomment>text alignment: every line stretched but the last</extracomment>
+        <translation>Justificat</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>Colour:</source>
+        <extracomment>label of the colour chooser for a net's lettering</extracomment>
+        <translation>Color:</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>Automatic</source>
+        <extracomment>colour that follows the light or dark theme</extracomment>
+        <translation>Automàtic</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>Choose…</source>
+        <extracomment>button that opens the colour chooser</extracomment>
+        <translation>Tria…</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>This colour is the one the theme itself writes in, so it will not change when the theme does. Automatic is what follows the theme.</source>
+        <extracomment>warning under the colour chooser when the colour chosen is the theme's own ink</extracomment>
+        <translation>Aquest color és el mateix amb què escriu el tema, i per tant no canviarà quan canviï el tema. Automàtic és el que segueix el tema.</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>Place:</source>
+        <extracomment>label of the typeface of a place's caption</extracomment>
+        <translation>Plaça:</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>Bold</source>
+        <extracomment>typeface: heavier than normal</extracomment>
+        <translation>Negreta</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>Italic</source>
+        <extracomment>typeface: sloped</extracomment>
+        <translation>Cursiva</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>Transition:</source>
+        <extracomment>label of the typeface of a transition's caption</extracomment>
+        <translation>Transició:</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>Guard:</source>
+        <extracomment>label of the typeface of a transition's guard, which does not exist yet</extracomment>
+        <translation>Guarda:</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>Time function:</source>
+        <extracomment>label of the typeface of a transition's time function, which does not exist yet</extracomment>
+        <translation>Funció de temps:</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>A guard and a time function are not written on a net yet; how they will be written is settled here. An arc's weight takes the font, the size and the colour, and is never bold, italic or aligned.</source>
+        <extracomment>under the lettering settings, on what is not written yet and what an arc takes</extracomment>
+        <translation>Encara no s'escriuen guardes ni funcions de temps en una xarxa; aquí es decideix com s'escriuran. El pes d'un arc pren el tipus de lletra, la mida i el color, i mai no és en negreta, en cursiva ni alineat.</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>Colour:</source>
+        <extracomment>label of the colour chooser for a net's lines</extracomment>
+        <translation>Color:</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>This colour is the one the theme itself draws in, so it will not change when the theme does. Automatic is what follows the theme.</source>
+        <extracomment>warning under the colour chooser when the colour chosen is the theme's own ink</extracomment>
+        <translation>Aquest color és el mateix amb què dibuixa el tema, i per tant no canviarà quan canviï el tema. Automàtic és el que segueix el tema.</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>Width:</source>
+        <extracomment>label of the line width chooser for a net</extracomment>
+        <translation>Gruix:</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>The width and the colour are a place's outline, a transition's bar, an arc's line and the head or ring it ends in. A selected item is drawn a little thicker than this.</source>
+        <extracomment>under the line settings, saying what the width and the colour cover</extracomment>
+        <translation>El gruix i el color són el contorn d'una plaça, la barra d'una transició, la línia d'un arc i la punta o l'anell amb què acaba. Un element seleccionat es dibuixa una mica més gruixut que això.</translation>
     </message>
     <message>
         <location filename="../dialogs/forms/settings.ui" line="0" />

@@ -66,6 +66,7 @@ from __future__ import annotations
 from PyQt6.QtCore import QPointF, QRectF, QSizeF
 from PyQt6.QtGui import QPainterPath
 
+from masafi_simtwin import preferences
 from masafi_simtwin.documents.label import LABEL_GAP
 from masafi_simtwin.documents.net_item import (
     ITEM_PEN,
@@ -140,6 +141,9 @@ class Transition(NetItem):
 
     #: A bar has a way round, so it can be turned.
     CAN_ROTATE = True
+
+    #: Which kind of text its caption is, and so how it is written.
+    ROLE = preferences.TRANSITION
 
     def __init__(self, *arguments, **keywords) -> None:
         super().__init__(*arguments, **keywords)
