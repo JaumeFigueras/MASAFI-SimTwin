@@ -259,6 +259,12 @@ class CanvasView(QGraphicsView):
         Emitted with the items its context menu asked to have turned the other
         way round.  The sheet does not turn them, for the reason it does not
         reshape an arc: a change to a net is the document's.
+    text_reset_asked : PyQt6.QtCore.pyqtSignal
+        Emitted with the things whose context menu asked for the lettering they
+        were given to be taken back, so that they follow the application's
+        defaults again.
+    line_reset_asked : PyQt6.QtCore.pyqtSignal
+        The same for the lines they are drawn with.
     """
 
     view_changed = pyqtSignal()
@@ -268,6 +274,8 @@ class CanvasView(QGraphicsView):
     connection_drawn = pyqtSignal(object, object, int, int, object)
     item_activated = pyqtSignal(object)
     arc_shape_asked = pyqtSignal(object, object)
+    text_reset_asked = pyqtSignal(object)
+    line_reset_asked = pyqtSignal(object)
     arc_end_asked = pyqtSignal(object, str, object, int)
     deletion_asked = pyqtSignal(object)
     items_moved = pyqtSignal(object)
@@ -750,6 +758,8 @@ class CanvasView(QGraphicsView):
                 drop = menu.addAction(self.tr('Delete Point'))
                 drop.triggered.connect(lambda: self.remove_arc_point(arc, point))
 
+        self._add_reset_entries(menu, [arc])
+
         menu.addSeparator()
         delete = menu.addAction(self.tr('Delete Arc'))
         delete.triggered.connect(lambda: self.deletion_asked.emit([arc]))
@@ -858,12 +868,17 @@ class CanvasView(QGraphicsView):
             The menu, or ``None`` when there is nothing to offer over it.
         """
 
-        if item is None or not item.CAN_ROTATE:
+        if item is None:
+            return None
+        given = item.text_style is not None or item.line_style is not None
+        if not (item.CAN_ROTATE or given):
             return None
 
         menu = QMenu(self)
-        rotate = menu.addAction(self.tr('Rotate'))
-        rotate.triggered.connect(lambda: self.rotate([item]))
+        if item.CAN_ROTATE:
+            rotate = menu.addAction(self.tr('Rotate'))
+            rotate.triggered.connect(lambda: self.rotate([item]))
+        self._add_reset_entries(menu, [item])
         return menu
 
     def rotate(self, items) -> None:
@@ -880,6 +895,69 @@ class CanvasView(QGraphicsView):
         """
 
         self.rotation_asked.emit(list(items))
+
+    def reset_text_appearance(self, items) -> None:
+        """Ask for the lettering given to some things to be taken back.
+
+        The sheet does not take it back — see :meth:`set_arc_shape` for why a
+        change to a net is the document's — so this says what was asked for and
+        nothing more.
+
+        Parameters
+        ----------
+        items : list
+            The places, transitions or arcs.
+        """
+
+        self.text_reset_asked.emit(list(items))
+
+    def reset_line_appearance(self, items) -> None:
+        """Ask for the lines given to some things to be taken back.
+
+        Parameters
+        ----------
+        items : list
+            The places, transitions or arcs.
+        """
+
+        self.line_reset_asked.emit(list(items))
+
+    def _add_reset_entries(self, menu: QMenu, items) -> bool:
+        """Offer to take back the appearance given to some things.
+
+        Only the half there is something to take back for is offered: an entry
+        that would do nothing is worse than no entry, which is the rule this
+        menu already keeps by giving no menu at all over an item with nothing
+        to offer.  A separator goes in first only when the menu already holds
+        something, so a place — which has no *Rotate* — does not open on one.
+
+        Parameters
+        ----------
+        menu : PyQt6.QtWidgets.QMenu
+            What to add them to.
+        items : list
+            The things the menu was aimed at.
+
+        Returns
+        -------
+        bool
+            Whether anything was added.
+        """
+
+        lettered = [item for item in items if item.text_style is not None]
+        drawn = [item for item in items if item.line_style is not None]
+        if not (lettered or drawn):
+            return False
+
+        if menu.actions():
+            menu.addSeparator()
+        if lettered:
+            entry = menu.addAction(self.tr('Reset Text Appearance'))
+            entry.triggered.connect(lambda: self.reset_text_appearance(lettered))
+        if drawn:
+            entry = menu.addAction(self.tr('Reset Line Appearance'))
+            entry.triggered.connect(lambda: self.reset_line_appearance(drawn))
+        return True
 
     def guide_menu(self, guide: Guide | None) -> QMenu | None:
         """Build what is offered over a guide, or over the bare sheet.

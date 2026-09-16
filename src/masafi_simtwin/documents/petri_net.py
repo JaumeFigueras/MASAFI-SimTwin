@@ -484,6 +484,8 @@ class PetriNetEditor(Canvas):
         self.view.arc_point_asked.connect(self._on_arc_point_asked)
         self.view.arc_point_removal_asked.connect(self._on_arc_point_removal_asked)
         self.view.rotation_asked.connect(self._on_rotation_asked)
+        self.view.text_reset_asked.connect(self._on_text_reset_asked)
+        self.view.line_reset_asked.connect(self._on_line_reset_asked)
         self.arc_tool_bar.shape_chosen.connect(self._on_shape_chosen)
         self.arc_tool_bar.kind_chosen.connect(self._on_kind_chosen)
         self.scene().selectionChanged.connect(self._on_selection_changed)
@@ -1216,6 +1218,32 @@ class PetriNetEditor(Canvas):
         """
 
         self.rotate(item.uuid for item in items)
+
+    def _on_text_reset_asked(self, items) -> None:
+        """Take back the lettering a context menu asked to have taken back.
+
+        ``None`` is *follow the application's defaults*, so this is the ordinary
+        setter asked for nothing — one recorded change, undone like any other,
+        which is what gives the appearance back.
+
+        Parameters
+        ----------
+        items : list
+            What was aimed at.
+        """
+
+        self.set_text_style([item.uuid for item in items], None)
+
+    def _on_line_reset_asked(self, items) -> None:
+        """Take back the lines a context menu asked to have taken back.
+
+        Parameters
+        ----------
+        items : list
+            What was aimed at.
+        """
+
+        self.set_line_style([item.uuid for item in items], None)
 
     # ------------------------------------------------------------------
     # What can be undone

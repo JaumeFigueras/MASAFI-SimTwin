@@ -1872,6 +1872,122 @@ def test_the_menu_turns_the_transition_it_was_aimed_at_and_no_other(editor):
     assert (transition.vertical, another.vertical) == (True, False)
 
 
+def test_an_item_given_an_appearance_is_offered_a_reset(editor):
+    """And one that follows the defaults still offers nothing at all, so the
+    pointer goes on falling through to whatever is under it."""
+
+    place = editor.add_element('pt-petri-net', 'place', QPointF(40.0, 40.0))
+
+    assert editor.view.item_menu(place) is None
+
+    place.text_style = TextStyle('DejaVu Sans', 4.0)
+    assert [entry.text() for entry in editor.view.item_menu(place).actions()] == [
+        'Reset Text Appearance'
+    ]
+
+    place.line_style = LineStyle('#aa0000', 1.0)
+    assert [entry.text() for entry in editor.view.item_menu(place).actions()] == [
+        'Reset Text Appearance',
+        'Reset Line Appearance',
+    ]
+
+
+def test_only_the_half_there_is_something_to_take_back_for_is_offered(editor):
+    """An entry that would do nothing is worse than no entry."""
+
+    place = editor.add_element('pt-petri-net', 'place', QPointF(40.0, 40.0))
+    place.line_style = LineStyle('#aa0000', 1.0)
+
+    assert [entry.text() for entry in editor.view.item_menu(place).actions()] == [
+        'Reset Line Appearance'
+    ]
+
+
+def test_a_transition_keeps_its_rotate_above_the_resets(editor):
+    """With a separator between what it is and what can be taken off it."""
+
+    transition = editor.add_element('pt-petri-net', 'transition', QPointF(80.0, 40.0))
+    transition.line_style = LineStyle('#aa0000', 1.0)
+
+    entries = [entry.text() for entry in editor.view.item_menu(transition).actions()]
+
+    assert entries[0] == 'Rotate'
+    assert entries[1] == ''
+    assert entries[2] == 'Reset Line Appearance'
+
+
+def test_resetting_from_the_menu_is_one_recorded_change(editor):
+    """The menu asks and the document takes it back, so Ctrl+Z gives it again —
+    and the sheet is drawn the default way at once."""
+
+    place = editor.add_element('pt-petri-net', 'place', QPointF(40.0, 40.0))
+    style = TextStyle('DejaVu Sans', 8.0)
+    editor.set_text_style((place.uuid,), style)
+    tall = place.label.size.height()
+    was = editor.undo_stack.count()
+
+    for entry in editor.view.item_menu(place).actions():
+        if entry.text() == 'Reset Text Appearance':
+            entry.trigger()
+
+    assert place.text_style is None
+    assert place.label.size.height() < tall
+    assert editor.undo_stack.count() == was + 1
+
+    editor.undo_stack.undo()
+    assert place.text_style == style
+
+
+def test_an_arc_given_an_appearance_is_offered_a_reset_above_delete(editor):
+    """Where the entries that take something off an arc belong."""
+
+    place = editor.add_element('pt-petri-net', 'place', QPointF(40.0, 40.0))
+    transition = editor.add_element('pt-petri-net', 'transition', QPointF(80.0, 40.0))
+    arc = editor.add_arc(place, transition)
+    plain = [entry.text() for entry in editor.view.arc_menu(arc).actions()]
+
+    arc.line_style = LineStyle('#aa0000', 1.0)
+    offered = [entry.text() for entry in editor.view.arc_menu(arc).actions()]
+
+    assert 'Reset Line Appearance' not in plain
+    assert offered.index('Reset Line Appearance') < offered.index('Delete Arc')
+
+
+def test_resetting_an_arc_from_its_menu_takes_the_style_back(editor):
+    """The same request, on the other kind of thing a style can be given to."""
+
+    place = editor.add_element('pt-petri-net', 'place', QPointF(40.0, 40.0))
+    transition = editor.add_element('pt-petri-net', 'transition', QPointF(80.0, 40.0))
+    arc = editor.add_arc(place, transition)
+    editor.set_line_style((arc.uuid,), LineStyle('#aa0000', 1.0))
+
+    for entry in editor.view.arc_menu(arc).actions():
+        if entry.text() == 'Reset Line Appearance':
+            entry.trigger()
+
+    assert arc.line_style is None
+
+
+def test_the_menu_over_a_place_given_an_appearance_is_the_item_menu(editor, monkeypatch):
+    """A plain place offers nothing, so the pointer falls through it to the
+    guides; one that has been given an appearance has something to take back,
+    and the pointer stops there."""
+
+    shown = []
+    monkeypatch.setattr(
+        QMenu, 'exec', lambda self, *rest: shown.append([action.text() for action in self.actions()])
+    )
+    place, _free, _transition, _arc = little_net(editor)
+    place.line_style = LineStyle('#aa0000', 1.0)
+    spot = editor.view.mapFromScene(place.scenePos())
+
+    editor.view.contextMenuEvent(
+        QContextMenuEvent(QContextMenuEvent.Reason.Mouse, spot, editor.view.mapToGlobal(spot))
+    )
+
+    assert shown == [['Reset Line Appearance']]
+
+
 def test_the_menu_over_a_transition_is_the_item_menu(editor, monkeypatch):
     """The pointer falls through the arcs to the item and stops there, rather
     than reaching the guides that run under it."""
