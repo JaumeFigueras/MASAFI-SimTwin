@@ -310,6 +310,50 @@ def set_weight(document: QWidget, uuids, weight: int) -> bool:
     return isinstance(document, PetriNetEditor) and document.set_weight(uuids, weight)
 
 
+def set_text_style(document: QWidget, uuids, style) -> bool:
+    """Give some items of a document the same text style, as one change.
+
+    Parameters
+    ----------
+    document : PyQt6.QtWidgets.QWidget
+        The document.
+    uuids : collections.abc.Iterable of str
+        The places, transitions or arcs — a UUID is unique across all three.
+    style : simtwin_core.petri_net.TextStyle, optional
+        The style each is to be written in, or ``None`` to follow the
+        application's defaults.
+
+    Returns
+    -------
+    bool
+        Whether any item changed.
+    """
+
+    return isinstance(document, PetriNetEditor) and document.set_text_style(uuids, style)
+
+
+def set_line_style(document: QWidget, uuids, style) -> bool:
+    """Give some items of a document the same line style, as one change.
+
+    Parameters
+    ----------
+    document : PyQt6.QtWidgets.QWidget
+        The document.
+    uuids : collections.abc.Iterable of str
+        The places, transitions or arcs.
+    style : simtwin_core.petri_net.LineStyle, optional
+        The style each is to be drawn with, or ``None`` to follow the
+        application's defaults.
+
+    Returns
+    -------
+    bool
+        Whether any item changed.
+    """
+
+    return isinstance(document, PetriNetEditor) and document.set_line_style(uuids, style)
+
+
 def can_copy(document: QWidget) -> bool:
     """Say whether there is anything in a document to copy or to cut.
 

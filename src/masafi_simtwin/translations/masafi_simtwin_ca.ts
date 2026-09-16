@@ -328,7 +328,7 @@
         <translation>Reinicia la simulació a l'estat inicial</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="517" />
+        <location filename="../main_window.py" line="519" />
         <location filename="../main_window.py" line="233" />
         <source>Idle</source>
         <translation>Inactiva</translation>
@@ -464,205 +464,205 @@
         <translation>Propietats</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1999" />
-        <location filename="../main_window.py" line="516" />
+        <location filename="../main_window.py" line="2036" />
+        <location filename="../main_window.py" line="518" />
         <source>No document</source>
         <translation>Cap document</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="611" />
+        <location filename="../main_window.py" line="613" />
         <source>The project could not be created</source>
         <translation>No s'ha pogut crear el projecte</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="622" />
+        <location filename="../main_window.py" line="624" />
         <source>Open Project</source>
         <translation>Obre un projecte</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="624" />
+        <location filename="../main_window.py" line="626" />
         <source>MASAFI-SimTwin projects (*{0})</source>
         <translation>Projectes de MASAFI-SimTwin (*{0})</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="669" />
-        <location filename="../main_window.py" line="649" />
+        <location filename="../main_window.py" line="671" />
+        <location filename="../main_window.py" line="651" />
         <source>The project could not be opened</source>
         <translation>No s'ha pogut obrir el projecte</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="662" />
+        <location filename="../main_window.py" line="664" />
         <source>The project is already open</source>
         <translation>El projecte ja està obert</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="663" />
+        <location filename="../main_window.py" line="665" />
         <source>{0} is open in another window, as {1}.</source>
         <translation>{0} està obert en una altra finestra, com a {1}.</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="664" />
+        <location filename="../main_window.py" line="666" />
         <source>another user</source>
         <translation>un altre usuari</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="690" />
+        <location filename="../main_window.py" line="692" />
         <source>Opened {0}</source>
         <translation>S'ha obert {0}</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="734" />
+        <location filename="../main_window.py" line="736" />
         <source>No Project</source>
         <translation>Cap projecte</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="741" />
+        <location filename="../main_window.py" line="743" />
         <source>Project closed</source>
         <translation>S'ha tancat el projecte</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="764" />
+        <location filename="../main_window.py" line="766" />
         <source>The list of recent projects was cleared</source>
         <translation>S'ha netejat la llista de projectes recents</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="840" />
+        <location filename="../main_window.py" line="842" />
         <source>The project history could not be written</source>
         <translation>No s'ha pogut escriure l'historial del projecte</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="910" />
+        <location filename="../main_window.py" line="912" />
         <source>No Recent Projects</source>
         <translation>Cap projecte recent</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="946" />
+        <location filename="../main_window.py" line="948" />
         <source>The model could not be added</source>
         <translation>No s'ha pogut afegir el model</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="975" />
+        <location filename="../main_window.py" line="977" />
         <source>The model could not be changed</source>
         <translation>No s'ha pogut modificar el model</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="992" />
+        <location filename="../main_window.py" line="994" />
         <source>Delete the model?</source>
         <translation>Voleu suprimir el model?</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="993" />
+        <location filename="../main_window.py" line="995" />
         <source>{0} and everything in it will be removed from the project. This cannot be undone: the model will be gone forever.</source>
         <translation>{0} i tot el que conté se suprimirà del projecte. Això no es pot desfer: el model desapareixerà per sempre.</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1006" />
+        <location filename="../main_window.py" line="1008" />
         <source>The model could not be removed</source>
         <translation>No s'ha pogut suprimir el model</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1120" />
+        <location filename="../main_window.py" line="1122" />
         <source>{0} cannot be opened yet: that kind of model is not built.</source>
         <translation>{0} encara no es pot obrir: aquest tipus de model no està construït.</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1130" />
+        <location filename="../main_window.py" line="1132" />
         <source>The model could not be opened</source>
         <translation>No s'ha pogut obrir el model</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1163" />
+        <location filename="../main_window.py" line="1165" />
         <source>The project could not be saved</source>
         <translation>No s'ha pogut desar el projecte</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1167" />
+        <location filename="../main_window.py" line="1169" />
         <source>The project was saved, but its earlier version could not be kept</source>
         <translation>S'ha desat el projecte, però no se n'ha pogut conservar la versió anterior</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1169" />
+        <location filename="../main_window.py" line="1171" />
         <source>The project was saved</source>
         <translation>S'ha desat el projecte</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1260" />
+        <location filename="../main_window.py" line="1262" />
         <source>The journal could not be written, so work will not be recovered if the application stops</source>
         <translation>No s'ha pogut escriure el diari, de manera que la feina no es recuperarà si l'aplicació s'atura</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1349" />
+        <location filename="../main_window.py" line="1351" />
         <source>The project was saved automatically, but its earlier version could not be kept</source>
         <translation>El projecte s'ha desat automàticament, però no se n'ha pogut conservar la versió anterior</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1355" />
+        <location filename="../main_window.py" line="1357" />
         <source>The project was saved automatically</source>
         <translation>El projecte s'ha desat automàticament</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1358" />
+        <location filename="../main_window.py" line="1360" />
         <source>Autosave: {0}</source>
         <translation>Desament automàtic: {0}</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1419" />
-        <location filename="../main_window.py" line="1379" />
+        <location filename="../main_window.py" line="1421" />
+        <location filename="../main_window.py" line="1381" />
         <source>Some work could not be put back</source>
         <translation>No s'ha pogut recuperar part de la feina</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1397" />
+        <location filename="../main_window.py" line="1399" />
         <source>{0} could not be put back: {1}</source>
         <translation>No s'ha pogut recuperar {0}: {1}</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1413" />
+        <location filename="../main_window.py" line="1415" />
         <source>Work that was not saved has been put back: {0}</source>
         <translation>S'ha recuperat la feina que no s'havia desat: {0}</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1466" />
+        <location filename="../main_window.py" line="1468" />
         <source>Delete old versions?</source>
         <translation>Voleu suprimir les versions antigues?</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1467" />
+        <location filename="../main_window.py" line="1469" />
         <source>{0} keeps {1} earlier versions of itself. Delete the oldest of them and keep the last {2}?</source>
         <translation>{0} conserva {1} versions anteriors. Voleu suprimir-ne les més antigues i conservar-ne les {2} darreres?</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1479" />
+        <location filename="../main_window.py" line="1481" />
         <source>The old versions could not be deleted</source>
         <translation>No s'han pogut suprimir les versions antigues</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1481" />
+        <location filename="../main_window.py" line="1483" />
         <source>Earlier versions deleted: {0}</source>
         <translation>Versions anteriors suprimides: {0}</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1487" />
+        <location filename="../main_window.py" line="1489" />
         <source>Cut to the clipboard</source>
         <translation>Retallat al porta-retalls</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1493" />
+        <location filename="../main_window.py" line="1495" />
         <source>Copied to the clipboard</source>
         <translation>Copiat al porta-retalls</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1499" />
+        <location filename="../main_window.py" line="1501" />
         <source>Pasted from the clipboard</source>
         <translation>Enganxat des del porta-retalls</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1706" />
+        <location filename="../main_window.py" line="1738" />
         <source>{0} could not be saved: {1}</source>
         <translation>No s'ha pogut desar {0}: {1}</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1734" />
+        <location filename="../main_window.py" line="1766" />
         <source>Close without saving?</source>
         <translation>Voleu tancar sense desar?</translation>
     </message>
@@ -1012,97 +1012,97 @@
 </context><context>
     <name>PropertiesPane</name>
     <message>
-        <location filename="../panes/properties.py" line="209" />
+        <location filename="../panes/properties.py" line="240" />
         <source>Place</source>
         <translation>Lloc</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="209" />
+        <location filename="../panes/properties.py" line="240" />
         <source>Transition</source>
         <translation>Transició</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="217" />
+        <location filename="../panes/properties.py" line="248" />
         <source>Places: {0}</source>
         <translation>Llocs: {0}</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="219" />
+        <location filename="../panes/properties.py" line="250" />
         <source>Transitions: {0}</source>
         <translation>Transicions: {0}</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="224" />
+        <location filename="../panes/properties.py" line="255" />
         <source>Several places</source>
         <translation>Diversos llocs</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="224" />
+        <location filename="../panes/properties.py" line="255" />
         <source>Several transitions</source>
         <translation>Diverses transicions</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="245" />
+        <location filename="../panes/properties.py" line="276" />
         <source>Several descriptions</source>
         <translation>Diverses descripcions</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="271" />
+        <location filename="../panes/properties.py" line="305" />
         <source>Arc</source>
         <translation>Arc</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="275" />
+        <location filename="../panes/properties.py" line="309" />
         <source>Arcs: {0}</source>
         <translation>Arcs: {0}</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="315" />
+        <location filename="../panes/properties.py" line="350" />
         <source>Petri Net</source>
         <translation>Xarxa de Petri</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="316" />
+        <location filename="../panes/properties.py" line="351" />
         <source>Process Flow</source>
         <translation>Flux de procés</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="317" />
+        <location filename="../panes/properties.py" line="352" />
         <source>2D Process</source>
         <translation>Procés 2D</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="318" />
+        <location filename="../panes/properties.py" line="353" />
         <source>3D Process</source>
         <translation>Procés 3D</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="337" />
+        <location filename="../panes/properties.py" line="372" />
         <source>A name cannot be empty.</source>
         <translation>Un nom no pot ser buit.</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="338" />
+        <location filename="../panes/properties.py" line="373" />
         <source>A name can only use letters without accents, digits and underscores.</source>
         <translation>Un nom només pot fer servir lletres sense accents, xifres i guions baixos.</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="341" />
+        <location filename="../panes/properties.py" line="376" />
         <source>A name cannot start with a digit.</source>
         <translation>Un nom no pot començar amb una xifra.</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="342" />
+        <location filename="../panes/properties.py" line="377" />
         <source>A name can only use letters, digits and underscores, with no spaces.</source>
         <translation>Un nom només pot fer servir lletres, xifres i guions baixos, sense espais.</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="345" />
+        <location filename="../panes/properties.py" line="380" />
         <source>A Python keyword cannot be a name.</source>
         <translation>Una paraula clau de Python no pot ser un nom.</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="346" />
+        <location filename="../panes/properties.py" line="381" />
         <source>Another place or transition already has this name, ignoring case.</source>
         <translation>Un altre lloc o transició ja té aquest nom, sense distingir majúscules i minúscules.</translation>
     </message>
@@ -1204,6 +1204,114 @@
         <source>A weight of one is not drawn. The shape and the type of an arc are chosen on the arc tool bar.</source>
         <extracomment>under the weight of an arc in the Properties pane</extracomment>
         <translation>Un pes d'un no es dibuixa. La forma i el tipus d'un arc es trien a la barra d'eines d'arcs.</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Appearance</source>
+        <extracomment>heading of the appearance of the selected place, transition or arc</extracomment>
+        <translation>Aparença</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Use app default text appearance</source>
+        <extracomment>tick to letter this item the way the settings say</extracomment>
+        <translation>Usa l'aparença de text per defecte</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Font:</source>
+        <translation>Tipus de lletra:</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Size:</source>
+        <translation>Mida:</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Typeface:</source>
+        <extracomment>label of the Bold and Italic boxes</extracomment>
+        <translation>Estil de lletra:</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Bold</source>
+        <extracomment>typeface: heavier than normal</extracomment>
+        <translation>Negreta</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Italic</source>
+        <extracomment>typeface: sloped</extracomment>
+        <translation>Cursiva</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Alignment:</source>
+        <translation>Alineació:</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Left</source>
+        <extracomment>text alignment: against the left side</extracomment>
+        <translation>Esquerra</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Right</source>
+        <extracomment>text alignment: against the right side</extracomment>
+        <translation>Dreta</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Centred</source>
+        <extracomment>text alignment: in the middle</extracomment>
+        <translation>Centrat</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Justified</source>
+        <extracomment>text alignment: every line stretched but the last</extracomment>
+        <translation>Justificat</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Colour:</source>
+        <translation>Color:</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Automatic</source>
+        <extracomment>colour that follows the light or dark theme</extracomment>
+        <translation>Automàtic</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Choose…</source>
+        <extracomment>button that opens the colour chooser</extracomment>
+        <translation>Tria…</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>This colour will not change when the theme does. Automatic is what follows the theme.</source>
+        <extracomment>warning when the colour chosen is the theme's own ink</extracomment>
+        <translation>Aquest color no canviarà quan canviï el tema. Automàtic és el que segueix el tema.</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Use app default line appearance</source>
+        <extracomment>tick to draw this item the way the settings say</extracomment>
+        <translation>Usa l'aparença de línia per defecte</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Width:</source>
+        <extracomment>how thick the lines of an item are drawn</extracomment>
+        <translation>Gruix:</translation>
     </message>
 </context><context>
     <name>RestartMessages</name>

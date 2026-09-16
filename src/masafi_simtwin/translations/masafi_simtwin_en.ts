@@ -328,7 +328,7 @@
         <translation>Reset the simulation to its initial state</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="517" />
+        <location filename="../main_window.py" line="519" />
         <location filename="../main_window.py" line="233" />
         <source>Idle</source>
         <translation>Idle</translation>
@@ -464,205 +464,205 @@
         <translation>Properties</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1999" />
-        <location filename="../main_window.py" line="516" />
+        <location filename="../main_window.py" line="2036" />
+        <location filename="../main_window.py" line="518" />
         <source>No document</source>
         <translation>No document</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="611" />
+        <location filename="../main_window.py" line="613" />
         <source>The project could not be created</source>
         <translation>The project could not be created</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="622" />
+        <location filename="../main_window.py" line="624" />
         <source>Open Project</source>
         <translation>Open Project</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="624" />
+        <location filename="../main_window.py" line="626" />
         <source>MASAFI-SimTwin projects (*{0})</source>
         <translation>MASAFI-SimTwin projects (*{0})</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="669" />
-        <location filename="../main_window.py" line="649" />
+        <location filename="../main_window.py" line="671" />
+        <location filename="../main_window.py" line="651" />
         <source>The project could not be opened</source>
         <translation>The project could not be opened</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="662" />
+        <location filename="../main_window.py" line="664" />
         <source>The project is already open</source>
         <translation>The project is already open</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="663" />
+        <location filename="../main_window.py" line="665" />
         <source>{0} is open in another window, as {1}.</source>
         <translation>{0} is open in another window, as {1}.</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="664" />
+        <location filename="../main_window.py" line="666" />
         <source>another user</source>
         <translation>another user</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="690" />
+        <location filename="../main_window.py" line="692" />
         <source>Opened {0}</source>
         <translation>Opened {0}</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="734" />
+        <location filename="../main_window.py" line="736" />
         <source>No Project</source>
         <translation>No Project</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="741" />
+        <location filename="../main_window.py" line="743" />
         <source>Project closed</source>
         <translation>Project closed</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="764" />
+        <location filename="../main_window.py" line="766" />
         <source>The list of recent projects was cleared</source>
         <translation>The list of recent projects was cleared</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="840" />
+        <location filename="../main_window.py" line="842" />
         <source>The project history could not be written</source>
         <translation>The project history could not be written</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="910" />
+        <location filename="../main_window.py" line="912" />
         <source>No Recent Projects</source>
         <translation>No Recent Projects</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="946" />
+        <location filename="../main_window.py" line="948" />
         <source>The model could not be added</source>
         <translation>The model could not be added</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="975" />
+        <location filename="../main_window.py" line="977" />
         <source>The model could not be changed</source>
         <translation>The model could not be changed</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="992" />
+        <location filename="../main_window.py" line="994" />
         <source>Delete the model?</source>
         <translation>Delete the model?</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="993" />
+        <location filename="../main_window.py" line="995" />
         <source>{0} and everything in it will be removed from the project. This cannot be undone: the model will be gone forever.</source>
         <translation>{0} and everything in it will be removed from the project. This cannot be undone: the model will be gone forever.</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1006" />
+        <location filename="../main_window.py" line="1008" />
         <source>The model could not be removed</source>
         <translation>The model could not be removed</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1120" />
+        <location filename="../main_window.py" line="1122" />
         <source>{0} cannot be opened yet: that kind of model is not built.</source>
         <translation>{0} cannot be opened yet: that kind of model is not built.</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1130" />
+        <location filename="../main_window.py" line="1132" />
         <source>The model could not be opened</source>
         <translation>The model could not be opened</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1163" />
+        <location filename="../main_window.py" line="1165" />
         <source>The project could not be saved</source>
         <translation>The project could not be saved</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1167" />
+        <location filename="../main_window.py" line="1169" />
         <source>The project was saved, but its earlier version could not be kept</source>
         <translation>The project was saved, but its earlier version could not be kept</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1169" />
+        <location filename="../main_window.py" line="1171" />
         <source>The project was saved</source>
         <translation>The project was saved</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1260" />
+        <location filename="../main_window.py" line="1262" />
         <source>The journal could not be written, so work will not be recovered if the application stops</source>
         <translation>The journal could not be written, so work will not be recovered if the application stops</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1349" />
+        <location filename="../main_window.py" line="1351" />
         <source>The project was saved automatically, but its earlier version could not be kept</source>
         <translation>The project was saved automatically, but its earlier version could not be kept</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1355" />
+        <location filename="../main_window.py" line="1357" />
         <source>The project was saved automatically</source>
         <translation>The project was saved automatically</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1358" />
+        <location filename="../main_window.py" line="1360" />
         <source>Autosave: {0}</source>
         <translation>Autosave: {0}</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1419" />
-        <location filename="../main_window.py" line="1379" />
+        <location filename="../main_window.py" line="1421" />
+        <location filename="../main_window.py" line="1381" />
         <source>Some work could not be put back</source>
         <translation>Some work could not be put back</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1397" />
+        <location filename="../main_window.py" line="1399" />
         <source>{0} could not be put back: {1}</source>
         <translation>{0} could not be put back: {1}</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1413" />
+        <location filename="../main_window.py" line="1415" />
         <source>Work that was not saved has been put back: {0}</source>
         <translation>Work that was not saved has been put back: {0}</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1466" />
+        <location filename="../main_window.py" line="1468" />
         <source>Delete old versions?</source>
         <translation>Delete old versions?</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1467" />
+        <location filename="../main_window.py" line="1469" />
         <source>{0} keeps {1} earlier versions of itself. Delete the oldest of them and keep the last {2}?</source>
         <translation>{0} keeps {1} earlier versions of itself. Delete the oldest of them and keep the last {2}?</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1479" />
+        <location filename="../main_window.py" line="1481" />
         <source>The old versions could not be deleted</source>
         <translation>The old versions could not be deleted</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1481" />
+        <location filename="../main_window.py" line="1483" />
         <source>Earlier versions deleted: {0}</source>
         <translation>Earlier versions deleted: {0}</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1487" />
+        <location filename="../main_window.py" line="1489" />
         <source>Cut to the clipboard</source>
         <translation>Cut to the clipboard</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1493" />
+        <location filename="../main_window.py" line="1495" />
         <source>Copied to the clipboard</source>
         <translation>Copied to the clipboard</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1499" />
+        <location filename="../main_window.py" line="1501" />
         <source>Pasted from the clipboard</source>
         <translation>Pasted from the clipboard</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1706" />
+        <location filename="../main_window.py" line="1738" />
         <source>{0} could not be saved: {1}</source>
         <translation>{0} could not be saved: {1}</translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="1734" />
+        <location filename="../main_window.py" line="1766" />
         <source>Close without saving?</source>
         <translation>Close without saving?</translation>
     </message>
@@ -1012,97 +1012,97 @@
 </context><context>
     <name>PropertiesPane</name>
     <message>
-        <location filename="../panes/properties.py" line="209" />
+        <location filename="../panes/properties.py" line="240" />
         <source>Place</source>
         <translation>Place</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="209" />
+        <location filename="../panes/properties.py" line="240" />
         <source>Transition</source>
         <translation>Transition</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="217" />
+        <location filename="../panes/properties.py" line="248" />
         <source>Places: {0}</source>
         <translation>Places: {0}</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="219" />
+        <location filename="../panes/properties.py" line="250" />
         <source>Transitions: {0}</source>
         <translation>Transitions: {0}</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="224" />
+        <location filename="../panes/properties.py" line="255" />
         <source>Several places</source>
         <translation>Several places</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="224" />
+        <location filename="../panes/properties.py" line="255" />
         <source>Several transitions</source>
         <translation>Several transitions</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="245" />
+        <location filename="../panes/properties.py" line="276" />
         <source>Several descriptions</source>
         <translation>Several descriptions</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="271" />
+        <location filename="../panes/properties.py" line="305" />
         <source>Arc</source>
         <translation>Arc</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="275" />
+        <location filename="../panes/properties.py" line="309" />
         <source>Arcs: {0}</source>
         <translation>Arcs: {0}</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="315" />
+        <location filename="../panes/properties.py" line="350" />
         <source>Petri Net</source>
         <translation>Petri Net</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="316" />
+        <location filename="../panes/properties.py" line="351" />
         <source>Process Flow</source>
         <translation>Process Flow</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="317" />
+        <location filename="../panes/properties.py" line="352" />
         <source>2D Process</source>
         <translation>2D Process</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="318" />
+        <location filename="../panes/properties.py" line="353" />
         <source>3D Process</source>
         <translation>3D Process</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="337" />
+        <location filename="../panes/properties.py" line="372" />
         <source>A name cannot be empty.</source>
         <translation>A name cannot be empty.</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="338" />
+        <location filename="../panes/properties.py" line="373" />
         <source>A name can only use letters without accents, digits and underscores.</source>
         <translation>A name can only use letters without accents, digits and underscores.</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="341" />
+        <location filename="../panes/properties.py" line="376" />
         <source>A name cannot start with a digit.</source>
         <translation>A name cannot start with a digit.</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="342" />
+        <location filename="../panes/properties.py" line="377" />
         <source>A name can only use letters, digits and underscores, with no spaces.</source>
         <translation>A name can only use letters, digits and underscores, with no spaces.</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="345" />
+        <location filename="../panes/properties.py" line="380" />
         <source>A Python keyword cannot be a name.</source>
         <translation>A Python keyword cannot be a name.</translation>
     </message>
     <message>
-        <location filename="../panes/properties.py" line="346" />
+        <location filename="../panes/properties.py" line="381" />
         <source>Another place or transition already has this name, ignoring case.</source>
         <translation>Another place or transition already has this name, ignoring case.</translation>
     </message>
@@ -1204,6 +1204,114 @@
         <source>A weight of one is not drawn. The shape and the type of an arc are chosen on the arc tool bar.</source>
         <extracomment>under the weight of an arc in the Properties pane</extracomment>
         <translation>A weight of one is not drawn. The shape and the type of an arc are chosen on the arc tool bar.</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Appearance</source>
+        <extracomment>heading of the appearance of the selected place, transition or arc</extracomment>
+        <translation>Appearance</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Use app default text appearance</source>
+        <extracomment>tick to letter this item the way the settings say</extracomment>
+        <translation>Use app default text appearance</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Font:</source>
+        <translation>Font:</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Size:</source>
+        <translation>Size:</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Typeface:</source>
+        <extracomment>label of the Bold and Italic boxes</extracomment>
+        <translation>Typeface:</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Bold</source>
+        <extracomment>typeface: heavier than normal</extracomment>
+        <translation>Bold</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Italic</source>
+        <extracomment>typeface: sloped</extracomment>
+        <translation>Italic</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Alignment:</source>
+        <translation>Alignment:</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Left</source>
+        <extracomment>text alignment: against the left side</extracomment>
+        <translation>Left</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Right</source>
+        <extracomment>text alignment: against the right side</extracomment>
+        <translation>Right</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Centred</source>
+        <extracomment>text alignment: in the middle</extracomment>
+        <translation>Centred</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Justified</source>
+        <extracomment>text alignment: every line stretched but the last</extracomment>
+        <translation>Justified</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Colour:</source>
+        <translation>Colour:</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Automatic</source>
+        <extracomment>colour that follows the light or dark theme</extracomment>
+        <translation>Automatic</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Choose…</source>
+        <extracomment>button that opens the colour chooser</extracomment>
+        <translation>Choose…</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>This colour will not change when the theme does. Automatic is what follows the theme.</source>
+        <extracomment>warning when the colour chosen is the theme's own ink</extracomment>
+        <translation>This colour will not change when the theme does. Automatic is what follows the theme.</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Use app default line appearance</source>
+        <extracomment>tick to draw this item the way the settings say</extracomment>
+        <translation>Use app default line appearance</translation>
+    </message>
+    <message>
+        <location filename="../panes/forms/properties.ui" line="0" />
+        <source>Width:</source>
+        <extracomment>how thick the lines of an item are drawn</extracomment>
+        <translation>Width:</translation>
     </message>
 </context><context>
     <name>RestartMessages</name>

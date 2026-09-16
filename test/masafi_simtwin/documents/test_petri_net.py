@@ -1101,6 +1101,104 @@ def test_a_selected_weight_stands_for_its_arc(editor):
     editor.arc_activated.disconnect()
 
 
+def test_a_style_is_given_to_items_as_one_recorded_change(editor):
+    """One method for the three kinds of item, as the operation is one: a UUID
+    is unique across a net."""
+
+    place = editor.add_element('pt-petri-net', 'place', QPointF(40.0, 40.0))
+    transition = editor.add_element('pt-petri-net', 'transition', QPointF(80.0, 40.0))
+    arc = editor.add_arc(place, transition)
+    style = TextStyle('DejaVu Sans', 4.0)
+
+    assert editor.set_text_style((place.uuid, transition.uuid, arc.uuid), style)
+
+    assert place.text_style == transition.text_style == arc.text_style == style
+    assert editor.undo_stack.count() == 4  # three items and the arc, in one change
+
+    editor.undo_stack.undo()
+    assert place.text_style is None
+    assert arc.text_style is None
+
+
+def test_a_style_an_arc_may_not_take_reaches_the_nodes_alone(editor):
+    """A weight is never bold, italic or aligned, so the arc is passed over
+    rather than the whole change being refused."""
+
+    place = editor.add_element('pt-petri-net', 'place', QPointF(40.0, 40.0))
+    transition = editor.add_element('pt-petri-net', 'transition', QPointF(80.0, 40.0))
+    arc = editor.add_arc(place, transition)
+    bold = TextStyle('DejaVu Sans', 4.0, bold=True)
+
+    assert editor.set_text_style((place.uuid, arc.uuid), bold)
+
+    assert place.text_style == bold
+    assert arc.text_style is None
+
+
+def test_a_line_style_is_given_and_taken_away_again(editor):
+    """``None`` is *follow the defaults*, and it is a change like any other."""
+
+    place = editor.add_element('pt-petri-net', 'place', QPointF(40.0, 40.0))
+    line = LineStyle('#aa0000', 1.5)
+
+    assert editor.set_line_style((place.uuid,), line)
+    assert place.line_style == line
+
+    assert editor.set_line_style((place.uuid,), None)
+    assert place.line_style is None
+
+    assert not editor.set_line_style((place.uuid,), None)
+
+
+def test_a_style_given_reaches_the_drawing_and_not_only_the_item(editor):
+    """Reported by Jaume: a change of appearance was not drawn.
+
+    The operation assigned the attribute and nothing told the sheet, so the
+    caption went on being lettered the way it had been.  Setting the style is
+    what draws the item again, so every path — an operation, an undo, a journal
+    replayed, a paste — draws it.
+    """
+
+    place = editor.add_element('pt-petri-net', 'place', QPointF(40.0, 40.0))
+    was = place.label.size.height()
+
+    editor.set_text_style((place.uuid,), TextStyle('DejaVu Sans', 8.0))
+
+    assert place.label.style.size == 8.0
+    assert place.label.size.height() > was
+
+    editor.undo_stack.undo()
+
+    assert place.label.style.size != 8.0
+    assert place.label.size.height() == pytest.approx(was)
+
+
+def test_a_line_style_given_draws_the_item_again(editor, monkeypatch):
+    """A width is geometry, so the item is told rather than left stale."""
+
+    place = editor.add_element('pt-petri-net', 'place', QPointF(40.0, 40.0))
+    drawn = []
+    monkeypatch.setattr(type(place), 'restyle', lambda self: drawn.append(self))
+
+    editor.set_line_style((place.uuid,), LineStyle('#aa0000', 1.5))
+
+    assert drawn == [place]
+
+
+def test_an_arc_given_a_style_is_drawn_again_too(editor, monkeypatch):
+    """The same rule on the other kind of thing a style can be given to."""
+
+    place = editor.add_element('pt-petri-net', 'place', QPointF(40.0, 40.0))
+    transition = editor.add_element('pt-petri-net', 'transition', QPointF(80.0, 40.0))
+    arc = editor.add_arc(place, transition)
+    drawn = []
+    monkeypatch.setattr(type(arc), 'restyle', lambda self: drawn.append(self))
+
+    editor.set_line_style((arc.uuid,), LineStyle('#aa0000', 1.5))
+
+    assert drawn == [arc]
+
+
 def test_styles_survive_a_document_round_trip_and_a_paste(editor):
     """Kept on the items, written by the editor, read back; a pasted copy carries
     its original's styles."""

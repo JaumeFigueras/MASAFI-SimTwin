@@ -4,11 +4,22 @@ from __future__ import annotations
 
 import pytest
 
+from PyQt6.QtCore import Qt
+
+from masafi_simtwin import preferences
 from masafi_simtwin.documents.petri_net import Selection
 from masafi_simtwin.panes import PropertiesPane
 from masafi_simtwin.panes.properties import unit_symbol
 from masafi_simtwin.project import ModelKind
-from simtwin_core.petri_net import ArcData, NameProblem, PlaceData, TransitionData
+from simtwin_core.petri_net import (
+    AUTOMATIC,
+    ArcData,
+    LineStyle,
+    NameProblem,
+    PlaceData,
+    TextStyle,
+    TransitionData,
+)
 
 
 @pytest.fixture
@@ -422,3 +433,291 @@ def test_a_page_of_another_kind_forgets_the_arcs(pane, qtbot):
 
     with qtbot.assertNotEmitted(pane.weight_asked):
         pane.arc_weight_spin.setValue(9)
+
+
+# ----------------------------------------------------------------------
+# The appearance of what is selected
+# ----------------------------------------------------------------------
+
+#: A place with an appearance of its own, and one that follows the defaults.
+STYLED = PlaceData(
+    'p',
+    'P1',
+    (0.0, 0.0),
+    2,
+    'Bottles waiting',
+    None,
+    None,
+    TextStyle('DejaVu Sans', 4.0, bold=True, colour='#aa0000'),
+    LineStyle('#0055aa', 1.5),
+)
+
+
+@pytest.fixture
+def chosen_colour(monkeypatch):
+    """Answer the colour dialog instead of opening one.
+
+    Parameters
+    ----------
+    monkeypatch : pytest.MonkeyPatch
+        The patcher.
+
+    Returns
+    -------
+    list
+        One entry per colour asked for; append one to be given it next.
+    """
+
+    answers = ['#117744']
+    monkeypatch.setattr(
+        'masafi_simtwin.panes.properties.ask_for_colour',
+        lambda parent, current: answers[-1],
+    )
+    return answers
+
+
+def test_the_appearance_is_shown_for_a_node_and_for_an_arc_and_for_nothing_else(pane):
+    """It belongs to a thing on the sheet, and a model is not one."""
+
+    pane.show_nodes((PLACE,), NAMES)
+    assert not pane.appearance_box.isHidden()
+
+    pane.show_arcs((ARC,), NODE_NAMES)
+    assert not pane.appearance_box.isHidden()
+
+    pane.show_model({'name': 'N', 'kind': 'petri-net', 'units': {'time': 's'}})
+    assert pane.appearance_box.isHidden()
+
+    pane.show_selection(Selection(places=(PLACE,), arcs=(ARC,)))
+    assert pane.appearance_box.isHidden()
+
+    pane.show_nothing()
+    assert pane.appearance_box.isHidden()
+
+
+def test_an_arc_is_offered_no_typeface_and_no_alignment(pane):
+    """A weight is never bold, italic or aligned — the rule the core keeps."""
+
+    pane.show_nodes((PLACE,), NAMES)
+    assert pane.text_form.isRowVisible(pane.typeface_label)
+    assert pane.text_form.isRowVisible(pane.alignment_label)
+
+    pane.show_arcs((ARC,), NODE_NAMES)
+
+    assert not pane.text_form.isRowVisible(pane.typeface_label)
+    assert not pane.text_form.isRowVisible(pane.alignment_label)
+    assert pane.text_form.isRowVisible(pane.font_label)
+    assert pane.text_form.isRowVisible(pane.text_colour_label)
+
+
+def test_an_item_that_follows_the_defaults_says_so_with_its_fields_dead(pane):
+    """Which is what the box being ticked means."""
+
+    pane.show_nodes((PLACE,), NAMES)
+
+    assert pane.text_default_check.checkState() == Qt.CheckState.Checked
+    assert pane.line_default_check.checkState() == Qt.CheckState.Checked
+    assert not pane.font_combo.isEnabled()
+    assert not pane.font_size_spin.isEnabled()
+    assert not pane.line_width_spin.isEnabled()
+
+
+def test_an_item_with_a_style_of_its_own_shows_it(pane):
+    """Unticked, the fields alive and holding what the item was given."""
+
+    pane.show_nodes((STYLED,), NAMES)
+
+    assert pane.text_default_check.checkState() == Qt.CheckState.Unchecked
+    assert pane.font_combo.currentText() == 'DejaVu Sans'
+    assert pane.font_size_spin.value() == 4.0
+    assert pane.bold_check.isChecked()
+    assert not pane.italic_check.isChecked()
+    assert pane.font_combo.isEnabled()
+
+    assert pane.line_default_check.checkState() == Qt.CheckState.Unchecked
+    assert pane.line_width_spin.value() == 1.5
+    assert not pane.line_colour_automatic.isChecked()
+
+
+@pytest.mark.parametrize(
+    ('box', 'field'),
+    [('text_default_check', 'font_size_spin'), ('line_default_check', 'line_width_spin')],
+    ids=['text', 'line'],
+)
+def test_clicking_the_box_toggles_between_ticked_and_unticked(pane, box, field):
+    """Reported by Jaume: unticking worked and ticking again did nothing.
+
+    The box is tri-state so that a disagreement can be *shown*, and Qt lets a
+    click cycle through that middle state — so the second click landed on
+    *partly ticked*, where the tick never arrived and the fields stayed alive.
+    A click is a person saying yes or no, and there is no third answer to give.
+    """
+
+    pane.show_nodes((PLACE,), NAMES)
+    ticked, edited = getattr(pane, box), getattr(pane, field)
+    assert ticked.checkState() == Qt.CheckState.Checked
+
+    ticked.click()
+    assert ticked.checkState() == Qt.CheckState.Unchecked
+    assert edited.isEnabled()
+
+    ticked.click()
+    assert ticked.checkState() == Qt.CheckState.Checked
+    assert not edited.isEnabled()
+
+
+def test_a_disagreement_is_still_shown_as_a_partly_ticked_box(pane):
+    """Shown, though a click can no longer land there."""
+
+    pane.show_nodes((PLACE, STYLED), NAMES)
+
+    assert pane.text_default_check.checkState() == Qt.CheckState.PartiallyChecked
+    assert pane.line_default_check.checkState() == Qt.CheckState.PartiallyChecked
+
+
+def test_items_that_disagree_leave_the_box_partly_ticked(pane):
+    """Neither *they all follow the defaults* nor *they all have their own*."""
+
+    pane.show_nodes((PLACE, STYLED), NAMES)
+
+    assert pane.text_default_check.checkState() == Qt.CheckState.PartiallyChecked
+    assert pane.line_default_check.checkState() == Qt.CheckState.PartiallyChecked
+
+
+def test_showing_an_item_asks_for_nothing(pane, qtbot):
+    """Filling the fields in is not choosing anything."""
+
+    with qtbot.assertNotEmitted(pane.text_style_asked), qtbot.assertNotEmitted(
+        pane.line_style_asked
+    ):
+        pane.show_nodes((PLACE,), NAMES)
+        pane.show_nodes((STYLED,), NAMES)
+        pane.show_nodes((PLACE, STYLED), NAMES)
+        pane.show_arcs((ARC,), NODE_NAMES)
+
+
+def test_unticking_asks_for_a_complete_style_of_the_defaults(pane, qtbot):
+    """Agreed with Jaume: unticking fills every field with the defaults of the
+    moment, so nothing is ever half its own and half the application's."""
+
+    pane.show_nodes((PLACE,), NAMES)
+
+    with qtbot.waitSignal(pane.text_style_asked, timeout=1000) as blocker:
+        pane.text_default_check.setCheckState(Qt.CheckState.Unchecked)
+
+    uuids, style = blocker.args
+    assert uuids == ('p',)
+    assert style == preferences.text_appearance(None, preferences.PLACE)
+    assert pane.font_size_spin.isEnabled()
+
+
+def test_ticking_again_throws_the_items_own_style_away(pane, qtbot):
+    """``None`` is *follow the defaults*, and Undo is what brings it back."""
+
+    pane.show_nodes((STYLED,), NAMES)
+
+    with qtbot.waitSignal(pane.text_style_asked, timeout=1000) as blocker:
+        pane.text_default_check.setCheckState(Qt.CheckState.Checked)
+
+    assert blocker.args == [('p',), None]
+
+
+def test_a_field_changed_asks_for_the_whole_style(pane, qtbot):
+    """A style is complete or absent, so every ask carries all of it."""
+
+    pane.show_nodes((STYLED,), NAMES)
+
+    with qtbot.waitSignal(pane.text_style_asked, timeout=1000) as blocker:
+        pane.font_size_spin.setValue(6.0)
+
+    _uuids, style = blocker.args
+    assert style.size == 6.0
+    assert style.font == 'DejaVu Sans'
+    assert style.bold is True
+    assert style.colour == '#aa0000'
+
+
+def test_a_typeface_is_asked_for_every_item_shown(pane, qtbot):
+    """One choice for all of them, as a description is."""
+
+    twin = PlaceData('q', 'P2', (0.0, 30.0), 2, 'Bottles waiting', None, None,
+                     STYLED.text_style, STYLED.line_style)
+
+    pane.show_nodes((STYLED, twin), NAMES)
+
+    with qtbot.waitSignal(pane.text_style_asked, timeout=1000) as blocker:
+        pane.italic_check.setChecked(True)
+
+    uuids, style = blocker.args
+    assert uuids == ('p', 'q')
+    assert style.italic is True
+
+
+def test_a_width_changed_asks_for_the_whole_line_style(pane, qtbot):
+    """The line half, which an arc has as well as a node."""
+
+    pane.show_nodes((STYLED,), NAMES)
+
+    with qtbot.waitSignal(pane.line_style_asked, timeout=1000) as blocker:
+        pane.line_width_spin.setValue(2.0)
+
+    _uuids, style = blocker.args
+    assert style == LineStyle('#0055aa', 2.0)
+
+
+def test_a_colour_is_chosen_on_a_button_and_automatic_follows_the_theme(
+    pane, qtbot, chosen_colour
+):
+    """The control the settings dialog uses, met again on one item."""
+
+    pane.show_nodes((STYLED,), NAMES)
+
+    with qtbot.waitSignal(pane.text_style_asked, timeout=1000) as blocker:
+        pane.text_colour_automatic.setChecked(True)
+    assert blocker.args[1].colour == AUTOMATIC
+
+    with qtbot.waitSignal(pane.text_style_asked, timeout=1000) as blocker:
+        pane.text_colour_automatic.setChecked(False)
+    assert blocker.args[1].colour == '#117744'
+
+
+def test_a_colour_that_is_the_themes_own_ink_is_warned_about(pane, chosen_colour):
+    """The same warning the settings dialog raises, for the same reason."""
+
+    from masafi_simtwin.theme import LIGHT_COLORS
+
+    pane.show_nodes((STYLED,), NAMES)
+    assert pane.text_colour_note.isHidden()
+
+    chosen_colour.append(LIGHT_COLORS.text)
+    pane.text_colour_button.click()
+
+    assert not pane.text_colour_note.isHidden()
+    assert pane.text_colour_note.property('error') is True
+
+
+def test_an_arc_is_asked_for_a_style_of_the_arcs_own_kind(pane, qtbot):
+    """Its defaults are the arc's: never bold, italic or aligned."""
+
+    pane.show_arcs((ARC,), NODE_NAMES)
+
+    with qtbot.waitSignal(pane.text_style_asked, timeout=1000) as blocker:
+        pane.text_default_check.setCheckState(Qt.CheckState.Unchecked)
+
+    uuids, style = blocker.args
+    assert uuids == ('a',)
+    assert style == preferences.text_appearance(None, preferences.ARC)
+    assert style.normal
+
+
+def test_a_page_of_another_kind_forgets_the_appearance(pane, qtbot):
+    """So a field moved afterwards is not asked of what is no longer shown."""
+
+    pane.show_nodes((STYLED,), NAMES)
+    pane.show_model({'name': 'N', 'kind': 'petri-net', 'units': {'time': 's'}})
+
+    with qtbot.assertNotEmitted(pane.text_style_asked), qtbot.assertNotEmitted(
+        pane.line_style_asked
+    ):
+        pane.font_size_spin.setValue(9.0)
+        pane.line_width_spin.setValue(2.5)

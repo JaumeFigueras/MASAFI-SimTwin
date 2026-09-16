@@ -966,6 +966,34 @@ is, opening one by hand is how a person gets something back.
 
 ---
 
+## A selection of more than one kind cannot be given an appearance
+
+**Now.** The Properties pane shows the appearance of what is selected while that is **places alone,
+transitions alone, or arcs alone** — the node page and the arc page. Select a place and an arc together
+and the pane shows the *selection* page, which counts what is in the selection and offers nothing to
+edit, so the way to colour a net is one kind at a time.
+
+**Why it was done this way.** The pane was built that way before there were styles: a page shows the
+properties of one kind of thing, because a name, a marking and a weight are not the same questions. The
+appearance is the first thing every kind of item has in common, and it sits in a box of its own below
+the pages; putting that box on the selection page as well would mean deciding what the *name* of the
+kind of text is for a mixed selection — a place's caption and an arc's weight take their typefaces from
+different preferences, and an arc may take no typeface at all.
+
+**When it will not be enough.** Colouring a whole subnet: a person selects the three places, the two
+transitions and the arcs between them, and has to do it in three passes.
+
+**Options.**
+
+- **Show the appearance box on the selection page too**, resolving each item against its own kind and
+  offering only what they all can take — no typeface and no alignment as soon as an arc is among them,
+  which is the rule the arc page already keeps.
+- **Ask what the selection has in common** and show the rest as partly ticked, which is what the box
+  already does for several items of one kind.
+- **Leave it**, and let *Reset* and the context menu (the step after this one) carry the quick cases.
+
+---
+
 ## The mark an arc ends in does not grow with the line it is drawn with
 
 **Now.** An arc's line takes the width it is given — anything from a tenth of a millimetre to three —

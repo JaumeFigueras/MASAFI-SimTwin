@@ -1029,8 +1029,8 @@ class Arc(QGraphicsItem):
         self._label = Label(self, snap, self._sheet)
         #: The arc's own text and line style, ``None`` for the application's
         #: defaults.  Kept and written, not yet drawn with.
-        self.text_style = None
-        self.line_style = None
+        self._text_style = None
+        self._line_style = None
 
         if source_port is None:
             source_port = source.free_port_towards(target.scenePos())
@@ -1967,6 +1967,41 @@ class Arc(QGraphicsItem):
         """
 
         return preferences.text_appearance(self.text_style, preferences.ARC)
+
+    @property
+    def text_style(self):
+        """simtwin_core.petri_net.TextStyle, optional: What the weight was given
+        to be written in, or ``None`` to follow the application's defaults.
+
+        Setting it draws the arc again, for the reason
+        :attr:`~masafi_simtwin.documents.net_item.NetItem.text_style` gives.
+        """
+
+        return self._text_style
+
+    @text_style.setter
+    def text_style(self, style) -> None:
+        if style == self._text_style:
+            return
+        self._text_style = style
+        self.restyle()
+
+    @property
+    def line_style(self):
+        """simtwin_core.petri_net.LineStyle, optional: What the arc was given to
+        be drawn with, or ``None`` to follow the application's defaults.
+
+        Setting it draws the arc again.
+        """
+
+        return self._line_style
+
+    @line_style.setter
+    def line_style(self, style) -> None:
+        if style == self._line_style:
+            return
+        self._line_style = style
+        self.restyle()
 
     def line_appearance(self):
         """Give the style the arc is actually drawn with.

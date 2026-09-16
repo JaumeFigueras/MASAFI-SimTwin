@@ -461,6 +461,8 @@ class MainWindow(QMainWindow):
         self._properties_pane.tokens_asked.connect(self._on_tokens_asked)
         self._properties_pane.description_asked.connect(self._on_description_asked)
         self._properties_pane.weight_asked.connect(self._on_weight_asked)
+        self._properties_pane.text_style_asked.connect(self._on_text_style_asked)
+        self._properties_pane.line_style_asked.connect(self._on_line_style_asked)
         contents: dict[str, QWidget] = {
             'project': self._project_tree,
             'libraries': self._library_tree,
@@ -1604,6 +1606,36 @@ class MainWindow(QMainWindow):
         """
 
         if not documents.describe(self._document_area.current_document, uuids, description):
+            self._refresh_properties()
+
+    def _on_text_style_asked(self, uuids, style) -> None:
+        """Letter items of the current document, as the Properties pane asks.
+
+        Parameters
+        ----------
+        uuids : tuple of str
+            The places, transitions or arcs.
+        style : simtwin_core.petri_net.TextStyle, optional
+            What they are to be written in, or ``None`` to follow the
+            application's defaults.
+        """
+
+        if not documents.set_text_style(self._document_area.current_document, uuids, style):
+            self._refresh_properties()
+
+    def _on_line_style_asked(self, uuids, style) -> None:
+        """Draw items of the current document, as the Properties pane asks.
+
+        Parameters
+        ----------
+        uuids : tuple of str
+            The places, transitions or arcs.
+        style : simtwin_core.petri_net.LineStyle, optional
+            What they are to be drawn with, or ``None`` to follow the
+            application's defaults.
+        """
+
+        if not documents.set_line_style(self._document_area.current_document, uuids, style):
             self._refresh_properties()
 
     def _on_weight_asked(self, uuids, weight: int) -> None:

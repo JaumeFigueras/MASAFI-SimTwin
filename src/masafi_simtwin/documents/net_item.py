@@ -207,10 +207,8 @@ class NetItem(QGraphicsItem):
         self._description = ''
         self._label_offset: tuple[float, float] | None = None
         self._label_width: float | None = None
-        #: The item's own text and line style, ``None`` for the application's
-        #: defaults.  Kept and written, not yet drawn with.
-        self.text_style = None
-        self.line_style = None
+        self._text_style = None
+        self._line_style = None
         self._label = Label(self, snap, bounds, resizable=True)
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
@@ -323,6 +321,46 @@ class NetItem(QGraphicsItem):
         self._label.width = self._label_width
         self._label.text = self.label_text()
         self._label.place(self.label_centre(self._label.size))
+
+    @property
+    def text_style(self):
+        """simtwin_core.petri_net.TextStyle, optional: What the item was given to
+        be written in, or ``None`` to follow the application's defaults.
+
+        **Setting it draws the item again.**  An operation assigns this
+        attribute — and so do an undo, a journal replayed and a piece pasted —
+        so the attribute is what has to tell the sheet; assigning it and leaving
+        the drawing as it was is exactly the bug Jaume reported, where a
+        caption went on being lettered the way it had been.
+        """
+
+        return self._text_style
+
+    @text_style.setter
+    def text_style(self, style) -> None:
+        if style == self._text_style:
+            return
+        self._text_style = style
+        self.restyle()
+
+    @property
+    def line_style(self):
+        """simtwin_core.petri_net.LineStyle, optional: What the item was given to
+        be drawn with, or ``None`` to follow the application's defaults.
+
+        Setting it draws the item again, for the reason :attr:`text_style`
+        gives — and a width is geometry, so what it calls is
+        :meth:`restyle`.
+        """
+
+        return self._line_style
+
+    @line_style.setter
+    def line_style(self, style) -> None:
+        if style == self._line_style:
+            return
+        self._line_style = style
+        self.restyle()
 
     def appearance(self):
         """Give the style the item's caption is actually written in.

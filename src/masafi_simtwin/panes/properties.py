@@ -37,12 +37,31 @@ for.
 
 from __future__ import annotations
 
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QColor, QFontDatabase, QIcon, QPixmap
 from PyQt6.QtWidgets import QWidget
 
+from masafi_simtwin import preferences
+from masafi_simtwin.dialogs.settings import (
+    ALIGNMENT_VALUES,
+    SWATCH_SIZE,
+    THEME_INKS,
+    ask_for_colour,
+)
 from masafi_simtwin.panes.forms.ui_properties import Ui_PropertiesPane
 from masafi_simtwin.project import ModelKind
-from simtwin_core.petri_net import NameProblem, PlaceData, name_problem
+from simtwin_core.petri_net import (
+    AUTOMATIC,
+    MAX_FONT_SIZE,
+    MAX_LINE_WIDTH,
+    MIN_FONT_SIZE,
+    MIN_LINE_WIDTH,
+    LineStyle,
+    NameProblem,
+    PlaceData,
+    TextStyle,
+    name_problem,
+)
 
 #: How a unit whose stored value is not its symbol is written.  The values are
 #: kept to ASCII so the settings file needs no encoding; the microsecond's symbol
@@ -103,6 +122,8 @@ class PropertiesPane(QWidget, Ui_PropertiesPane):
     tokens_asked = pyqtSignal(object, int)
     description_asked = pyqtSignal(object, str)
     weight_asked = pyqtSignal(object, int)
+    text_style_asked = pyqtSignal(object, object)
+    line_style_asked = pyqtSignal(object, object)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -113,6 +134,12 @@ class PropertiesPane(QWidget, Ui_PropertiesPane):
         self._taken: tuple[str, ...] = ()
         #: The arcs on the arc page.
         self._arcs: tuple = ()
+        #: What the appearance box is showing, and which kind of text it is.
+        self._styled: tuple = ()
+        self._role: str = preferences.PLACE
+        #: The colours the two colour buttons stand for.
+        self._text_colour: str = AUTOMATIC
+        self._line_colour: str = AUTOMATIC
         #: Set while fields are filled in, so that filling one is not an edit.
         self._showing = False
 
@@ -123,6 +150,7 @@ class PropertiesPane(QWidget, Ui_PropertiesPane):
         self.node_description_edit.editingFinished.connect(self._on_description_finished)
         self.arc_weight_spin.setKeyboardTracking(False)
         self.arc_weight_spin.valueChanged.connect(self._on_weight_changed)
+        self._bind_appearance()
 
         self.show_nothing()
 
@@ -146,6 +174,7 @@ class PropertiesPane(QWidget, Ui_PropertiesPane):
         """Show that there is no model to say anything about."""
 
         self._nodes = self._arcs = ()
+        self._hide_appearance()
         self.page_stack.setCurrentWidget(self.nothing_page)
 
     def show_model(self, model: dict) -> None:
@@ -167,6 +196,7 @@ class PropertiesPane(QWidget, Ui_PropertiesPane):
         self.model_time_value.setText(unit_symbol(units.get('time', '')))
         self.model_distance_value.setText(unit_symbol(distance or ''))
         self.model_form.setRowVisible(self.model_distance_label, distance is not None)
+        self._hide_appearance()
         self.page_stack.setCurrentWidget(self.model_page)
 
     def show_selection(self, selection) -> None:
@@ -182,6 +212,7 @@ class PropertiesPane(QWidget, Ui_PropertiesPane):
         self.places_value.setText(str(len(selection.places)))
         self.transitions_value.setText(str(len(selection.transitions)))
         self.arcs_value.setText(str(len(selection.arcs)))
+        self._hide_appearance()
         self.page_stack.setCurrentWidget(self.selection_page)
 
     def show_nodes(self, nodes, names=()) -> None:
@@ -244,6 +275,9 @@ class PropertiesPane(QWidget, Ui_PropertiesPane):
                 self.node_description_edit.clear()
                 self.node_description_edit.setPlaceholderText(self.tr('Several descriptions'))
 
+            self._show_appearance(
+                self._nodes, preferences.PLACE if places else preferences.TRANSITION
+            )
             self.page_stack.setCurrentWidget(self.node_page)
         finally:
             self._showing = False
@@ -286,6 +320,7 @@ class PropertiesPane(QWidget, Ui_PropertiesPane):
                 self.arc_weight_spin.setSpecialValueText(' ')
                 self.arc_weight_spin.setValue(MIXED_WEIGHT)
 
+            self._show_appearance(self._arcs, preferences.ARC)
             self.page_stack.setCurrentWidget(self.arc_page)
         finally:
             self._showing = False
@@ -418,6 +453,395 @@ class PropertiesPane(QWidget, Ui_PropertiesPane):
         if all(arc.weight == value for arc in self._arcs):
             return
         self.weight_asked.emit(tuple(arc.uuid for arc in self._arcs), value)
+
+    # ------------------------------------------------------------------
+    # The appearance of what is shown
+    # ------------------------------------------------------------------
+
+    def _bind_appearance(self) -> None:
+        """Fill the appearance controls and follow them from there.
+
+        The families are this machine's, so the form leaves the combo empty, as
+        the settings dialog's does; the limits are the core's, set here rather
+        than typed into Designer where they could drift from the rule a document
+        is held to; and the alignments are paired with the core's own names by
+        order, the arrangement the settings dialog uses and guards.
+
+        Raises
+        ------
+        RuntimeError
+            When the form fills the font combo, or holds a different number of
+            alignments than there are values for them.
+        """
+
+        if self.font_combo.count():
+            raise RuntimeError(
+                'font_combo is filled from the families this machine has, so it '
+                f'has to be left empty in properties.ui; it holds '
+                f'{self.font_combo.count()} entries.'
+            )
+        for family in QFontDatabase.families():
+            self.font_combo.addItem(family, family)
+        if self.alignment_combo.count() != len(ALIGNMENT_VALUES):
+            raise RuntimeError(
+                f'alignment_combo has {self.alignment_combo.count()} entries and '
+                f'there are {len(ALIGNMENT_VALUES)} alignments to pair them with.'
+            )
+        for index, value in enumerate(ALIGNMENT_VALUES):
+            self.alignment_combo.setItemData(index, value)
+
+        self.font_size_spin.setRange(MIN_FONT_SIZE, MAX_FONT_SIZE)
+        self.font_size_spin.setKeyboardTracking(False)
+        self.line_width_spin.setRange(MIN_LINE_WIDTH, MAX_LINE_WIDTH)
+        self.line_width_spin.setKeyboardTracking(False)
+
+        self.text_default_check.stateChanged.connect(self._on_text_default_changed)
+        self.line_default_check.stateChanged.connect(self._on_line_default_changed)
+        for control in (self.font_combo, self.alignment_combo):
+            control.currentIndexChanged.connect(self._on_text_field_changed)
+        self.font_size_spin.valueChanged.connect(self._on_text_field_changed)
+        for box in (self.bold_check, self.italic_check):
+            box.toggled.connect(self._on_text_field_changed)
+        self.line_width_spin.valueChanged.connect(self._on_line_field_changed)
+        self.text_colour_automatic.toggled.connect(self._on_text_automatic)
+        self.text_colour_button.clicked.connect(self._on_text_colour)
+        self.line_colour_automatic.toggled.connect(self._on_line_automatic)
+        self.line_colour_button.clicked.connect(self._on_line_colour)
+
+    def _hide_appearance(self) -> None:
+        """Put the appearance box away, and forget what it was showing."""
+
+        self._styled = ()
+        self.appearance_box.setHidden(True)
+
+    def _show_appearance(self, items, role: str) -> None:
+        """Show the appearance of what is selected, to be edited.
+
+        Parameters
+        ----------
+        items : tuple
+            The places, transitions or arcs shown, one at least.
+        role : str
+            Which kind of text their captions are, which decides both the
+            defaults offered and what may be chosen: an **arc** is offered no
+            typeface and no alignment, a weight being never bold, italic or
+            aligned.
+        """
+
+        self._styled = tuple(items)
+        self._role = role
+        arc = role == preferences.ARC
+        self.text_form.setRowVisible(self.typeface_label, not arc)
+        self.text_form.setRowVisible(self.alignment_label, not arc)
+        self._show_text_style()
+        self._show_line_style()
+        self.appearance_box.setHidden(False)
+
+    @staticmethod
+    def _agreement(styles: set) -> Qt.CheckState:
+        """Say what the *Use app default* box reads for a set of styles.
+
+        Parameters
+        ----------
+        styles : set
+            What each item shown was given, ``None`` being the defaults.
+
+        Returns
+        -------
+        PyQt6.QtCore.Qt.CheckState
+            Ticked when every item follows the defaults, unticked when none
+            does, and partly ticked when they disagree — decided with Jaume, so
+            that a mixed selection says so rather than showing one of them as
+            though it were all of them.
+        """
+
+        if styles == {None}:
+            return Qt.CheckState.Checked
+        if None not in styles:
+            return Qt.CheckState.Unchecked
+        return Qt.CheckState.PartiallyChecked
+
+    def _show_text_style(self) -> None:
+        """Fill the text fields from what is shown, or from the defaults."""
+
+        styles = {item.text_style for item in self._styled}
+        state = self._agreement(styles)
+        own = next(iter(styles)) if len(styles) == 1 and None not in styles else None
+        style = own if own is not None else preferences.text_appearance(None, self._role)
+
+        self.text_default_check.setCheckState(state)
+        if self.font_combo.findData(style.font) < 0:
+            self.font_combo.addItem(style.font, style.font)
+        self.font_combo.setCurrentIndex(self.font_combo.findData(style.font))
+        self.font_size_spin.setValue(style.size)
+        self.bold_check.setChecked(style.bold)
+        self.italic_check.setChecked(style.italic)
+        self.alignment_combo.setCurrentIndex(self.alignment_combo.findData(style.alignment))
+        self._text_colour = style.colour
+        self.text_colour_automatic.setChecked(style.colour == AUTOMATIC)
+        self._show_colour(style.colour, self.text_colour_button, self.text_colour_note)
+
+        self._enable_text_fields(state != Qt.CheckState.Checked)
+
+    def _show_line_style(self) -> None:
+        """Fill the line fields from what is shown, or from the defaults."""
+
+        styles = {item.line_style for item in self._styled}
+        state = self._agreement(styles)
+        own = next(iter(styles)) if len(styles) == 1 and None not in styles else None
+        style = own if own is not None else preferences.line_appearance(None)
+
+        self.line_default_check.setCheckState(state)
+        self.line_width_spin.setValue(style.width)
+        self._line_colour = style.colour
+        self.line_colour_automatic.setChecked(style.colour == AUTOMATIC)
+        self._show_colour(style.colour, self.line_colour_button, self.line_colour_note)
+
+        self._enable_line_fields(state != Qt.CheckState.Checked)
+
+    def _enable_text_fields(self, alive: bool) -> None:
+        """Turn the text fields on or off, the colour button with them.
+
+        It is done where the box is **ticked** as well as where the pane is
+        filled in, so the control answers the click itself rather than waiting
+        for the change to be made and the pane to be shown again — which is a
+        round trip through the window, and which leaves the box unticked over
+        dead fields if anything refuses the change on the way.
+
+        Parameters
+        ----------
+        alive : bool
+            Whether the item has a style of its own to edit.
+        """
+
+        for control in (
+            self.font_combo,
+            self.font_size_spin,
+            self.bold_check,
+            self.italic_check,
+            self.alignment_combo,
+            self.text_colour_automatic,
+        ):
+            control.setEnabled(alive)
+        self.text_colour_button.setEnabled(alive and self._text_colour != AUTOMATIC)
+
+    def _enable_line_fields(self, alive: bool) -> None:
+        """Turn the line fields on or off, the colour button with them.
+
+        Parameters
+        ----------
+        alive : bool
+            Whether the item has a style of its own to edit.
+        """
+
+        self.line_width_spin.setEnabled(alive)
+        self.line_colour_automatic.setEnabled(alive)
+        self.line_colour_button.setEnabled(alive and self._line_colour != AUTOMATIC)
+
+    def _show_colour(self, colour: str, button, note) -> None:
+        """Show what a colour is worth, and warn where the warning is due.
+
+        Parameters
+        ----------
+        colour : str
+            :data:`~simtwin_core.petri_net.AUTOMATIC` or ``#rrggbb``.
+        button : PyQt6.QtWidgets.QPushButton
+            The button the colour is chosen on.
+        note : PyQt6.QtWidgets.QLabel
+            The warning under it, raised for the ink a theme writes in — such a
+            colour looks right in the scheme it was chosen in and wrong in the
+            other, exactly as the settings dialog says.
+        """
+
+        chosen = colour != AUTOMATIC
+        if chosen:
+            swatch = QPixmap(SWATCH_SIZE, SWATCH_SIZE)
+            swatch.fill(QColor(colour))
+            button.setIcon(QIcon(swatch))
+        else:
+            button.setIcon(QIcon())
+        note.setHidden(not (chosen and colour.lower() in THEME_INKS))
+
+    def _text_style_now(self) -> TextStyle:
+        """Build the whole style the text fields describe.
+
+        Returns
+        -------
+        simtwin_core.petri_net.TextStyle
+            A complete style — they are complete or absent — with an arc's
+            typeface held to plain, whatever the fields happen to hold.
+        """
+
+        arc = self._role == preferences.ARC
+        return TextStyle(
+            self.font_combo.currentData() or preferences.text_appearance(None, self._role).font,
+            self.font_size_spin.value(),
+            False if arc else self.bold_check.isChecked(),
+            False if arc else self.italic_check.isChecked(),
+            'left' if arc else self.alignment_combo.currentData(),
+            self._text_colour,
+        )
+
+    def _line_style_now(self) -> LineStyle:
+        """Build the whole style the line fields describe.
+
+        Returns
+        -------
+        simtwin_core.petri_net.LineStyle
+            A complete style.
+        """
+
+        return LineStyle(self._line_colour, self.line_width_spin.value())
+
+    def _ask_text_style(self, style) -> None:
+        """Ask for a text style for everything shown.
+
+        Parameters
+        ----------
+        style : simtwin_core.petri_net.TextStyle, optional
+            The style, or ``None`` to follow the defaults.
+        """
+
+        if self._showing or not self._styled:
+            return
+        self.text_style_asked.emit(tuple(item.uuid for item in self._styled), style)
+
+    def _ask_line_style(self, style) -> None:
+        """Ask for a line style for everything shown.
+
+        Parameters
+        ----------
+        style : simtwin_core.petri_net.LineStyle, optional
+            The style, or ``None`` to follow the defaults.
+        """
+
+        if self._showing or not self._styled:
+            return
+        self.line_style_asked.emit(tuple(item.uuid for item in self._styled), style)
+
+    def _on_text_default_changed(self, state: int) -> None:
+        """Follow the defaults, or take a style of one's own from them.
+
+        Parameters
+        ----------
+        state : int
+            What the box now reads.  Unticking fills every field with the
+            defaults of the moment and asks for exactly that, which is what
+            makes a style complete rather than half the application's.
+        """
+
+        alive = Qt.CheckState(state) != Qt.CheckState.Checked
+        self._enable_text_fields(alive)
+        self._ask_text_style(
+            preferences.text_appearance(None, self._role) if alive else None
+        )
+
+    def _on_line_default_changed(self, state: int) -> None:
+        """The same for the lines.
+
+        Parameters
+        ----------
+        state : int
+            What the box now reads.
+        """
+
+        alive = Qt.CheckState(state) != Qt.CheckState.Checked
+        self._enable_line_fields(alive)
+        self._ask_line_style(preferences.line_appearance(None) if alive else None)
+
+    def _on_text_field_changed(self, _value=None) -> None:
+        """Ask for the whole text style whenever one of its fields moves.
+
+        Parameters
+        ----------
+        _value : object, optional
+            What the field became, which is read off the fields instead.
+        """
+
+        self._ask_text_style(self._text_style_now())
+
+    def _on_line_field_changed(self, _value=None) -> None:
+        """Ask for the whole line style whenever one of its fields moves.
+
+        Parameters
+        ----------
+        _value : object, optional
+            What the field became.
+        """
+
+        self._ask_line_style(self._line_style_now())
+
+    def _on_text_automatic(self, ticked: bool) -> None:
+        """Follow the theme, or ask for the colour to write in instead.
+
+        Parameters
+        ----------
+        ticked : bool
+            Whether *Automatic* is now ticked.  Unticking opens the colour
+            chooser, as it does in the settings dialog, and giving that up puts
+            the tick back.
+        """
+
+        if self._showing:
+            return
+        if ticked:
+            self._text_colour = AUTOMATIC
+        else:
+            colour = ask_for_colour(self, self._text_colour)
+            if colour is None:
+                self.text_colour_automatic.blockSignals(True)
+                self.text_colour_automatic.setChecked(True)
+                self.text_colour_automatic.blockSignals(False)
+                return
+            self._text_colour = colour
+        self._show_colour(self._text_colour, self.text_colour_button, self.text_colour_note)
+        self.text_colour_button.setEnabled(self._text_colour != AUTOMATIC)
+        self._on_text_field_changed()
+
+    def _on_line_automatic(self, ticked: bool) -> None:
+        """The same for the lines.
+
+        Parameters
+        ----------
+        ticked : bool
+            Whether *Automatic* is now ticked.
+        """
+
+        if self._showing:
+            return
+        if ticked:
+            self._line_colour = AUTOMATIC
+        else:
+            colour = ask_for_colour(self, self._line_colour)
+            if colour is None:
+                self.line_colour_automatic.blockSignals(True)
+                self.line_colour_automatic.setChecked(True)
+                self.line_colour_automatic.blockSignals(False)
+                return
+            self._line_colour = colour
+        self._show_colour(self._line_colour, self.line_colour_button, self.line_colour_note)
+        self.line_colour_button.setEnabled(self._line_colour != AUTOMATIC)
+        self._on_line_field_changed()
+
+    def _on_text_colour(self) -> None:
+        """Ask for another colour to write in, leaving it alone if given up."""
+
+        colour = ask_for_colour(self, self._text_colour)
+        if colour is None:
+            return
+        self._text_colour = colour
+        self._show_colour(colour, self.text_colour_button, self.text_colour_note)
+        self._on_text_field_changed()
+
+    def _on_line_colour(self) -> None:
+        """Ask for another colour to draw in, leaving it alone if given up."""
+
+        colour = ask_for_colour(self, self._line_colour)
+        if colour is None:
+            return
+        self._line_colour = colour
+        self._show_colour(colour, self.line_colour_button, self.line_colour_note)
+        self._on_line_field_changed()
 
     def _on_description_finished(self) -> None:
         """Ask for the description typed, for every node shown."""

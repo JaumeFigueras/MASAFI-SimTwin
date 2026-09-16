@@ -2011,6 +2011,68 @@ class PetriNetEditor(Canvas):
         self.push(Change('set-arc-weight', operations))
         return bool(operations)
 
+    def set_text_style(self, uuids, style) -> bool:
+        """Give some items the same text style, as one recorded change.
+
+        One method for the three kinds of item, as
+        :class:`~simtwin_core.operations.SetTextStyle` is one operation for
+        them: a UUID is unique across a net, so what is named is found whether
+        it is a place, a transition or an arc.
+
+        Parameters
+        ----------
+        uuids : collections.abc.Iterable of str
+            The items.
+        style : simtwin_core.petri_net.TextStyle, optional
+            What each is to be written in, or ``None`` to follow the
+            application's defaults.
+
+        Returns
+        -------
+        bool
+            Whether any item changed.  A style an arc may not take — a weight is
+            never bold, italic or aligned — is refused for every arc named,
+            since the document would refuse it as well.
+        """
+
+        items = [self.node_or_arc(uuid) for uuid in uuids]
+        items = [item for item in items if item is not None]
+        if style is not None and not style.normal:
+            items = [item for item in items if not isinstance(item, Arc)]
+        operations = tuple(
+            SetTextStyle(item.uuid, item.text_style, style)
+            for item in items
+            if item.text_style != style
+        )
+        self.push(Change('set-text-style', operations))
+        return bool(operations)
+
+    def set_line_style(self, uuids, style) -> bool:
+        """Give some items the same line style, as one recorded change.
+
+        Parameters
+        ----------
+        uuids : collections.abc.Iterable of str
+            The items — places, transitions or arcs.
+        style : simtwin_core.petri_net.LineStyle, optional
+            What each is to be drawn with, or ``None`` to follow the
+            application's defaults.
+
+        Returns
+        -------
+        bool
+            Whether any item changed.
+        """
+
+        items = [self.node_or_arc(uuid) for uuid in uuids]
+        operations = tuple(
+            SetLineStyle(item.uuid, item.line_style, style)
+            for item in items
+            if item is not None and item.line_style != style
+        )
+        self.push(Change('set-line-style', operations))
+        return bool(operations)
+
     def _on_item_activated(self, item) -> None:
         """Say that an arc was double-clicked, so that its weight can be edited.
 
