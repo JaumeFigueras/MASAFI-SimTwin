@@ -173,11 +173,13 @@ def test_the_file_menu_opens_with_new_open_and_recent(window):
     assert entries[1] is window.open_project_action
     assert entries[2] is window._recent_menu.menuAction()
     assert entries[3] is window.save_action
-    assert entries[4] is window.close_project_action
-    assert entries[5] is window.settings_action
-    assert entries[6] is window.quit_action
+    assert entries[4] is window.export_pdf_action
+    assert entries[5] is window.close_project_action
+    assert entries[6] is window.settings_action
+    assert entries[7] is window.quit_action
     assert not window.close_project_action.isEnabled()
     assert not window.save_action.isEnabled()
+    assert not window.export_pdf_action.isEnabled()
 
 
 def test_the_simulation_controls_live_on_the_top_bar_alone(window):
@@ -3719,3 +3721,162 @@ def test_a_double_click_in_a_tab_not_looked_at_opens_nothing(window, opened, mon
     editor.arc_activated.emit(editor.model_id, editor.arcs[0].uuid)
 
     assert not window.pane_action('properties').isChecked()
+
+
+# ----------------------------------------------------------------------
+# Exporting a drawing
+# ----------------------------------------------------------------------
+
+
+def stub_save_dialog(monkeypatch, path):
+    """Put a save dialog that neither draws nor blocks in the window's way.
+
+    Parameters
+    ----------
+    monkeypatch : pytest.MonkeyPatch
+        The patcher.
+    path : pathlib.Path or str
+        What the dialog settles on, or an empty string for one given up.
+
+    Returns
+    -------
+    list
+        What the dialog was offered, so that what it opened on can be read.
+    """
+
+    offered = []
+
+    def chosen(_parent, _title, directory, _filter):
+        offered.append(directory)
+        return str(path), ''
+
+    monkeypatch.setattr('masafi_simtwin.main_window.QFileDialog.getSaveFileName', chosen)
+    return offered
+
+
+def test_there_is_nothing_to_export_until_a_drawing_is_open(window, opened, monkeypatch):
+    """The entry is offered only where it would do something, which is the rule
+    *Cut*, *Copy* and *Paste* already keep."""
+
+    assert not window.export_pdf_action.isEnabled()
+
+    add_model(window, monkeypatch, 'Filling Station')
+
+    assert window.export_pdf_action.isEnabled()
+
+    window.close_project()
+
+    assert not window.export_pdf_action.isEnabled()
+
+
+def test_a_drawing_is_exported_to_the_file_that_was_chosen(
+    window, opened, monkeypatch, tmp_path
+):
+    """The sheet as it is drawn, on the paper the settings say."""
+
+    model = add_model(window, monkeypatch, 'Filling Station')
+    draw(editor_of(window, model))
+    path = tmp_path / 'net.pdf'
+    stub_save_dialog(monkeypatch, path)
+
+    window.export_pdf_action.trigger()
+
+    assert path.exists()
+    assert path.read_bytes().startswith(b'%PDF')
+    assert b'Filling Station' in path.read_bytes()
+    assert path.name in window.statusBar().currentMessage()
+
+
+def test_an_export_is_offered_under_the_models_name_beside_the_project(
+    window, opened, monkeypatch, tmp_path
+):
+    """Where somebody exporting a drawing of a project is most likely to want
+    it, and under the name the model is called rather than the file it is kept
+    in."""
+
+    add_model(window, monkeypatch, 'Filling Station')
+    offered = stub_save_dialog(monkeypatch, tmp_path / 'net.pdf')
+
+    window.export_pdf_action.trigger()
+
+    assert offered == [str(Path(opened).parent / 'Filling Station.pdf')]
+
+
+def test_a_cancelled_export_writes_nothing(window, opened, monkeypatch, tmp_path):
+    """A dialog given up says nothing at all, there being nothing to report."""
+
+    model = add_model(window, monkeypatch, 'Filling Station')
+    draw(editor_of(window, model))
+    stub_save_dialog(monkeypatch, '')
+
+    assert not window.export_pdf()
+    assert list(tmp_path.glob('*.pdf')) == []
+
+
+def test_an_export_is_given_the_suffix_the_user_left_off(
+    window, opened, monkeypatch, tmp_path
+):
+    """A file named without one is still a PDF, and a dialog is not the place to
+    be pedantic about it."""
+
+    model = add_model(window, monkeypatch, 'Filling Station')
+    draw(editor_of(window, model))
+    stub_save_dialog(monkeypatch, tmp_path / 'net')
+
+    window.export_pdf_action.trigger()
+
+    assert (tmp_path / 'net.pdf').exists()
+
+
+def test_a_sheet_with_nothing_drawn_on_it_exports_nothing(
+    window, opened, monkeypatch, tmp_path
+):
+    """An empty file would be worse than none, so it is said rather than
+    written."""
+
+    add_model(window, monkeypatch, 'Filling Station')
+    path = tmp_path / 'net.pdf'
+    stub_save_dialog(monkeypatch, path)
+
+    assert not window.export_pdf()
+    assert not path.exists()
+    assert window.statusBar().currentMessage()
+
+
+def test_an_export_that_cannot_be_written_is_reported(
+    window, opened, monkeypatch, tmp_path
+):
+    """A warning rather than a sentence in the status bar: a file the user asked
+    for and did not get is worth stopping them over."""
+
+    warnings = []
+    monkeypatch.setattr(
+        'masafi_simtwin.main_window.QMessageBox.warning',
+        lambda _parent, title, text, *rest: warnings.append((title, text)),
+    )
+    model = add_model(window, monkeypatch, 'Filling Station')
+    draw(editor_of(window, model))
+    stub_save_dialog(monkeypatch, tmp_path / 'no such folder' / 'net.pdf')
+
+    assert not window.export_pdf()
+    assert len(warnings) == 1
+    assert 'net.pdf' in warnings[0][1]
+
+
+def test_exporting_leaves_the_drawing_as_it_was(window, opened, monkeypatch, tmp_path):
+    """A print is something looked at rather than something done to the net: it
+    records no change, marks nothing unsaved and puts the selection back."""
+
+    model = add_model(window, monkeypatch, 'Filling Station')
+    editor = editor_of(window, model)
+    draw(editor)
+    window.save_project()
+    place = editor.places[0]
+    place.setSelected(True)
+    stub_save_dialog(monkeypatch, tmp_path / 'net.pdf')
+
+    window.export_pdf_action.trigger()
+
+    assert editor.scene().selectedItems() == [place]
+    assert not documents.is_modified(editor)
+    assert not window.undo_action.isEnabled() or editor.undo_stack.isClean()

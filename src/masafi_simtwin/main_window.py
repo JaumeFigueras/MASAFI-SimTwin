@@ -39,7 +39,7 @@ from masafi_simtwin.dialogs import (
     ask_to_restart,
 )
 from masafi_simtwin import preferences
-from masafi_simtwin.documents import Canvas, clipboard
+from masafi_simtwin.documents import Canvas, clipboard, printing
 from masafi_simtwin.menus import clear_menu
 from masafi_simtwin.panes import PropertiesPane
 from masafi_simtwin.preferences import install_id, needs_restart
@@ -182,6 +182,16 @@ class MainWindow(QMainWindow):
         #: is most of the time, and always while a net is being drawn.
         self.addAction(self.save_action)
 
+        self.export_pdf_action = QAction(self.tr('Export to PDF…'), self)
+        self.export_pdf_action.setShortcut(QKeySequence('Ctrl+Shift+E'))
+        self.export_pdf_action.setEnabled(False)
+        self.export_pdf_action.triggered.connect(self.export_pdf)
+        #: Held by the window as *Save* is, so the shortcut works while the menu
+        #: bar is folded away.  **Not** ``Ctrl+P``: that key belongs to printing
+        #: on a printer, which this is not and which is still to come — see
+        #: `FUTURE.md`.
+        self.addAction(self.export_pdf_action)
+
         self.close_project_action = QAction(self.tr('Close Project'), self)
         self.close_project_action.setEnabled(False)
         self.close_project_action.triggered.connect(self.close_project)
@@ -276,6 +286,7 @@ class MainWindow(QMainWindow):
         self._recent_menu = file_menu.addMenu(self.tr('Open Recent'))
         file_menu.addSeparator()
         file_menu.addAction(self.save_action)
+        file_menu.addAction(self.export_pdf_action)
         file_menu.addAction(self.close_project_action)
         file_menu.addSeparator()
         file_menu.addAction(self.settings_action)
@@ -1171,6 +1182,86 @@ class MainWindow(QMainWindow):
             self._report(self.tr('The project was saved'))
         return True
 
+    def export_pdf(self) -> bool:
+        """Print the model being looked at to a PDF file.
+
+        **The sheet is printed as it is drawn**, on the paper the settings say,
+        and only the pages of it that hold something.  What is on the screen
+        because of *this* session — the selection, the guides, the grid — is not
+        on the paper; see :mod:`masafi_simtwin.documents.printing`.
+
+        Returns
+        -------
+        bool
+            Whether a file was written.  A dialog given up, a sheet with nothing
+            drawn on it and a file that could not be written all answer no, and
+            each says so in its own way: nothing at all, a sentence in the status
+            bar, and a warning.
+        """
+
+        document = self._document_area.current_document
+        if not documents.can_print(document):
+            self._report(self.tr('There is no drawing to export'))
+            return False
+
+        key = self._document_area.key_of(document)
+        name = self._document_area.document_title(key) if key else ''
+        path, _filter = QFileDialog.getSaveFileName(
+            self,
+            self.tr('Export to PDF'),
+            str(self._suggested_pdf(name)),
+            self.tr('PDF files (*{0})').format(printing.PDF_SUFFIX),
+        )
+        if not path:
+            return False
+
+        chosen = Path(path)
+        if not chosen.suffix:
+            chosen = chosen.with_suffix(printing.PDF_SUFFIX)
+
+        try:
+            pages = documents.print_to_pdf(document, chosen, title=name)
+        except OSError as error:
+            QMessageBox.warning(
+                self,
+                self.tr('The model could not be exported'),
+                self.tr('{0} could not be written.\n\n{1}').format(chosen.name, error),
+            )
+            return False
+
+        if not pages:
+            self._report(self.tr('There is nothing drawn on the sheet to export'))
+            return False
+        self._report(self.tr('Exported to {0}').format(chosen.name))
+        return True
+
+    def _suggested_pdf(self, name: str) -> Path:
+        """Give the file an export is offered under first.
+
+        The model's own name, beside the project it belongs to — which is where
+        somebody exporting a drawing of a project is most likely to want it, and
+        is the same answer :meth:`_last_location` gives when there is no project
+        open at all.
+
+        Parameters
+        ----------
+        name : str
+            The model's name, as the tab shows it.
+
+        Returns
+        -------
+        pathlib.Path
+            The file, which the dialog may be given up in favour of any other.
+        """
+
+        beside = (
+            Path(self._project_path).parent
+            if self._project_path is not None
+            else Path(self._last_location() or '.')
+        )
+        called = name or self.tr('Drawing')
+        return beside / f'{called}{printing.PDF_SUFFIX}'
+
     def _write_documents(self, keys=None) -> list[str]:
         """Write open models to the project, and say which could not be written.
 
@@ -1546,6 +1637,7 @@ class MainWindow(QMainWindow):
         key = self._document_area.key_of(document) if document is not None else None
         selection = documents.selection_of(document) if key else None
         self._show_edit_actions()
+        self.export_pdf_action.setEnabled(documents.can_print(document))
         if selection and selection.arcs and not (selection.places or selection.transitions):
             self._properties_pane.show_arcs(selection.arcs, selection.node_names)
             return

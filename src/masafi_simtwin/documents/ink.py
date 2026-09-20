@@ -23,6 +23,15 @@ with a ``g`` in it would then come out smaller than a line without one.
 :func:`text_block` scales the **font's own line height**, once, for the whole
 block, and wraps it to a width.
 
+**Laying a block out and marking it are two things.**  :func:`text_layout` says
+which words go on which line, where each sits and how big the box comes to, and
+:func:`block_path` is one way of marking that out — the sheet's way, a path
+filled with the same brush as the thing the caption belongs to.  They are parted
+because the paper wants the other way: the same caption printed is text a reader
+can select, search and copy out of the file, which is the same lines in the same
+places marked with the font rather than with a path.  :func:`text_block` is both
+in one call, which is what everything drawing on the sheet asks for.
+
 **The size is the font's em, as a word processor measures it**, and the line it
 makes is the font's own business: :func:`line_height` is what a line of a style
 comes to, and two families at one size letter lines of different heights.
@@ -43,7 +52,10 @@ reaching for one another.
 
 from __future__ import annotations
 
-from PyQt6.QtCore import QSizeF, Qt
+from contextlib import contextmanager
+from dataclasses import dataclass
+
+from PyQt6.QtCore import QPointF, QSizeF, Qt
 from PyQt6.QtGui import (
     QColor,
     QFont,
@@ -80,6 +92,122 @@ HANDLE_SIZE = 0.7
 #: smaller is a change to the picture and not to the aiming, which is why the
 #: two are separate numbers.
 HANDLE_GRAB = 1.3
+
+#: The palette of the paper being printed on, while a print is under way, and
+#: ``None`` while the sheet is being drawn on a screen.  Everything on the sheet
+#: resolves its colour through :func:`ink_colour` and :func:`paper_colour`, so
+#: this is the one place the answer can be changed — which is what makes a print
+#: black on white without the application's own palette being touched.  Setting
+#: that instead would fire ``PaletteChange`` across the whole window, rebuild
+#: every icon and repaint every canvas in the middle of a print.
+_paper: QPalette | None = None
+
+
+@contextmanager
+def on_paper(palette: QPalette):
+    """Paint on paper rather than on a screen, for as long as this is open.
+
+    Two things change inside it, and they are the whole of what printing is:
+    a colour that follows the scheme follows **this** palette instead — black on
+    white — and a caption is written as **text** rather than marked as a path,
+    so a reader can select it, search it and copy it out of the file.  A colour
+    a person chose is not touched: it is the thing's own rather than the
+    scheme's.
+
+    It is a state of the module rather than an argument passed down because
+    nothing in between would carry it: a scene paints its items through Qt, and
+    the palette it hands each one is the application's — measured, not assumed.
+
+    Parameters
+    ----------
+    palette : PyQt6.QtGui.QPalette
+        What paper looks like, from
+        :func:`masafi_simtwin.theme.paper_palette`.  It is given rather than
+        read, so that this module goes on knowing nothing but what a painter
+        needs.
+
+    Yields
+    ------
+    None
+        While the paper is what is being painted on.
+    """
+
+    global _paper
+
+    was = _paper
+    _paper = palette
+    try:
+        yield
+    finally:
+        _paper = was
+
+
+def printing() -> bool:
+    """Say whether what is being painted on is paper.
+
+    Returns
+    -------
+    bool
+        Whether a print is under way, which is what :func:`on_paper` opens.
+    """
+
+    return _paper is not None
+
+
+def _palette(option) -> QPalette:
+    """Give the palette what is being painted on is painted with.
+
+    Parameters
+    ----------
+    option : PyQt6.QtWidgets.QStyleOptionGraphicsItem
+        What the view knows about drawing the thing, its palette included.
+
+    Returns
+    -------
+    PyQt6.QtGui.QPalette
+        The paper's while a print is under way, and the option's otherwise.
+    """
+
+    return _paper if _paper is not None else option.palette
+
+
+@dataclass(frozen=True)
+class Block:
+    """What a block of text comes to, before anything is marked on the paper.
+
+    Laying a block out and marking it are two things, and they are parted
+    because the **paper wants a different mark from the screen**: a caption on
+    the sheet is a path, filled with the same brush as the thing it belongs to,
+    and the same caption in a PDF is text a reader can select, search and copy
+    out.  Both are the same lines in the same places at the same size — so the
+    layout is worked out once, here, and what is done with it is the painter's.
+
+    The pieces are in **font units**, which is what the font's own metrics are
+    measured in: :data:`FONT_UNITS` to the em, so that the whole block is scaled
+    by one number and nothing is rounded on the way.  A line is one piece, but
+    for a **justified** line, which is one piece per word — the words being
+    spread to both sides of the box, there is no one place a justified line
+    starts from.
+
+    Attributes
+    ----------
+    pieces : tuple
+        What to write and where, as ``(along, baseline, text)`` in font units,
+        in the order it is read.
+    box : PyQt6.QtCore.QSizeF
+        How big the block is, in millimetres.  This is what an owner measures
+        its caption by, so it is in the units the sheet is drawn in rather than
+        in the font's.
+    scale : float
+        How many millimetres one font unit comes to.
+    font : PyQt6.QtGui.QFont
+        What it is lettered in, at :data:`FONT_UNITS` to the em.
+    """
+
+    pieces: tuple[tuple[float, float, str], ...]
+    box: QSizeF
+    scale: float
+    font: QFont
 
 
 def font_of(style) -> QFont:
@@ -178,34 +306,42 @@ def label_lines(text: str, width: float, metrics: QFontMetricsF, scale: float) -
 
 
 def _justified(
-    glyphs: QPainterPath, line: str, baseline: float, room: float, font, metrics
-) -> None:
-    """Write one line with its words spread to both sides of the box.
+    line: str, baseline: float, room: float, metrics
+) -> list[tuple[float, float, str]]:
+    """Lay one line out with its words spread to both sides of the box.
+
+    A justified line has no one place it starts from, so it is laid out word by
+    word: every word is a piece of its own, and the slack the line has left over
+    is shared between the gaps.
 
     Parameters
     ----------
-    glyphs : PyQt6.QtGui.QPainterPath
-        What to add the line to.
     line : str
         The line, whose words are parted by single spaces.
     baseline : float
         Where the line sits, in font units.
     room : float
         How wide the box is, in font units.
-    font : PyQt6.QtGui.QFont
-        The font.
     metrics : PyQt6.QtGui.QFontMetricsF
-        Its metrics.
+        The font's metrics.
+
+    Returns
+    -------
+    list of tuple
+        The words and where each starts, as ``(along, baseline, text)`` in font
+        units.
     """
 
     words = line.split(' ')
     space = metrics.horizontalAdvance(' ')
     written = sum(metrics.horizontalAdvance(word) for word in words)
     slack = (room - written - space * (len(words) - 1)) / (len(words) - 1)
+    pieces = []
     along = 0.0
     for word in words:
-        glyphs.addText(along, baseline, font, word)
+        pieces.append((along, baseline, word))
         along += metrics.horizontalAdvance(word) + space + slack
+    return pieces
 
 
 def _laid(line: str, alignment: str, room: float, metrics) -> float:
@@ -236,8 +372,14 @@ def _laid(line: str, alignment: str, room: float, metrics) -> float:
     return 0.0
 
 
-def text_block(text: str, width: float, style, fit: bool = True):
-    """Lay a piece of text out as a path of however many lines it needs.
+def text_layout(text: str, width: float, style, fit: bool = True) -> Block:
+    """Lay a piece of text out as however many lines it needs.
+
+    This is where a block of text is decided and nothing is marked: which words
+    go on which line, where each line sits, and how big the box they fill comes
+    to.  What is done with that is the painter's — :func:`block_path` for the
+    sheet, where a caption is a path filled with the same brush as the thing it
+    belongs to.
 
     A block of text is not :func:`glyph_path`: that scales one piece of text so
     that **its own ink** is a height, which is what a single number wants and
@@ -246,8 +388,8 @@ def text_block(text: str, width: float, style, fit: bool = True):
     height is what is scaled, once, for the whole block, so every line is the
     same size and one line below the last.
 
-    The path is centred on the middle of the **box** rather than of the ink, so
-    where a label sits does not depend on which letters are in it.
+    The block is laid out about the middle of the **box** rather than of the
+    ink, so where a label sits does not depend on which letters are in it.
 
     **Justified stretches every line but the last**, which is laid against the
     left — as it is in any editor, a last line spread across the box being what
@@ -272,6 +414,142 @@ def text_block(text: str, width: float, style, fit: bool = True):
 
     Returns
     -------
+    Block
+        The pieces and where they go, and the box they fill.  Both are empty for
+        text that writes nothing.
+    """
+
+    font = font_of(style)
+    metrics = QFontMetricsF(font)
+    scale = style.size / FONT_UNITS
+    if metrics.height() <= 0.0:  # pragma: no cover - a font always has a height
+        return Block((), QSizeF(0.0, 0.0), scale, font)
+
+    tall = metrics.height() * scale
+    lines = label_lines(text, width, metrics, scale)
+    if not lines:
+        return Block((), QSizeF(0.0, 0.0), scale, font)
+
+    widest = max(metrics.horizontalAdvance(line) for line in lines) * scale
+    box = QSizeF(widest if fit else max(width, widest), len(lines) * tall)
+    room = box.width() / scale
+
+    pieces: list[tuple[float, float, str]] = []
+    for row, line in enumerate(lines):
+        baseline = metrics.ascent() + row * metrics.height()
+        last = row == len(lines) - 1
+        if style.alignment == 'justified' and not last and ' ' in line:
+            pieces.extend(_justified(line, baseline, room, metrics))
+            continue
+        alignment = 'left' if style.alignment == 'justified' else style.alignment
+        pieces.append((_laid(line, alignment, room, metrics), baseline, line))
+    return Block(tuple(pieces), box, scale, font)
+
+
+def block_path(block: Block) -> QPainterPath:
+    """Mark a block out as a path, centred on nought.
+
+    What is written on the sheet is a **path** rather than text drawn with a
+    font, because the scene is measured in millimetres and a font in points: a
+    path is scaled to a size on the paper, so it is the same size at every zoom
+    and on every machine, and it is filled with the same brush as the thing it
+    belongs to.
+
+    **It is filled by the winding rule.**  A path is filled odd-even unless it
+    is told otherwise, and many fonts draw a letter out of contours that
+    overlap, every one of which would then be a hole.
+
+    Parameters
+    ----------
+    block : Block
+        What was laid out.
+
+    Returns
+    -------
+    PyQt6.QtGui.QPainterPath
+        The glyphs, the middle of the box they were laid out in on the origin,
+        or an empty path for a block that writes nothing.
+    """
+
+    glyphs = QPainterPath()
+    if not block.pieces:
+        return glyphs
+
+    for along, baseline, piece in block.pieces:
+        glyphs.addText(along, baseline, block.font, piece)
+    glyphs = QTransform().scale(block.scale, block.scale).map(glyphs)
+    glyphs.translate(-block.box.width() / 2.0, -block.box.height() / 2.0)
+    glyphs.setFillRule(Qt.FillRule.WindingFill)
+    return glyphs
+
+
+def write_block(painter, block: Block, glyphs: QPainterPath, colour) -> None:
+    """Write a block out, the way what is being painted on wants it.
+
+    **On the sheet a caption is a path**, filled with the brush the thing it
+    belongs to is drawn in: the scene is measured in millimetres and a font in
+    points, and a path scaled to a size on the paper is the same size at every
+    zoom and on every machine.  **On paper it is text**, written with the block's
+    own font at the place and the scale the layout worked out — the same lines
+    in the same places, marked the other way, so that what is printed can be
+    selected, searched and copied out of the file.
+
+    The path is passed in rather than built here because its owner keeps it: a
+    caption is laid out when it changes and painted at every repaint, and
+    building the glyphs again each time would be paying the layout twice.
+
+    Parameters
+    ----------
+    painter : PyQt6.QtGui.QPainter
+        What to write with.  Its pen, its brush, its font and its transform are
+        left as they were found.
+    block : Block
+        What was laid out.
+    glyphs : PyQt6.QtGui.QPainterPath
+        The same block marked as a path, from :func:`block_path`, which is what
+        the sheet is written with.
+    colour : PyQt6.QtGui.QColor
+        The ink, already resolved — from :func:`ink_colour`, so that a print has
+        taken the paper's answer rather than the screen's.
+    """
+
+    if not block.pieces:
+        return
+
+    painter.save()
+    if printing():
+        painter.setPen(colour)
+        painter.setFont(block.font)
+        painter.translate(-block.box.width() / 2.0, -block.box.height() / 2.0)
+        painter.scale(block.scale, block.scale)
+        for along, baseline, piece in block.pieces:
+            painter.drawText(QPointF(along, baseline), piece)
+    else:
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(colour)
+        painter.drawPath(glyphs)
+    painter.restore()
+
+
+def text_block(text: str, width: float, style, fit: bool = True):
+    """Lay a piece of text out and mark it as a path of however many lines.
+
+    :func:`text_layout` and :func:`block_path`, which is what everything drawing
+    on the sheet wants and in one call.
+
+    Parameters
+    ----------
+    text : str
+        What to write.
+    width : float
+        How wide it may be, in millimetres, before it goes onto another line.
+    style : simtwin_core.petri_net.TextStyle
+        What to write it in, already resolved.
+    fit : bool, optional
+        Whether the box is as wide as its widest line or as wide as ``width``.
+
+    Returns
+    -------
     tuple
         The glyphs as a :class:`~PyQt6.QtGui.QPainterPath` centred on nought,
         and the size of the box they were laid out in as a
@@ -279,34 +557,8 @@ def text_block(text: str, width: float, style, fit: bool = True):
         nothing.
     """
 
-    font = font_of(style)
-    metrics = QFontMetricsF(font)
-    if metrics.height() <= 0.0:  # pragma: no cover - a font always has a height
-        return QPainterPath(), QSizeF(0.0, 0.0)
-
-    scale = style.size / FONT_UNITS
-    tall = metrics.height() * scale
-    lines = label_lines(text, width, metrics, scale)
-    if not lines:
-        return QPainterPath(), QSizeF(0.0, 0.0)
-
-    widest = max(metrics.horizontalAdvance(line) for line in lines) * scale
-    box = QSizeF(widest if fit else max(width, widest), len(lines) * tall)
-    room = box.width() / scale
-
-    glyphs = QPainterPath()
-    for row, line in enumerate(lines):
-        baseline = metrics.ascent() + row * metrics.height()
-        last = row == len(lines) - 1
-        if style.alignment == 'justified' and not last and ' ' in line:
-            _justified(glyphs, line, baseline, room, font, metrics)
-            continue
-        alignment = 'left' if style.alignment == 'justified' else style.alignment
-        glyphs.addText(_laid(line, alignment, room, metrics), baseline, font, line)
-    glyphs = QTransform().scale(scale, scale).map(glyphs)
-    glyphs.translate(-box.width() / 2.0, -box.height() / 2.0)
-    glyphs.setFillRule(Qt.FillRule.WindingFill)
-    return glyphs, box
+    block = text_layout(text, width, style, fit)
+    return block_path(block), block.box
 
 
 def glyph_path(
@@ -370,6 +622,10 @@ def ink_colour(selected: bool, option, colour: str = AUTOMATIC) -> QColor:
     decided with Jaume: the selection has to be visible, and a thing drawn in its
     own red while selected would say nothing about being in hand.
 
+    **On paper the answer comes from the paper** rather than from the option —
+    see :func:`on_paper` — so a colour that follows the scheme prints black and a
+    colour a person chose prints as it is.
+
     Parameters
     ----------
     selected : bool
@@ -377,7 +633,7 @@ def ink_colour(selected: bool, option, colour: str = AUTOMATIC) -> QColor:
     option : PyQt6.QtWidgets.QStyleOptionGraphicsItem
         What the view knows about drawing it, its palette included.  An item has
         no widget to take a palette from, so this is where the palette comes
-        from.
+        from — unless a print is under way, which answers for itself.
     colour : str, optional
         :data:`~simtwin_core.petri_net.AUTOMATIC`, which follows the theme, or
         the ``#rrggbb`` the thing was given.
@@ -388,11 +644,12 @@ def ink_colour(selected: bool, option, colour: str = AUTOMATIC) -> QColor:
         The colour.
     """
 
+    palette = _palette(option)
     if selected:
-        return option.palette.color(QPalette.ColorRole.Link)
+        return palette.color(QPalette.ColorRole.Link)
     if colour != AUTOMATIC:
         return QColor(colour)
-    return option.palette.color(QPalette.ColorRole.Text)
+    return palette.color(QPalette.ColorRole.Text)
 
 
 def paper_colour(option) -> QColor:
@@ -414,4 +671,4 @@ def paper_colour(option) -> QColor:
         The colour.
     """
 
-    return option.palette.color(QPalette.ColorRole.Base)
+    return _palette(option).color(QPalette.ColorRole.Base)

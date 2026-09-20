@@ -370,6 +370,28 @@ class DocumentArea(QWidget):
         widget = self._documents.get(key)
         return widget is not None and widget in self._modified
 
+    def document_title(self, key: str) -> str:
+        """Give a document's title, apart from the mark of unsaved changes.
+
+        The title is kept apart from the mark — see
+        :meth:`set_document_modified` — so this is what a document is *called*
+        rather than what its tab happens to read, which is what anything naming
+        a file after it wants.
+
+        Parameters
+        ----------
+        key : str
+            What was passed to :meth:`add_document`.
+
+        Returns
+        -------
+        str
+            The title, and an empty string for a key that is not open.
+        """
+
+        widget = self._documents.get(key)
+        return self._titles.get(widget, '') if widget is not None else ''
+
     def _show_title(self, widget: QWidget) -> None:
         """Write a document's tab text: its title, and the mark when it has one.
 

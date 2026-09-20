@@ -335,6 +335,55 @@ def build_palette(colors: ThemeColors) -> QPalette:
     return palette
 
 
+#: What paper is, and what is written on it.  A drawing printed is black on
+#: white whatever scheme the application happens to be running in: paper has no
+#: dark mode, and a net that came out white on black would be a net that costs
+#: a cartridge to read.
+PAPER = '#ffffff'
+PAPER_INK = '#000000'
+
+
+def paper_palette() -> QPalette:
+    """Build the palette a drawing is printed with.
+
+    Everything on the sheet takes its colours from the palette rather than from
+    a constant — one rule that reads on both schemes — so **printing is that
+    same rule asked of paper**: the ground is white, the ink is black, and a
+    thing drawn in a colour of its own is not touched at all, its colour being
+    the thing's rather than the scheme's.
+
+    The **accent is black here too**.  On the sheet it says *this is in hand*,
+    which is a fact about the session and not about the net; a print has no
+    selection, and anything that reached the accent anyway would come out in a
+    blue that means nothing on paper.
+
+    It is built over the light scheme so that a role nothing here names — one
+    some item asks for later — still answers with something sensible rather
+    than with the dark scheme it happened to be built under.
+
+    Returns
+    -------
+    PyQt6.QtGui.QPalette
+        The palette, to be given to
+        :func:`masafi_simtwin.documents.ink.on_paper`.
+    """
+
+    role = QPalette.ColorRole
+
+    palette = build_palette(LIGHT_COLORS)
+    for ground in (role.Base, role.Window, role.AlternateBase):
+        palette.setColor(ground, QColor(PAPER))
+    for mark in (
+        role.Text,
+        role.WindowText,
+        role.ButtonText,
+        role.Link,
+        role.LinkVisited,
+    ):
+        palette.setColor(mark, QColor(PAPER_INK))
+    return palette
+
+
 def build_stylesheet(colors: ThemeColors) -> str:
     """Build the application style sheet of a scheme.
 

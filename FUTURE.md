@@ -1116,3 +1116,161 @@ from a machine other than the one the net was drawn on.
   own style once. The drawing becomes explicit and travels intact, and the defaults go on being a way
   of working; the cost is that every item then carries a style, and a later change to the defaults
   reaches none of them.
+
+---
+
+## Printing is to a file and never to a printer
+
+**Now.** *File → Export to PDF…* writes a PDF and that is the whole of printing. There is no *Print…*,
+no `QPrintDialog`, no printer chosen, no copies and no page range. `Ctrl+P` is deliberately unbound —
+`Ctrl+Shift+E` is the export's key — so that the one key everybody reaches for is still free for the
+thing it actually means.
+
+**Why it was done this way.** Decided with Jaume: a file was what was asked for, and it is the whole of
+what a report, a thesis or a colleague needs. A print dialog brings a page-range and copies interface
+that would have to be written and translated, and a printer's own driver to misbehave; and every
+platform's *Print to File* reaches the same PDF the export writes directly, by a longer route.
+
+**When it will not be enough.** Printing a net on paper without saving a file first; a plotter, which is
+where a sheet four metres wide is going; a printer whose paper is not the paper the settings say.
+
+**Options.**
+
+- **Add *Print…* on `Ctrl+P` over the same renderer.** `masafi_simtwin.documents.printing` already takes
+  a `QPageSize`, an orientation and a `QPainter`; a `QPrinter` is one in place of the `QPdfWriter`, and
+  `QPrintDialog`'s page range is a slice of what `pages_of()` returns. The work is the dialog and what
+  it is allowed to change, not the drawing.
+- **Print the preview first**, since `draw_page()` already draws onto any painter — a `QPrintPreviewDialog`
+  is the same call onto its own.
+- **Leave it as it is** and let the operating system's *Print* on the written file do it, which is what
+  anybody printing a PDF does anyway.
+
+---
+
+## A printed page carries the drawing and nothing else
+
+**Now.** A page is the net on white paper: no margins (the layout is set to nought all round), no
+header, no footer, no page number, no model name, no date, no crop marks, and no guides. A net drawn
+across a seam is printed in part on each page, and nothing on either page says which page it is or
+which edge joins which.
+
+**Why it was done this way.** Decided with Jaume: *just the net*. The page is then exactly the picture,
+which is what goes into a report; anything else is furniture that has to be placed, sized, lettered and
+translated, and that would be drawn in a margin the sheet does not have. The guides go for the reason
+*Copy* leaves them out — a guide is what the drawing is lined up against rather than part of it.
+
+**When it will not be enough.** A net over several pages that has to be laid out on a table and
+assembled — the pages cannot be told apart. A printer whose unprintable margin eats the edge of a
+drawing laid out to the paper's edge, which nought margins invite. A working print, where the guides
+are the point.
+
+**Options.**
+
+- **A footer, behind a setting**, saying the model's name and *2 of 5*. It needs a margin to live in,
+  which means the sheet's pages and the file's pages stop being the same rectangle — or the footer is
+  drawn over the drawing, which is worse.
+- **Crop marks in the corners**, which assemble without lettering and need far less room than a footer.
+- **Print the guides**, behind a setting, for a working print. `as_printed()` is the one place that
+  hides them.
+- **A margin of its own**, so that a drawing at the edge of a page is not clipped by the printer. It
+  would have to shrink the drawing or move it, and either breaks *true millimetres* — see below.
+
+---
+
+## Only the pages that hold something are printed, so a sparse net does not tile
+
+**Now.** `pages_of()` gives every tile of the sheet that anything drawn reaches into, in reading order,
+and nothing else. A net in one corner is one page; a net across a seam is two. But two nets at opposite
+corners of the sheet are **two pages with nothing between them**, and nothing in the file says how far
+apart they were.
+
+**Why it was done this way.** The answer chosen when it was asked: no blank pages, ever. The sheet is
+two hundred pages and almost all of it is empty, so printing the rectangular block that spans the
+drawing would mean sixty blank pages for two nets in opposite corners, and printing the whole sheet is
+absurd.
+
+**When it will not be enough.** Exactly the case above: a drawing meant to be assembled out of its
+pages, where the blanks are what carry the spacing.
+
+**Options.**
+
+- **The rectangular block of tiles**, behind a setting — the same function with `min`/`max` over the
+  occupied rows and columns instead of a test per tile. A dozen lines.
+- **Blank pages only *between* occupied ones on a row**, which assembles a row without paying for a
+  column of empty pages.
+- **Say what was left out**: a sentence in the status bar naming how many pages were skipped, so the
+  ragged set is at least not a surprise.
+
+---
+
+## Nothing scales a print, and the page cannot be fitted to the drawing
+
+**Now.** A print is at **true millimetres**: a place drawn 10 mm across measures 10 mm on the paper, and
+the page of the file is the page the sheet was ruled into, as the settings say. There is no *fit to
+page*, no percentage, and no way to print a net larger than a page on one sheet.
+
+**Why it was done this way.** *Paper size will be kept as in the setup*, which is what was asked for, and
+one scene unit being one millimetre is the promise the whole sheet is built on. Scaling would also make
+the file disagree with the sheet: a net measured against the page boundaries on screen would come out
+somewhere else on the paper.
+
+**When it will not be enough.** A net drawn a little wider than a page, which now takes two pages to show
+a picture that would fit at 95%. A drawing wanted at a known scale — half size for a handout.
+
+**Options.**
+
+- **A scale the print is taken at**, one number given to `draw_page()`, which already takes the dots to
+  the millimetre as an argument. *Fit to page* is that number worked out from the drawing's bounding
+  rectangle rather than typed.
+- **Print the drawing rather than the pages** — one page the size of what is drawn, which is what an
+  illustration for a document usually wants and is a different feature from tiling a sheet.
+- **Leave it**, and let whoever is printing the PDF scale it in their own print dialog, which every one
+  of them can do.
+
+---
+
+## A place's tokens are printed as a drawing rather than as text
+
+**Now.** Every caption in a printed file is real text — a name, a description, an arc's weight — and a
+reader takes them back out as words. A place's **token count** is the one exception: it is a
+`QPainterPath` on the sheet and a path in the file, so it is vector and bears any zoom, but it cannot
+be selected, searched or copied.
+
+**Why it was done this way.** `glyph_path()` scales a piece of text so that **its own ink** is a height,
+which is what makes a number fit the circle it sits in; `text_layout()`, which is what
+`ink.write_block()` writes as text, scales the font's own line height. They are different measurements
+on purpose — see *A place's tokens take the family its caption is written in and nothing else* — so
+writing the number as text would mean a second layout to keep in step with the first, for a count of
+one or two digits that nobody searches a document for.
+
+**When it will not be enough.** A net whose markings are being read out of the PDF by something rather
+than by somebody — a diff of two printed nets, a script pulling the marking out of a report.
+
+**Options.**
+
+- **Give `glyph_path()` a layout of its own**, as `text_block()` now has: the measurement stays what it
+  is and `write_block()` learns a second kind of block. It is about twenty lines and one more thing to
+  keep in step.
+- **Letter the number from `text_layout()`** and clamp it to the circle, which is the same trade the
+  tokens entry above already describes, and would make it text for free.
+
+---
+
+## There is no way out but PDF
+
+**Now.** A drawing leaves the application as a PDF and in no other way. There is no SVG, no PNG, no
+copying the drawing to the clipboard as a picture, and no printing a net into another document.
+
+**Why it was done this way.** PDF was what was asked for, and it is the one that is vector, carries real
+text, holds several pages and opens everywhere. The rest are one feature each and none was needed yet.
+
+**When it will not be enough.** A net going into a web page or a slide, which wants SVG or PNG; a net
+going into a drawing program to be finished by hand, which wants SVG; pasting a net into a chat.
+
+**Options.**
+
+- **SVG through `QSvgGenerator`**, which is another paged paint device in the same shape as `QPdfWriter`:
+  `draw_page()` would draw onto it unchanged, one file per page. `QtSvg` is already a dependency.
+- **PNG through a `QImage`** at a resolution the person chooses — `painted()` in the printing tests is
+  already that function, written for the tests rather than for the application.
+- **The clipboard**, which is the same image or the same SVG put on it instead of written to a file.

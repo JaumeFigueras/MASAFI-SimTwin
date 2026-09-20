@@ -4,6 +4,11 @@ Two kinds of lettering, and the difference between them is the point:
 ``glyph_path`` scales one piece of text so that its own ink is a height, and
 ``text_block`` lays a whole block out in a **style** — a family, a size in
 millimetres, a typeface and an alignment — and wraps it to a width.
+
+Laying a block out and marking it are parted: ``text_layout`` decides which
+words go on which line and where each sits, and ``block_path`` is the sheet's
+way of marking that out.  So the tests of the layout read the pieces, and the
+tests of the lettering read the ink.
 """
 
 from __future__ import annotations
@@ -12,19 +17,41 @@ import math
 
 import pytest
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor, QFont, QFontDatabase, QImage, QPainter, QPainterPath
+from PyQt6.QtGui import (
+    QColor,
+    QFont,
+    QFontDatabase,
+    QFontMetricsF,
+    QImage,
+    QPainter,
+    QPainterPath,
+    QTransform,
+)
 from PyQt6.QtWidgets import QApplication, QStyleOptionGraphicsItem
 
 from masafi_simtwin import fonts
 from masafi_simtwin.documents.ink import (
     LABEL_WIDTH,
+    block_path,
     font_of,
     glyph_path,
     ink_colour,
     line_height,
+    on_paper,
+    paper_colour,
+    printing,
     text_block,
+    text_layout,
+    write_block,
 )
-from masafi_simtwin.theme import DARK_COLORS, LIGHT_COLORS, build_palette
+from masafi_simtwin.theme import (
+    DARK_COLORS,
+    LIGHT_COLORS,
+    PAPER,
+    PAPER_INK,
+    build_palette,
+    paper_palette,
+)
 from simtwin_core.petri_net import AUTOMATIC, TextStyle
 
 #: Letters whose strokes overlap in fonts drawn with overlapping contours —
@@ -414,6 +441,243 @@ def test_a_block_of_nothing_is_nothing(style):
 
 
 # ----------------------------------------------------------------------
+# Laying a block out, apart from marking it
+# ----------------------------------------------------------------------
+
+
+def test_a_layout_is_a_piece_a_line_and_says_where_each_line_sits(style):
+    """Which is the whole of what a painter needs to write a block out: what to
+    write and where, in the font's own units."""
+
+    metrics = QFontMetricsF(font_of(style))
+
+    one = text_layout(ONE_LINE, ROOMY, style)
+    several = text_layout(TWO_LINES, ROOMY, style)
+    baselines = [piece[1] for piece in several.pieces]
+
+    assert [piece[2] for piece in one.pieces] == [ONE_LINE]
+    assert one.pieces[0][1] == pytest.approx(metrics.ascent())
+    assert len(several.pieces) > 1
+    assert ' '.join(piece[2] for piece in several.pieces) == TWO_LINES
+    assert baselines[1] - baselines[0] == pytest.approx(metrics.height())
+
+
+def test_the_box_is_as_tall_as_the_lines_the_layout_holds(style):
+    """The box is measured in millimetres and the pieces in font units, and the
+    two have to say the same thing about how many lines there are."""
+
+    block = text_layout(TWO_LINES, ROOMY, style)
+    lines = {piece[1] for piece in block.pieces}
+
+    assert len(lines) > 1
+    assert block.box.height() == pytest.approx(len(lines) * line_height(style))
+
+
+def test_a_justified_line_is_laid_out_word_by_word(style):
+    """There is no one place a justified line starts from — the slack is shared
+    between the gaps — so every word is a piece of its own.  The last line is
+    laid against the left, so it stays one piece."""
+
+    block = text_layout(TWO_LINES, ROOMY, aligned(style, 'justified'), fit=False)
+    left = text_layout(TWO_LINES, ROOMY, aligned(style, 'left'), fit=False)
+    first = [piece for piece in block.pieces if piece[1] == block.pieces[0][1]]
+    last = [piece for piece in block.pieces if piece[1] == block.pieces[-1][1]]
+
+    assert len(first) > 1
+    assert all(' ' not in piece[2] for piece in first)
+    assert [piece[0] for piece in first] == sorted(piece[0] for piece in first)
+    assert len(last) == 1
+    assert ' ' in left.pieces[0][2]
+
+
+def test_a_block_is_its_pieces_marked_with_the_font_and_scaled_once(style):
+    """What is drawn on the sheet is what the layout says, marked with the
+    block's own font and scaled by the one number, the middle of its box on the
+    origin — so the two halves cannot drift apart, whichever of them is changed.
+
+    The paths are compared rather than their ink: ``inked`` draws a path against
+    its own bounding rectangle, which is exactly what makes it blind to where
+    the block was put, and where the block was put is half of what is held
+    here."""
+
+    block = text_layout(TWO_LINES, ROOMY, style)
+
+    marked = QPainterPath()
+    for along, baseline, piece in block.pieces:
+        marked.addText(along, baseline, block.font, piece)
+    marked = QTransform().scale(block.scale, block.scale).map(marked)
+    marked.translate(-block.box.width() / 2.0, -block.box.height() / 2.0)
+
+    assert text_block(TWO_LINES, ROOMY, style)[0] == winding(marked)
+
+
+def test_a_layout_of_nothing_lays_nothing_out(style):
+    """An item made outside the editor has no name, and there is nothing to
+    write and nothing to mark."""
+
+    block = text_layout('', LABEL_WIDTH, style)
+
+    assert block.pieces == ()
+    assert block.box.isEmpty()
+    assert block_path(block).isEmpty()
+
+
+class WritingPainter:
+    """A stand-in for the painter, which keeps how a block was written out.
+
+    ``write_block`` asks the painter for one of two things and nothing else: to
+    fill a path, which is what the sheet is lettered with, or to take a font and
+    write pieces of text, which is what paper is — so which of the two it chose
+    can be read off without a screen or a file to put it on.
+
+    Attributes
+    ----------
+    paths : list
+        Every path it was asked to fill.
+    written : list of tuple
+        Every piece of text it was asked to write, as ``(point, text)``.
+    font : PyQt6.QtGui.QFont or None
+        The font it was told to write in.
+    pen : object or None
+        The pen it was left with when the writing was done.
+    brush : object or None
+        The brush it was left with.
+    moves : list of tuple
+        What it was asked to do to its transform, so that where the writing
+        would land can be read off.
+    depth : int
+        How many saves are still open, which must be nought when it is over.
+    """
+
+    def __init__(self) -> None:
+        self.paths = []
+        self.written = []
+        self.font = None
+        self.pen = None
+        self.brush = None
+        self.moves = []
+        self.depth = 0
+
+    def save(self) -> None:
+        """Keep what the painter was set to."""
+
+        self.depth += 1
+
+    def restore(self) -> None:
+        """Put back what the painter was set to."""
+
+        self.depth -= 1
+
+    def setPen(self, pen) -> None:  # noqa: N802  (Qt naming)
+        """Take the pen.
+
+        Parameters
+        ----------
+        pen : object
+            The pen, or a style meaning there is none.
+        """
+
+        self.pen = pen
+
+    def setBrush(self, brush) -> None:  # noqa: N802  (Qt naming)
+        """Take the brush.
+
+        Parameters
+        ----------
+        brush : object
+            The brush.
+        """
+
+        self.brush = brush
+
+    def setFont(self, font) -> None:  # noqa: N802  (Qt naming)
+        """Take the font.
+
+        Parameters
+        ----------
+        font : PyQt6.QtGui.QFont
+            The font.
+        """
+
+        self.font = font
+
+    def translate(self, *where) -> None:
+        """Keep a move of the transform.
+
+        Parameters
+        ----------
+        *where
+            Whatever the caller passes.
+        """
+
+        self.moves.append(('translate', where))
+
+    def scale(self, *by) -> None:
+        """Keep a scaling of the transform.
+
+        Parameters
+        ----------
+        *by
+            Whatever the caller passes.
+        """
+
+        self.moves.append(('scale', by))
+
+    def drawPath(self, path) -> None:  # noqa: N802  (Qt naming)
+        """Keep a path it was asked to fill.
+
+        Parameters
+        ----------
+        path : PyQt6.QtGui.QPainterPath
+            The path.
+        """
+
+        self.paths.append(path)
+
+    def drawText(self, point, text) -> None:  # noqa: N802  (Qt naming)
+        """Keep a piece of text it was asked to write.
+
+        Parameters
+        ----------
+        point : PyQt6.QtCore.QPointF
+            Where the piece starts, on its baseline.
+        text : str
+            What it says.
+        """
+
+        self.written.append((point, text))
+
+
+def written_out(block, glyphs, colour, paper=None) -> WritingPainter:
+    """Write a block out and give back what the painter was asked for.
+
+    Parameters
+    ----------
+    block : masafi_simtwin.documents.ink.Block
+        What was laid out.
+    glyphs : PyQt6.QtGui.QPainterPath
+        The same block marked as a path.
+    colour : PyQt6.QtGui.QColor
+        The ink.
+    paper : PyQt6.QtGui.QPalette, optional
+        What paper looks like.  Left out, it is written on a screen.
+
+    Returns
+    -------
+    WritingPainter
+        What it was asked to do.
+    """
+
+    painter = WritingPainter()
+    if paper is None:
+        write_block(painter, block, glyphs, colour)
+        return painter
+    with on_paper(paper):
+        write_block(painter, block, glyphs, colour)
+    return painter
+
+
+# ----------------------------------------------------------------------
 # What it is written in
 # ----------------------------------------------------------------------
 
@@ -444,3 +708,231 @@ def test_a_selected_thing_keeps_the_accent_whatever_its_colour(colors):
 
     assert ink_colour(True, option, AUTOMATIC) == QColor(colors.accent)
     assert ink_colour(True, option, '#aa0000') == QColor(colors.accent)
+
+
+# ----------------------------------------------------------------------
+# On paper
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.parametrize('colors', [LIGHT_COLORS, DARK_COLORS], ids=['light', 'dark'])
+def test_paper_has_no_scheme(colors):
+    """A drawing printed is black on white whatever the application is running
+    in: paper has no dark mode, and a net that came out white on black would be
+    a net that costs a cartridge to read."""
+
+    option = palette_option(colors)
+
+    with on_paper(paper_palette()):
+        assert ink_colour(False, option, AUTOMATIC) == QColor(PAPER_INK)
+        assert paper_colour(option) == QColor(PAPER)
+
+
+@pytest.mark.parametrize('colors', [LIGHT_COLORS, DARK_COLORS], ids=['light', 'dark'])
+def test_a_colour_of_its_own_is_printed_as_it_is(colors):
+    """What follows the scheme is what printing changes.  A colour a person
+    chose is the thing's own rather than the scheme's, so it is not touched —
+    which is what was asked for."""
+
+    option = palette_option(colors)
+
+    with on_paper(paper_palette()):
+        assert ink_colour(False, option, '#aa0000') == QColor('#aa0000')
+
+
+@pytest.mark.parametrize('colors', [LIGHT_COLORS, DARK_COLORS], ids=['light', 'dark'])
+def test_nothing_is_printed_in_the_accent(colors):
+    """The accent says *this is in hand*, which is a fact about the session and
+    not about the net.  A print clears the selection before it draws anything;
+    this is the second answer, so that a thing selected could not print blue
+    even if one were left."""
+
+    option = palette_option(colors)
+
+    with on_paper(paper_palette()):
+        assert ink_colour(True, option, AUTOMATIC) == QColor(PAPER_INK)
+        assert ink_colour(True, option, '#aa0000') == QColor(PAPER_INK)
+
+
+def test_the_screen_is_what_is_painted_on_again_afterwards():
+    """The paper is a state of the module, so it has to be given back.
+
+    **Given back when the painting raised as well** — a print that cannot be
+    written is an ordinary thing, and one of them must not leave every sheet in
+    the application black on white until it is restarted.  The failure is
+    raised at the top level here and not inside a second print: nested, the
+    outer one puts the paper back on its own way out and the leak cannot be
+    seen, which is how this test first passed against a version with no
+    ``finally`` in it at all.
+    """
+
+    option = palette_option(DARK_COLORS)
+
+    assert not printing()
+    with on_paper(paper_palette()):
+        assert printing()
+    assert not printing()
+
+    with pytest.raises(ValueError):
+        with on_paper(paper_palette()):
+            raise ValueError('a print that could not be written')
+
+    assert not printing()
+    assert ink_colour(False, option, AUTOMATIC) == QColor(DARK_COLORS.text)
+
+
+def test_a_caption_is_a_path_on_the_sheet(style):
+    """Which is what makes it the same size at every zoom and fills it with the
+    brush of the thing it belongs to."""
+
+    block = text_layout(TWO_LINES, ROOMY, style)
+    glyphs = block_path(block)
+
+    painter = written_out(block, glyphs, QColor('#aa0000'))
+
+    assert painter.paths == [glyphs]
+    assert painter.written == []
+    assert painter.brush == QColor('#aa0000')
+    assert painter.depth == 0
+
+
+def test_a_caption_is_text_on_paper(style):
+    """So a reader can select it, search it and copy it out of the file — which
+    a path cannot be.  It is the same pieces in the same places, written with
+    the block's own font rather than built into a path."""
+
+    block = text_layout(TWO_LINES, ROOMY, style)
+    glyphs = block_path(block)
+
+    painter = written_out(block, glyphs, QColor(PAPER_INK), paper=paper_palette())
+
+    assert painter.paths == []
+    assert [text for _where, text in painter.written] == [
+        piece[2] for piece in block.pieces
+    ]
+    assert [
+        (where.x(), where.y()) for where, _text in painter.written
+    ] == [(piece[0], piece[1]) for piece in block.pieces]
+    assert painter.font == block.font
+    assert painter.pen == QColor(PAPER_INK)
+    assert painter.depth == 0
+
+
+def test_a_printed_caption_is_scaled_and_centred_like_the_path(style):
+    """The pieces are in the font's own units and the box is in millimetres, so
+    the painter is moved to the middle of the box and scaled by the block's one
+    number — which is exactly what ``block_path`` does to the path, and is what
+    makes a printed caption land where the sheet puts it."""
+
+    block = text_layout(TWO_LINES, ROOMY, style)
+
+    painter = written_out(block, block_path(block), QColor(PAPER_INK), paper_palette())
+
+    assert painter.moves == [
+        ('translate', (-block.box.width() / 2.0, -block.box.height() / 2.0)),
+        ('scale', (block.scale, block.scale)),
+    ]
+
+
+def test_a_block_of_nothing_is_written_neither_way(style):
+    """An item made outside the editor has no name, and a caption that says
+    nothing must not leave a pen, a brush or a font behind it."""
+
+    block = text_layout('', LABEL_WIDTH, style)
+
+    on_sheet = written_out(block, block_path(block), QColor(PAPER_INK))
+    on_the_paper = written_out(block, block_path(block), QColor(PAPER_INK), paper_palette())
+
+    for painter in (on_sheet, on_the_paper):
+        assert painter.paths == []
+        assert painter.written == []
+        assert painter.font is None
+        assert painter.depth == 0
+
+
+#: Pixels to the millimetre a caption is written at to be read back.  Small
+#: enough that a box thirty millimetres across fits in the image with room to
+#: spare, big enough that a line of lettering is several pixels tall.
+WRITING_ZOOM = 12.0
+
+
+def marked(block, glyphs, paper=None) -> QImage:
+    """Write a block out with a real painter and give what it came to.
+
+    Parameters
+    ----------
+    block : masafi_simtwin.documents.ink.Block
+        What was laid out.
+    glyphs : PyQt6.QtGui.QPainterPath
+        The same block marked as a path.
+    paper : PyQt6.QtGui.QPalette, optional
+        What paper looks like.  Left out, it is written on a screen.
+
+    Returns
+    -------
+    PyQt6.QtGui.QImage
+        The image, the middle of the block on the middle of it.
+    """
+
+    image = QImage(600, 400, QImage.Format.Format_ARGB32)
+    image.fill(QColor('white'))
+    painter = QPainter(image)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+    painter.translate(image.width() / 2.0, image.height() / 2.0)
+    painter.scale(WRITING_ZOOM, WRITING_ZOOM)
+    if paper is None:
+        write_block(painter, block, glyphs, QColor('black'))
+    else:
+        with on_paper(paper):
+            write_block(painter, block, glyphs, QColor('black'))
+    painter.end()
+    return image
+
+
+def ink_box(image: QImage) -> tuple[int, int, int, int]:
+    """Give the corners of what was actually marked on an image.
+
+    Parameters
+    ----------
+    image : PyQt6.QtGui.QImage
+        The image, white where nothing was marked.
+
+    Returns
+    -------
+    tuple
+        Left, top, right and bottom, in pixels.
+    """
+
+    pixels = image.constBits().asstring(image.sizeInBytes())
+    width = image.width()
+    marks = [
+        divmod(at // 4, width)
+        for at in range(0, len(pixels), 4)
+        if pixels[at] < 128
+    ]
+    assert marks, 'nothing was marked at all'
+    return (
+        min(across for _down, across in marks),
+        min(down for down, _across in marks),
+        max(across for _down, across in marks),
+        max(down for down, _across in marks),
+    )
+
+
+def test_a_printed_caption_lands_where_the_sheet_puts_it(style):
+    """The two markings are not the same pixels — a glyph written with a font is
+    hinted and a glyph built into a path is not — but they must occupy the same
+    place, or a net would print somewhere other than where it was drawn.
+
+    This is the claim the stand-in painter cannot make: it reads the calls, and
+    where the ink lands is what a real painter answers.
+    """
+
+    block = text_layout(TWO_LINES, LABEL_WIDTH, style)
+    glyphs = block_path(block)
+
+    on_sheet = ink_box(marked(block, glyphs))
+    on_the_paper = ink_box(marked(block, glyphs, paper_palette()))
+
+    for sheet_edge, paper_edge in zip(on_sheet, on_the_paper):
+        assert paper_edge == pytest.approx(sheet_edge, abs=1)

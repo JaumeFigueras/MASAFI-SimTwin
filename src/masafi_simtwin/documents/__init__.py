@@ -21,7 +21,7 @@ from collections.abc import Callable
 
 from PyQt6.QtWidgets import QWidget
 
-from masafi_simtwin.documents import clipboard
+from masafi_simtwin.documents import clipboard, printing
 from masafi_simtwin.documents.arc import Arc
 from masafi_simtwin.documents.canvas import Canvas
 from masafi_simtwin.documents.petri_net import PetriNetEditor, Selection
@@ -501,6 +501,59 @@ def file_of(document: QWidget) -> bytes | None:
     if isinstance(document, PetriNetEditor):
         return pnml.to_pnml(document.to_document())
     return None
+
+
+def can_print(document: QWidget) -> bool:
+    """Say whether a document is one that can be printed.
+
+    Parameters
+    ----------
+    document : PyQt6.QtWidgets.QWidget
+        The document, or ``None`` when none is open.
+
+    Returns
+    -------
+    bool
+        Whether it is drawn on a sheet.  Everything drawn is printed the same
+        way, whatever is drawn on it, which is why this asks about the sheet
+        rather than about the kind of model.
+    """
+
+    return isinstance(document, Canvas)
+
+
+def print_to_pdf(document: QWidget, path, title: str = '') -> int | None:
+    """Print an open document to a PDF file, and say how many pages it came to.
+
+    The one place that knows a document is printed by printing the sheet it is
+    drawn on, so the window prints a model without knowing what it is.
+
+    Parameters
+    ----------
+    document : PyQt6.QtWidgets.QWidget
+        The document.
+    path : str or pathlib.Path
+        Where to write the file.
+    title : str, optional
+        What the file calls itself, which is the model's name.
+
+    Returns
+    -------
+    int, optional
+        How many pages were written — **nought writes no file**, a sheet with
+        nothing drawn on it having no pages worth writing — or ``None`` for a
+        document that is not drawn on a sheet at all, which is a different
+        answer from a sheet with nothing on it.
+
+    Raises
+    ------
+    OSError
+        When the file cannot be written.
+    """
+
+    if not can_print(document):
+        return None
+    return printing.print_to_pdf(document, path, title)
 
 
 def load_file(document: QWidget, data: bytes) -> None:

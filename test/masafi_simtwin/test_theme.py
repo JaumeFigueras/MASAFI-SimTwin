@@ -11,7 +11,11 @@ from masafi_simtwin.theme import (
     CARD_RADIUS,
     COLOR_SCHEME_KEY,
     COLORS,
+    DARK_COLORS,
+    LIGHT_COLORS,
     PANE_GAP,
+    PAPER,
+    PAPER_INK,
     PORTAL_SCHEMES,
     SEPARATOR_WIDTH,
     ColorScheme,
@@ -20,6 +24,7 @@ from masafi_simtwin.theme import (
     build_palette,
     build_stylesheet,
     detect_color_scheme,
+    paper_palette,
     portal_color_scheme,
     portal_settings,
 )
@@ -210,6 +215,57 @@ def test_clearing_the_override_follows_the_desktop_again(qapp):
     manager.override = None
     assert manager.override is None
     assert manager.scheme == detect_color_scheme()
+
+
+# ----------------------------------------------------------------------
+# Paper
+# ----------------------------------------------------------------------
+
+
+def test_paper_is_black_on_white():
+    """A drawing is printed black on white whatever the application is running
+    in.  The **accent is black here too**: it says *this is in hand*, which is a
+    fact about the session and not about the net, and on paper it would be a
+    blue that means nothing."""
+
+    role = QPalette.ColorRole
+    palette = paper_palette()
+
+    for ground in (role.Base, role.Window, role.AlternateBase):
+        assert palette.color(ground).name() == PAPER
+    for mark in (role.Text, role.WindowText, role.Link, role.LinkVisited):
+        assert palette.color(mark).name() == PAPER_INK
+
+
+def test_paper_is_neither_scheme():
+    """Not the light scheme under another name.  The light sheet is white
+    already, so the **ground** is the one thing the two agree about; the ink is
+    where they part, the light scheme's being a near-black chosen to sit easily
+    on a screen rather than the black a printer lays down."""
+
+    palette = paper_palette()
+
+    assert palette.color(QPalette.ColorRole.Base).name() == LIGHT_COLORS.editor
+    assert palette.color(QPalette.ColorRole.Base).name() != DARK_COLORS.editor
+    for colors in (LIGHT_COLORS, DARK_COLORS):
+        assert palette.color(QPalette.ColorRole.Text).name() != colors.text
+
+
+def test_paper_answers_for_every_role_a_scheme_does():
+    """Built over a scheme rather than from nothing, so a role nothing here
+    names — one some item asks for later — still answers with something
+    sensible."""
+
+    palette = paper_palette()
+    light = build_palette(LIGHT_COLORS)
+
+    for role in (
+        QPalette.ColorRole.PlaceholderText,
+        QPalette.ColorRole.Mid,
+        QPalette.ColorRole.ToolTipBase,
+        QPalette.ColorRole.BrightText,
+    ):
+        assert palette.color(role) == light.color(role)
 
 
 # ----------------------------------------------------------------------

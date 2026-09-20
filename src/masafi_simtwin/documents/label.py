@@ -50,16 +50,19 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PyQt6.QtCore import QLineF, QPointF, QRectF, QSizeF, Qt
-from PyQt6.QtGui import QPainterPath, QPen
+from PyQt6.QtGui import QFont, QPainterPath, QPen
 from PyQt6.QtWidgets import QGraphicsItem
 
 from masafi_simtwin.documents.ink import (
     HANDLE_GRAB,
     HANDLE_SIZE,
     LABEL_WIDTH,
+    Block,
+    block_path,
     ink_colour,
     paper_colour,
-    text_block,
+    text_layout,
+    write_block,
 )
 
 #: How far a label stands off the item it belongs to, in millimetres.
@@ -123,6 +126,7 @@ class Label(QGraphicsItem):
         self._text = ''
         self._width: float | None = None
         self._style = None
+        self._block = Block((), QSizeF(0.0, 0.0), 0.0, QFont())
         self._glyphs = QPainterPath()
         self._size = QSizeF(0.0, 0.0)
         self._asked = False
@@ -211,17 +215,25 @@ class Label(QGraphicsItem):
         A change of geometry and not merely of paint: the box is as big as what
         is in it, so the view is told before it changes size or it repaints the
         new box and leaves the old one on the sheet.
+
+        **Both the layout and the path are kept.**  The path is what the sheet
+        is written with and is built once here rather than at every repaint; the
+        layout is what the same caption is written from on paper, where it is
+        text rather than a path — see
+        :func:`~masafi_simtwin.documents.ink.write_block`.
         """
 
         self.prepareGeometryChange()
         if self._style is None:
-            self._glyphs, self._size = QPainterPath(), QSizeF(0.0, 0.0)
+            self._block = Block((), QSizeF(0.0, 0.0), 0.0, QFont())
         elif self._width is None:
-            self._glyphs, self._size = text_block(self._text, LABEL_WIDTH, self._style)
+            self._block = text_layout(self._text, LABEL_WIDTH, self._style)
         else:
-            self._glyphs, self._size = text_block(
+            self._block = text_layout(
                 self._text, self._width, self._style, fit=False
             )
+        self._glyphs = block_path(self._block)
+        self._size = self._block.box
         self.update()
 
     @property
@@ -317,6 +329,12 @@ class Label(QGraphicsItem):
         of one can be seen.  The frame is what tells the two apart — a hairline
         of the accent, dashed, the way a selected guide is dashed.
 
+        **How the text is marked is not this label's to decide**:
+        :func:`~masafi_simtwin.documents.ink.write_block` writes it as a path on
+        the sheet and as text on paper.  The frame and the handles are the
+        session's rather than the drawing's, and a print never reaches them —
+        nothing is selected while one is taken.
+
         Parameters
         ----------
         painter : PyQt6.QtGui.QPainter
@@ -334,9 +352,7 @@ class Label(QGraphicsItem):
         chosen = self.isSelected() or (owner is not None and owner.isSelected())
         ink = ink_colour(chosen, option, self._style.colour)
 
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(ink)
-        painter.drawPath(self._glyphs)
+        write_block(painter, self._block, self._glyphs, ink)
 
         if not self.isSelected():
             return
