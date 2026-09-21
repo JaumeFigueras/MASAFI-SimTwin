@@ -2,8 +2,10 @@
 
 A place is a circle and a transition is a bar, and apart from those two facts
 they are the same thing: something of a fixed size in millimetres, dropped on
-the sheet, moved about it a millimetre at a time, held inside the paper, and
-carrying **connecting points** for the arcs that will join them.  That is
+the sheet, moved about it a grid step at a time, held inside the paper, and
+carrying **connecting points** for the arcs that will join them.  Which of its
+points land on the grid as it moves is the one thing about snapping a subclass
+may say, through :meth:`NetItem.anchors_for`.  That is
 :class:`NetItem`, and it was written when there were two items to write it
 against rather than one — a base class over a sample of one is a guess.
 
@@ -78,7 +80,7 @@ from __future__ import annotations
 
 import math
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from uuid import uuid4
 
 from PyQt6.QtCore import QPointF, QRectF, QSizeF, Qt
@@ -128,12 +130,19 @@ class NetItem(QGraphicsItem):
     puts under the pointer, and it is the one point of a circle that means
     anything.
 
+    A person dragging it lands one of its :meth:`snap_anchors` on the grid —
+    whichever asks for the least move.  A position that is a **record** of where
+    it was — read from a file, put back by an undo, replayed from a journal — is
+    put down exactly by :meth:`place` instead, on whatever grid it was drawn on: snapping
+    it again would move an item nobody moved, and the sheet would stop agreeing
+    with the document.
+
     Parameters
     ----------
     snap : collections.abc.Callable, optional
-        What to round a coordinate to as the item moves.  The canvas passes
-        :meth:`~masafi_simtwin.documents.canvas.CanvasView.snap`, which is the
-        millimetre at every zoom; without one an item goes where it is put.
+        What to round one coordinate to.  The canvas passes
+        :meth:`~masafi_simtwin.documents.canvas.CanvasView.snap`; the item hands
+        it on to its caption, which snaps a width with it.
     bounds : collections.abc.Callable, optional
         Where the item may be, as something returning a
         :class:`~PyQt6.QtCore.QRectF` in scene coordinates.  The canvas passes
@@ -143,6 +152,11 @@ class NetItem(QGraphicsItem):
         again whenever the page changes under it.
     parent : PyQt6.QtWidgets.QGraphicsItem, optional
         Parent item.
+    snap_point : collections.abc.Callable, optional
+        What to move a point to, given the point and its anchors, as the item is
+        dragged.  The canvas passes
+        :meth:`~masafi_simtwin.documents.canvas.CanvasView.snap_point`, the grid
+        step at every zoom; without one an item goes where it is put.
 
     Attributes
     ----------
@@ -196,10 +210,13 @@ class NetItem(QGraphicsItem):
         snap: Callable[[float], float] | None = None,
         bounds: Callable[[], QRectF] | None = None,
         parent: QGraphicsItem | None = None,
+        *,
+        snap_point: Callable[[QPointF, Sequence[QPointF]], QPointF] | None = None,
     ) -> None:
         super().__init__(parent)
-        self._snap = snap
+        self._snap_point = snap_point
         self._bounds = bounds
+        self._placing = False
         self._ports_visible = False
         self._arcs: list = []
         self.uuid = str(uuid4())
@@ -738,11 +755,70 @@ class NetItem(QGraphicsItem):
     # Where the item may go
     # ------------------------------------------------------------------
 
+    @classmethod
+    def anchors_for(cls, vertical: bool = False) -> tuple[QPointF, ...]:
+        """Give the points of this kind of item that may land on the grid.
+
+        Asked of the kind rather than of an item, because a paste has to know
+        where a node will land before there is an item to ask.  The shape is all
+        it depends on, and the only way two items of one kind differ in shape is
+        which way round a transition is.
+
+        Parameters
+        ----------
+        vertical : bool, optional
+            Whether the item stands up the sheet.  Only a kind that can be
+            turned takes any notice.
+
+        Returns
+        -------
+        tuple of PyQt6.QtCore.QPointF
+            The anchors, in millimetres from the centre, **the centre first**:
+            a tie goes to the first.  An item of no particular shape has the
+            centre alone.
+        """
+
+        return (QPointF(0.0, 0.0),)
+
+    def snap_anchors(self) -> tuple[QPointF, ...]:
+        """Give the points of this item that may land on the grid.
+
+        Returns
+        -------
+        tuple of PyQt6.QtCore.QPointF
+            :meth:`anchors_for` its kind, the way round it is.
+        """
+
+        return self.anchors_for()
+
+    def place(self, position: QPointF) -> None:
+        """Put the item exactly where a record says it was.
+
+        Not snapped: a position read from a file, or put back by an undo or a
+        journal, was on the grid it was drawn on, which need not be today's.
+        Still held on the paper, which is a rule of the sheet rather than of the
+        grid.
+
+        Parameters
+        ----------
+        position : PyQt6.QtCore.QPointF
+            Where its centre goes, in scene millimetres.
+        """
+
+        self._placing = True
+        try:
+            self.setPos(position)
+        finally:
+            self._placing = False
+
     def itemChange(self, change, value):  # noqa: N802  (Qt naming)
         """Snap a moving item to the grid and hold it to the sheet.
 
         This is the one place a position is decided, so an item dropped from the
-        library and one dragged by the hand land under the same rule.
+        library and one dragged by the hand land under the same rule: the one of
+        its :meth:`snap_anchors` that asks for the least move is put on the
+        grid.  An item put down by :meth:`place` is held on the paper and nothing
+        more.
 
         Parameters
         ----------
@@ -758,9 +834,9 @@ class NetItem(QGraphicsItem):
         """
 
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionChange:
+            if self._snap_point is not None and not self._placing:
+                value = self._snap_point(value, self.snap_anchors())
             x, y = value.x(), value.y()
-            if self._snap is not None:
-                x, y = self._snap(x), self._snap(y)
             if self._bounds is not None:
                 x, y = self._inside(x, y, self._bounds())
             return QPointF(x, y)

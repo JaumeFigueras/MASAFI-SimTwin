@@ -415,12 +415,18 @@ def test_an_s_without_points_is_not_given_them_back(editor):
     assert editor.arcs[0].curve_points() == []
 
 
-def test_a_position_read_back_is_snapped_like_any_other(editor):
-    """A net written by another tool lands on the millimetre."""
+def test_a_position_read_back_is_where_it_was_drawn(editor):
+    """Even off the grid: reading a net is not moving it.
+
+    The editor cannot tell a net another tool wrote from one of its own drawn
+    on another grid step, and snapping either on the way in would move a node
+    nobody moved.  A node read off the grid lands on it the first time it is
+    dragged.
+    """
 
     editor.load_document(NetDocument(places=(PlaceData('p', 'P1', (20.4, 19.7)),)))
 
-    assert editor.to_document().places[0].position == (20.0, 20.0)
+    assert editor.to_document().places[0].position == (20.4, 19.7)
 
 
 def test_a_connecting_point_a_node_lacks_is_held_to_its_last(editor):
@@ -601,6 +607,62 @@ def test_every_operation_undone_leaves_the_sheet_as_it_was(editor, name):
     editor.apply(change.inverse())
 
     assert editor.to_document() == before
+
+
+#: A grid step most of the positions of :func:`operations_for` do not lie on —
+#: the little net's 20 and 80, the new place's 100 and 40, the guides' 50 and 70
+#: — so an operation, or its inverse, that re-snapped what it put down would
+#: move it.
+FOREIGN_STEP = 3.0
+
+
+@pytest.mark.parametrize('name', sorted(OPERATIONS), ids=sorted(OPERATIONS))
+def test_the_two_agree_on_a_grid_the_net_was_not_drawn_on(editor, name):
+    """A recorded position is where it was, whatever the grid is today.
+
+    The net is drawn at a millimetre and the step changed before the operation
+    is applied — which is what an undo, a redo or a journal replayed after a
+    change of settings does.  Snapping what an operation puts down would move a
+    node or a guide the description says has not moved.
+    """
+
+    operation = operations_for(editor)[name]
+    editor.view.set_grid_step(FOREIGN_STEP)
+    before = editor.to_document()
+    change = Change('gesture', (operation,))
+
+    editor.apply(change)
+    assert editor.to_document() == operation.apply(before)
+
+    editor.apply(change.inverse())
+    assert editor.to_document() == before
+
+
+def test_a_net_read_on_another_grid_is_not_moved(editor):
+    """Reading a net is not moving it, whatever step it was drawn at."""
+
+    little_net(editor)
+    editor.add_guide(Qt.Orientation.Vertical, 40.0)
+    drawn = editor.to_document()
+    editor.view.set_grid_step(FOREIGN_STEP)
+
+    editor.load_document(drawn)
+
+    assert editor.to_document() == drawn
+
+
+def test_a_node_read_off_the_grid_lands_on_it_when_dragged(editor):
+    """What is read is left alone until a person moves it."""
+
+    editor.view.set_grid_step(FOREIGN_STEP)
+    editor.load_document(NetDocument(places=(PlaceData('p', 'P1', (40.0, 40.0)),)))
+    place = editor.places[0]
+
+    assert place.pos() == QPointF(40.0, 40.0)
+
+    place.setPos(QPointF(40.2, 40.0))
+
+    assert place.pos() == QPointF(40.0, 39.0)
 
 
 def test_a_change_of_several_operations_is_undone_whole(editor):

@@ -72,6 +72,7 @@ class Guide(QGraphicsItem):
         self.orientation = orientation
         self._sheet = QRectF(sheet)
         self._snap = snap
+        self._placing = False
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
@@ -123,6 +124,27 @@ class Guide(QGraphicsItem):
 
         self.setPos(QPointF(0.0, value) if self.horizontal else QPointF(value, 0.0))
 
+    def place(self, value: float) -> None:
+        """Put the guide exactly where a record says it was.
+
+        A guide read out of a file, or put back by an undo or a journal, goes
+        where it was — which is on whatever grid it was dropped on, and that may
+        not be the grid of today.  Snapping it again would move a guide nobody
+        moved, and the sheet would stop agreeing with the document that says
+        where it is.  Its axis is still locked.
+
+        Parameters
+        ----------
+        value : float
+            Where it goes, in scene millimetres.
+        """
+
+        self._placing = True
+        try:
+            self.position = value
+        finally:
+            self._placing = False
+
     # ------------------------------------------------------------------
     # Where the guide may go
     # ------------------------------------------------------------------
@@ -132,7 +154,7 @@ class Guide(QGraphicsItem):
 
         This is the one place a guide's position is decided, so that one dragged
         by hand and one dragged off its ruler cannot end up under different
-        rules.
+        rules.  A guide put down by :meth:`place` is not snapped.
 
         Parameters
         ----------
@@ -149,7 +171,7 @@ class Guide(QGraphicsItem):
 
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionChange:
             along = value.y() if self.horizontal else value.x()
-            if self._snap is not None:
+            if self._snap is not None and not self._placing:
                 along = self._snap(along)
             return QPointF(0.0, along) if self.horizontal else QPointF(along, 0.0)
         return super().itemChange(change, value)

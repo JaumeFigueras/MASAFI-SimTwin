@@ -1,8 +1,8 @@
 """Tests for what every item of a net does the same way.
 
 A place is a circle and a transition is a bar, and apart from that they are one
-thing: dropped out of the Libraries pane, snapped to the millimetre, held on the
-paper, and carrying connecting points that are not drawn until the pointer is
+thing: dropped out of the Libraries pane, snapped to the grid by whichever of
+its anchors is nearest, held on the paper, and carrying connecting points that are not drawn until the pointer is
 over them.  Every test here is run against both, so a rule that holds for one and
 not the other is a failure rather than an oversight.
 
@@ -293,6 +293,62 @@ def test_the_snapping_does_not_follow_the_zoom(editor, item):
     assert all(position == QPointF(47.0, 63.0) for _, position in landed)
     assert min(zoom for zoom, _ in landed) < 0.2
     assert max(zoom for zoom, _ in landed) > 4.0
+
+
+def test_an_item_without_a_shape_snaps_by_its_centre_alone():
+    """The rule before there were anchors, for anything that declares none."""
+
+    assert NetItem.anchors_for() == (QPointF(0.0, 0.0),)
+    assert NetItem.anchors_for(vertical=True) == (QPointF(0.0, 0.0),)
+
+
+def test_an_item_s_anchors_are_its_centre_and_some_of_its_connecting_points(item):
+    """So an item snapped by an edge puts an arc's end on the grid.
+
+    The centre is first, since a tie goes to the first anchor, and every other
+    anchor is a point an arc can be joined at.
+    """
+
+    anchors = item.snap_anchors()
+
+    assert anchors[0] == QPointF(0.0, 0.0)
+    assert len(anchors) > 1
+    assert all(anchor in item.ports() for anchor in anchors[1:])
+
+
+def test_an_item_is_snapped_by_the_anchor_nearest_the_grid(editor, item):
+    """At a step its shape is not a whole number of steps across.
+
+    A place's rim and a transition's ends are both five and eight millimetres
+    out, neither a multiple of three, and for both the right-hand anchor asks
+    for the least move: it lands on a crossing and the centre does not.  The
+    item was put down at a millimetre, so the new step reaches what is already
+    on the sheet the next time it is moved.
+    """
+
+    editor.view.set_grid_step(3.0)
+    item.setPos(QPointF(10.4, 20.2))
+
+    assert item.pos() == QPointF(10.0, 21.0)
+    assert item.pos().x() % 3.0 != 0.0
+
+
+def test_an_item_placed_is_put_exactly_where_it_is_told(editor, item):
+    """A record of where it was is not a drag, and is not snapped."""
+
+    editor.view.set_grid_step(3.0)
+    item.place(QPointF(40.2, 40.7))
+
+    assert item.pos() == QPointF(40.2, 40.7)
+
+
+def test_an_item_placed_is_still_held_on_the_paper(editor, item):
+    """The paper is the sheet's rule, not the grid's."""
+
+    reach = item.boundingRect()
+    item.place(QPointF(-500.0, -500.0))
+
+    assert item.pos() == QPointF(-reach.left(), -reach.top())
 
 
 def test_an_item_cannot_be_dragged_off_the_sheet(editor, item):

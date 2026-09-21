@@ -23,6 +23,7 @@ from masafi_simtwin.documents.transition import (
     TRANSITION_HALF_LENGTH,
     TRANSITION_HEIGHT,
     TRANSITION_LENGTH,
+    Transition,
     turned,
 )
 from masafi_simtwin.theme import DARK_COLORS, LIGHT_COLORS
@@ -217,6 +218,49 @@ def test_the_connecting_points_turn_with_the_bar(transition):
     assert len(standing) == PORT_COUNT
     assert standing == [turned(point) for point in lying]
     assert standing[0] == QPointF(0.0, TRANSITION_HALF_LENGTH)
+
+
+def test_a_transition_snaps_by_its_centre_and_the_ends_of_its_bar(transition):
+    """The ends are where its arcs meet it, and the centre is first."""
+
+    assert transition.snap_anchors() == (
+        QPointF(0.0, 0.0),
+        QPointF(TRANSITION_HALF_LENGTH, 0.0),
+        QPointF(-TRANSITION_HALF_LENGTH, 0.0),
+    )
+
+
+def test_the_anchors_turn_with_the_bar(transition):
+    """Standing up, it snaps by its top and bottom ends, as its points turn."""
+
+    transition.vertical = True
+
+    assert transition.snap_anchors() == (
+        QPointF(0.0, 0.0),
+        turned(QPointF(TRANSITION_HALF_LENGTH, 0.0)),
+        turned(QPointF(-TRANSITION_HALF_LENGTH, 0.0)),
+    )
+    assert transition.snap_anchors() == Transition.anchors_for(vertical=True)
+
+
+def test_a_bar_lying_and_a_bar_standing_snap_by_different_ends(editor, transition):
+    """Dragged to one place, each lands by the end nearest a crossing.
+
+    At a step of 3 mm, lying across the sheet the right-hand end asks for the
+    least move and the bar lands a whole step right of the crossing its end is
+    on; standing up, the bottom end does, and the bar lands the other way.
+    """
+
+    editor.view.set_grid_step(3.0)
+
+    transition.setPos(QPointF(10.2, 10.4))
+    lying = transition.pos()
+    transition.vertical = True
+    transition.setPos(QPointF(10.2, 10.4))
+    standing = transition.pos()
+
+    assert lying == QPointF(10.0, 9.0)
+    assert standing == QPointF(9.0, 10.0)
 
 
 def test_a_transition_stood_up_is_taken_hold_of_by_its_bar(transition):

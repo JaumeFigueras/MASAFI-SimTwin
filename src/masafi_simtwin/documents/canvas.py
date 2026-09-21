@@ -575,7 +575,9 @@ class CanvasView(QGraphicsView):
         found = [item for item in self.scene().items() if isinstance(item, Guide)]
         return sorted(found, key=lambda guide: (guide.orientation.value, guide.position))
 
-    def add_guide(self, orientation: Qt.Orientation, position: float) -> Guide:
+    def add_guide(
+        self, orientation: Qt.Orientation, position: float, exact: bool = False
+    ) -> Guide:
         """Put a guide on the sheet.
 
         Parameters
@@ -585,7 +587,12 @@ class CanvasView(QGraphicsView):
             standing up it.
         position : float
             Where it goes, in scene millimetres.  It is snapped like any other
-            move of a guide.
+            move of a guide, unless it is ``exact``.
+        exact : bool, optional
+            Whether the position is a record of where a guide was — read from a
+            file, put back by an undo — rather than where one is being dropped,
+            and so goes exactly there.  See
+            :meth:`~masafi_simtwin.documents.guide.Guide.place`.
 
         Returns
         -------
@@ -594,6 +601,8 @@ class CanvasView(QGraphicsView):
         """
 
         guide = Guide(orientation, position, self.sceneRect(), self.snap)
+        if exact:
+            guide.place(position)
         self.scene().addItem(guide)
         return guide
 
@@ -2457,7 +2466,9 @@ class Canvas(QWidget):
 
         return self.view.guides
 
-    def add_guide(self, orientation: Qt.Orientation, position: float) -> Guide:
+    def add_guide(
+        self, orientation: Qt.Orientation, position: float, exact: bool = False
+    ) -> Guide:
         """Put a guide on the sheet.
 
         Parameters
@@ -2467,6 +2478,9 @@ class Canvas(QWidget):
             standing up it.
         position : float
             Where it goes, in scene millimetres.
+        exact : bool, optional
+            Whether it goes exactly there rather than snapped, being a record of
+            where a guide was.
 
         Returns
         -------
@@ -2474,7 +2488,7 @@ class Canvas(QWidget):
             The guide.
         """
 
-        return self.view.add_guide(orientation, position)
+        return self.view.add_guide(orientation, position, exact)
 
     def clear_guides(self) -> None:
         """Take every guide off the sheet."""

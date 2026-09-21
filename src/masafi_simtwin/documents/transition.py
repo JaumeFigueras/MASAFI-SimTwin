@@ -186,6 +186,44 @@ class Transition(NetItem):
             return TRANSITION_HALF_HEIGHT, TRANSITION_HALF_LENGTH
         return TRANSITION_HALF_LENGTH, TRANSITION_HALF_HEIGHT
 
+    @classmethod
+    def anchors_for(cls, vertical: bool = False) -> tuple[QPointF, ...]:
+        """Give the three points of a transition that may land on the grid.
+
+        The centre and the two **ends of the bar**, as agreed with Jaume — the
+        middle of the left and right edges of a bar lying across the sheet,
+        which are where its arcs meet it.  They turn with the bar, as the
+        connecting points do (:func:`turned`), so one standing up is snapped by
+        its top and bottom ends.
+
+        Parameters
+        ----------
+        vertical : bool, optional
+            Whether the bar stands up the sheet.
+
+        Returns
+        -------
+        tuple of PyQt6.QtCore.QPointF
+            The centre, then the right-hand and left-hand end — the bottom and
+            top end once upright — in millimetres from the centre.
+        """
+
+        ends = (QPointF(TRANSITION_HALF_LENGTH, 0.0), QPointF(-TRANSITION_HALF_LENGTH, 0.0))
+        if vertical:
+            ends = tuple(turned(end) for end in ends)
+        return (QPointF(0.0, 0.0), *ends)
+
+    def snap_anchors(self) -> tuple[QPointF, ...]:
+        """Give the points of this transition that may land on the grid.
+
+        Returns
+        -------
+        tuple of PyQt6.QtCore.QPointF
+            :meth:`anchors_for` a bar the way round this one is.
+        """
+
+        return self.anchors_for(self._vertical)
+
     @staticmethod
     def port_offsets_along_an_edge() -> list[float]:
         """Give how far along a long edge each of its points is, from the middle.

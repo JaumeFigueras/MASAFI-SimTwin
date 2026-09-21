@@ -520,7 +520,7 @@ class PetriNetEditor(Canvas):
         if factory is None:
             return None
 
-        item = factory(self.view.snap, self.view.sceneRect)
+        item = factory(self.view.snap, self.view.sceneRect, snap_point=self.view.snap_point)
         item.name = self.next_name(item.NAME_PREFIX)
         item.uuid = str(uuid4())
         self.scene().addItem(item)
@@ -1413,7 +1413,7 @@ class PetriNetEditor(Canvas):
         for data in document.arcs:
             self.draw_arc(data)
         for data in document.guides:
-            self.add_guide(GUIDE_WAYS[data.orientation], data.position)
+            self.add_guide(GUIDE_WAYS[data.orientation], data.position, exact=True)
 
         self.show_arc_choice()
 
@@ -1431,7 +1431,9 @@ class PetriNetEditor(Canvas):
             The item, already on the scene.
         """
 
-        item = NODE_ITEMS[type(data)](self.view.snap, self.view.sceneRect)
+        item = NODE_ITEMS[type(data)](
+            self.view.snap, self.view.sceneRect, snap_point=self.view.snap_point
+        )
         item.uuid = data.uuid
         item.name = data.name
         item.description = data.description
@@ -1444,7 +1446,7 @@ class PetriNetEditor(Canvas):
         item.text_style = data.text_style
         item.line_style = data.line_style
         self.scene().addItem(item)
-        item.setPos(QPointF(*data.position))
+        item.place(QPointF(*data.position))
         return item
 
     def draw_arc(self, data: ArcData) -> Arc:
@@ -1634,7 +1636,7 @@ class PetriNetEditor(Canvas):
         elif isinstance(operation, RemoveNode):
             self.view.remove(self.node(operation.node.uuid))
         elif isinstance(operation, MoveNode):
-            self.node(operation.node).setPos(QPointF(*operation.after))
+            self.node(operation.node).place(QPointF(*operation.after))
         elif isinstance(operation, SetNodeName):
             self.node(operation.node).name = operation.after
         elif isinstance(operation, SetTokens):
@@ -1678,11 +1680,15 @@ class PetriNetEditor(Canvas):
                 operation.after_controls, operation.after_points
             )
         elif isinstance(operation, AddGuide):
-            self.add_guide(GUIDE_WAYS[operation.guide.orientation], operation.guide.position)
+            self.add_guide(
+                GUIDE_WAYS[operation.guide.orientation],
+                operation.guide.position,
+                exact=True,
+            )
         elif isinstance(operation, RemoveGuide):
             self.view.remove_guide(self.guide(operation.guide))
         elif isinstance(operation, MoveGuide):
-            self.guide(operation.before).position = operation.after.position
+            self.guide(operation.before).place(operation.after.position)
         else:
             raise TypeError(f'{operation!r} is an operation this editor cannot make')
 

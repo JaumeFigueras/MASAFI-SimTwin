@@ -217,6 +217,32 @@ class Place(NetItem):
 
         return [self.port_offset(angle) for angle in self.port_angles()]
 
+    @classmethod
+    def anchors_for(cls, vertical: bool = False) -> tuple[QPointF, ...]:
+        """Give the five points of a place that may land on the grid.
+
+        The centre and the four points of the rim due east, north, west and
+        south, as agreed with Jaume — which are the connecting points at 0°,
+        90°, 180° and 270°, so a place snapped by its rim lines an arc's end up
+        with the grid.  A circle has no way round, so ``vertical`` is ignored.
+
+        Parameters
+        ----------
+        vertical : bool, optional
+            Ignored.
+
+        Returns
+        -------
+        tuple of PyQt6.QtCore.QPointF
+            The centre, then the rim east, north, west and south, in
+            millimetres from the centre.
+        """
+
+        return (
+            QPointF(0.0, 0.0),
+            *(cls.port_offset(angle) for angle in (0.0, 90.0, 180.0, 270.0)),
+        )
+
     def boundingRect(self) -> QRectF:  # noqa: N802  (Qt naming)
         """Give what the circle itself is drawn inside.
 

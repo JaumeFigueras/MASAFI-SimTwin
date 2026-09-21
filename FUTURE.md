@@ -1274,3 +1274,31 @@ going into a drawing program to be finished by hand, which wants SVG; pasting a 
 - **PNG through a `QImage`** at a resolution the person chooses — `painted()` in the printing tests is
   already that function, written for the tests rather than for the application.
 - **The clipboard**, which is the same image or the same SVG put on it instead of written to a file.
+
+---
+
+## A net read off the grid stays off it until it is dragged
+
+**Now.** A position read from a file, put back by an undo or a redo, or replayed from a journal is put
+down **exactly** — `NetItem.place()`, `Guide.place()`, `add_guide(exact=True)` — and only a person's
+drag or drop snaps. So a net another tool wrote, whose places sit at 20.4 and 19.7, opens with them
+there, and each lands on the grid the first time it is moved.
+
+**Why it was done this way.** The grid step is a preference and can change between drawing a net and
+reading it. Snapping on the way in moved every node and guide of a net drawn at 1 mm and opened at
+3 mm — a change nobody made, which the sheet then disagreed with its own document about, and an undo
+or a journal after a change of step did the same. The editor is handed a `NetDocument` and cannot tell
+a foreign net from one of its own drawn at another step, so it snaps neither. This reverses what was
+done before, when the step was fixed and a net from another tool was snapped as it was read.
+
+**When it will not be enough.** Importing a net from another tool to be tidied, where a dozen nodes a
+few tenths off the grid are a dozen things to drag.
+
+**Options.**
+
+- **Snap in the adapter, for foreign nodes only.** `from_pnml()` knows which nodes carry SimTwin's own
+  tool data; the ones that do not could be snapped as they are read, the shell passing the step down
+  as a plain number. A foreign file is then read tidily and a SimTwin file exactly.
+- **A *Snap to Grid* command** on a selection, one recorded change, which is the tidying done when it is
+  wanted rather than whenever a file is read.
+- Leave it: a node off the grid is one drag from being on it.

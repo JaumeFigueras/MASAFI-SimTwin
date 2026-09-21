@@ -25,6 +25,7 @@ from masafi_simtwin.documents.place import (
     TOKEN_NUMBER_HEIGHT,
     TOKEN_NUMBER_WIDTH,
     TOKEN_RADIUS,
+    Place,
 )
 from masafi_simtwin.preferences import DEFAULT_LINE_WIDTH
 from masafi_simtwin.theme import DARK_COLORS, LIGHT_COLORS
@@ -70,6 +71,25 @@ def test_there_is_a_connecting_point_every_thirty_degrees(place):
     assert PORT_COUNT == 12
     assert place.port_angles() == [angle * 30.0 for angle in range(12)]
     assert len(place.ports()) == 12
+
+
+def test_a_place_snaps_by_its_centre_and_four_points_of_its_rim(place):
+    """Due east, north, west and south, and the centre first."""
+
+    expected = [
+        (0.0, 0.0),
+        (PLACE_RADIUS, 0.0),
+        (0.0, -PLACE_RADIUS),
+        (-PLACE_RADIUS, 0.0),
+        (0.0, PLACE_RADIUS),
+    ]
+    anchors = place.snap_anchors()
+
+    assert len(anchors) == 5
+    for anchor, (x, y) in zip(anchors, expected):
+        assert anchor.x() == pytest.approx(x, abs=1e-12)
+        assert anchor.y() == pytest.approx(y, abs=1e-12)
+    assert anchors == Place.anchors_for(vertical=True)
 
 
 def test_every_connecting_point_is_one_radius_out(place):
