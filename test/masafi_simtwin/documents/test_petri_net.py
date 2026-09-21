@@ -1022,7 +1022,7 @@ def drag_label(view, label, by: QPointF, at: QPointF | None = None) -> None:
 
 
 def test_a_caption_dragged_by_hand_is_one_recorded_change(editor):
-    """Moved a millimetre at a time, kept on the item, and put back by *Undo*
+    """Moved a grid step at a time, kept on the item, and put back by *Undo*
     where the item puts it rather than where it happened to be."""
 
     place, _free, _transition, _arc = little_net(editor)
@@ -1036,7 +1036,11 @@ def test_a_caption_dragged_by_hand_is_one_recorded_change(editor):
     assert editor.undo_stack.command(count).text() == 'Move Label'
     offset = place.label_offset
     assert offset == (place.label.pos().x(), place.label.pos().y())
-    assert offset == (round(offset[0]), round(offset[1]))
+    assert any(
+        point.x() == pytest.approx(round(point.x()), abs=1e-9)
+        and point.y() == pytest.approx(round(point.y()), abs=1e-9)
+        for point in map(place.label.mapToScene, place.label.snap_anchors())
+    )
     assert abs(offset[0] - anchor.x() - 10.3) <= 1.0 and abs(offset[1] - anchor.y() - 20.2) <= 1.0
     assert editor.to_document().places[0].label_offset == offset
 

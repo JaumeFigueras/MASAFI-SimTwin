@@ -501,7 +501,10 @@ class CanvasView(QGraphicsView):
         return round(round(value / step) * step, SNAP_DIGITS)
 
     def snap_point(
-        self, point: QPointF, anchors: Sequence[QPointF] = ()
+        self,
+        point: QPointF,
+        anchors: Sequence[QPointF] = (),
+        origin: QPointF | None = None,
     ) -> QPointF:
         """Move a point by the least that puts one of its anchors on the grid.
 
@@ -519,6 +522,14 @@ class CanvasView(QGraphicsView):
         than one per axis: a place lands with one of its five points on a
         crossing, not with its left edge on one line and its centre on another.
 
+        The grid is the **sheet's** whatever frame the point is in.  A caption
+        is placed in its owner's coordinates, so it says where that frame begins
+        on the sheet as ``origin``, and its corner lands on a crossing of the
+        sheet rather than on a whole step from its node.  The answer is worked
+        out and rounded here, in the point's own frame, rather than mapped out
+        to the sheet and back — a round trip that turns 2.85 into
+        2.8499999999999996 on the way.
+
         Parameters
         ----------
         point : PyQt6.QtCore.QPointF
@@ -526,17 +537,26 @@ class CanvasView(QGraphicsView):
         anchors : sequence of PyQt6.QtCore.QPointF, optional
             Its anchors, from ``point``, the centre first: a tie goes to the
             first.  None given is the centre alone.
+        origin : PyQt6.QtCore.QPointF, optional
+            Where the frame ``point`` is measured in begins, in scene
+            millimetres.  Left out, ``point`` is on the sheet already.  A frame
+            is only ever moved, never turned or scaled: nothing on the sheet is.
 
         Returns
         -------
         PyQt6.QtCore.QPointF
-            Where the thing is placed instead.
+            Where the thing is placed instead, in the frame ``point`` was in.
         """
 
+        ox, oy = (origin.x(), origin.y()) if origin is not None else (0.0, 0.0)
         best: tuple[float, QPointF] | None = None
         for anchor in anchors or (QPointF(),):
-            x = round(self.snap(point.x() + anchor.x()) - anchor.x(), SNAP_DIGITS)
-            y = round(self.snap(point.y() + anchor.y()) - anchor.y(), SNAP_DIGITS)
+            x = round(
+                self.snap(ox + point.x() + anchor.x()) - anchor.x() - ox, SNAP_DIGITS
+            )
+            y = round(
+                self.snap(oy + point.y() + anchor.y()) - anchor.y() - oy, SNAP_DIGITS
+            )
             length = math.hypot(x - point.x(), y - point.y())
             if best is None or length < best[0] - SNAP_TIE:
                 best = (length, QPointF(x, y))

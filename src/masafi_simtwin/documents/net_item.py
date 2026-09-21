@@ -156,7 +156,8 @@ class NetItem(QGraphicsItem):
         What to move a point to, given the point and its anchors, as the item is
         dragged.  The canvas passes
         :meth:`~masafi_simtwin.documents.canvas.CanvasView.snap_point`, the grid
-        step at every zoom; without one an item goes where it is put.
+        step at every zoom; without one an item goes where it is put.  The item
+        hands it on to its caption, which snaps by nine points of its own.
 
     Attributes
     ----------
@@ -226,7 +227,7 @@ class NetItem(QGraphicsItem):
         self._label_width: float | None = None
         self._text_style = None
         self._line_style = None
-        self._label = Label(self, snap, bounds, resizable=True)
+        self._label = Label(self, snap, bounds, resizable=True, snap_point=snap_point)
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)

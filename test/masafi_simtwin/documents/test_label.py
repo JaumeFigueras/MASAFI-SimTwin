@@ -9,7 +9,7 @@ a caption is selected by clicking it and by nothing else.
 from __future__ import annotations
 
 import pytest
-from PyQt6.QtCore import QEvent, QPointF, Qt
+from PyQt6.QtCore import QEvent, QLineF, QPointF, Qt
 from PyQt6.QtGui import QColor, QMouseEvent, QPainterPath
 from PyQt6.QtWidgets import QApplication
 
@@ -23,6 +23,82 @@ SCHEMES = [LIGHT_COLORS, DARK_COLORS]
 
 #: What each is called, so a failure names the scheme it happened in.
 SCHEME_NAMES = ['light', 'dark']
+
+
+def on_the_grid(label: Label, step: float = 1.0) -> list[QPointF]:
+    """Give the points of a box that sit on a crossing of the sheet's grid.
+
+    Parameters
+    ----------
+    label : masafi_simtwin.documents.label.Label
+        The box, on a sheet.
+    step : float, optional
+        The grid step, in millimetres.
+
+    Returns
+    -------
+    list of PyQt6.QtCore.QPointF
+        The anchors, in the label's own coordinates, whose place on the sheet
+        is a whole number of steps along and down.
+    """
+
+    def whole(value: float) -> bool:
+        return abs(value / step - round(value / step)) < 1e-6
+
+    return [
+        anchor
+        for anchor in label.snap_anchors()
+        if whole(label.mapToScene(anchor).x()) and whole(label.mapToScene(anchor).y())
+    ]
+
+
+def by_its_corner(label: Label, corner: QPointF) -> QPointF:
+    """Give where to drag a box so its frame's top left corner is a hair off a crossing.
+
+    Parameters
+    ----------
+    label : masafi_simtwin.documents.label.Label
+        The box, on a sheet.
+    corner : PyQt6.QtCore.QPointF
+        The crossing, in scene millimetres.
+
+    Returns
+    -------
+    PyQt6.QtCore.QPointF
+        Where to put the box's centre, in its owner's coordinates, so that its
+        top left corner is a hundredth off ``corner`` each way.  Another point
+        of the box is nearer a crossing only if a side happens to be within two
+        hundredths of a whole millimetre long; a side is as long as the font
+        makes it, and five hundredths was not enough — the 2.9352 mm box of
+        ``P1`` put its top right corner nearer.
+    """
+
+    top_left = label.frame().topLeft()
+    return label.parentItem().mapFromScene(corner + QPointF(0.01, 0.01) - top_left)
+
+
+def lands_by_its_top_left_corner(label: Label, corner: QPointF) -> bool:
+    """Say whether a frame's top left corner is on a crossing and its centre is not.
+
+    Parameters
+    ----------
+    label : masafi_simtwin.documents.label.Label
+        The box, on a sheet.
+    corner : PyQt6.QtCore.QPointF
+        The crossing it was aimed at, in scene millimetres.
+
+    Returns
+    -------
+    bool
+        Whether it was snapped by that corner rather than by its centre.
+    """
+
+    landed = label.mapToScene(label.frame().topLeft())
+    return (
+        landed.x() == pytest.approx(corner.x(), abs=1e-9)
+        and landed.y() == pytest.approx(corner.y(), abs=1e-9)
+        and QPointF(0.0, 0.0) not in on_the_grid(label)
+    )
 
 
 def press(view, label: Label) -> None:
@@ -217,13 +293,105 @@ def test_where_the_owner_puts_a_label_is_taken_exactly(place):
     assert place.label.pos() == QPointF(0.35, -2.7)
 
 
-def test_a_label_dragged_is_snapped_to_the_millimetre(place):
-    """A drag is any move that is not :meth:`Label.place` — which is how Qt moves
-    one under the hand."""
+def test_a_box_snaps_by_its_centre_its_sides_and_its_corners(place):
+    """Nine points of the frame a person sees, the centre first since a tie goes
+    to the first."""
 
+    box = place.label.frame()
+
+    assert place.label.snap_anchors() == (
+        QPointF(0.0, 0.0),
+        QPointF(0.0, box.top()),
+        QPointF(box.right(), 0.0),
+        QPointF(0.0, box.bottom()),
+        QPointF(box.left(), 0.0),
+        box.topLeft(),
+        box.topRight(),
+        box.bottomRight(),
+        box.bottomLeft(),
+    )
+
+
+def test_the_frame_is_the_box_with_air_round_it(place):
+    """What is drawn while selected, and what a caption is lined up by."""
+
+    box = place.label.box()
+
+    assert place.label.frame() == box.adjusted(
+        -LABEL_PADDING, -LABEL_PADDING, LABEL_PADDING, LABEL_PADDING
+    )
+
+
+def test_a_label_with_nothing_to_say_snaps_by_its_centre_alone(place):
+    """It has no box to have corners."""
+
+    place.name = ''
+
+    assert place.label.snap_anchors() == (QPointF(0.0, 0.0),)
+
+
+def test_a_label_dragged_lands_a_point_of_its_box_on_the_grid(place):
+    """A drag is any move that is not :meth:`Label.place` — which is how Qt moves
+    one under the hand.  A caption's box is as tall as its font makes it, never a
+    round number, so snapping its centre would leave every edge off the grid."""
+
+    place.label.setPos(by_its_corner(place.label, QPointF(110.0, 90.0)))
+
+    assert lands_by_its_top_left_corner(place.label, QPointF(110.0, 90.0))
+
+
+def test_a_label_lands_on_the_sheet_s_grid_not_a_step_from_its_node(editor, place):
+    """Its node may be off the grid — read from a file, or snapped by an edge —
+    and the box is lined up with the sheet, not with the node."""
+
+    place.place(QPointF(100.4, 80.3))
     place.label.setPos(QPointF(3.4, 8.6))
 
-    assert place.label.pos() == QPointF(3.0, 9.0)
+    assert on_the_grid(place.label)
+    assert place.label.pos() != QPointF(3.0, 9.0), 'what rounding the offset gave'
+
+
+def test_a_label_is_moved_by_the_least_any_point_of_its_box_asks_for(editor, place):
+    """At a step of 3 mm, where the nine points ask for nine different moves."""
+
+    editor.view.set_grid_step(3.0)
+    wanted = QPointF(3.4, 8.6)
+    origin = place.scenePos()
+
+    place.label.setPos(wanted)
+    moved = QLineF(wanted, place.label.pos()).length()
+
+    assert on_the_grid(place.label, 3.0)
+    assert moved > 0.0
+    for anchor in place.label.snap_anchors():
+        alone = editor.view.snap_point(wanted, [anchor], origin)
+        assert moved <= QLineF(wanted, alone).length() + 1e-9
+
+
+def test_an_offset_is_kept_as_the_snap_gave_it(editor, place):
+    """Worked out in the node's frame, not mapped to the sheet and back.
+
+    With the node at 100.4 a round trip through the sheet adds and takes away
+    100.4, which is not exact in binary, and the offset written to the file
+    would carry the error in its last digits.
+    """
+
+    place.place(QPointF(100.4, 80.3))
+    place.label.setPos(QPointF(3.4, 8.6))
+    x, y = place.label.pos().x(), place.label.pos().y()
+
+    assert (x, y) == (round(x, 9), round(y, 9))
+
+
+def test_an_arc_s_weight_snaps_by_its_box_as_a_caption_does(editor, place, transition):
+    """The weight is the same box, hung on an arc at the sheet's origin."""
+
+    arc = editor.add_arc(place, transition)
+    editor.set_weight([arc.uuid], 3)
+
+    arc.label.setPos(by_its_corner(arc.label, QPointF(120.0, 60.0)))
+
+    assert lands_by_its_top_left_corner(arc.label, QPointF(120.0, 60.0))
 
 
 def test_a_label_dragged_off_the_sheet_is_held_on_it_whole(editor, place):

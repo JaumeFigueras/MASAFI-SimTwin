@@ -670,6 +670,7 @@ class PetriNetEditor(Canvas):
             kind=kind,
             points=points,
             snap=self.view.snap,
+            snap_point=self.view.snap_point,
         )
         self.scene().addItem(arc)
         self.record(Change('draw-arc', (AddArc(arc_data(arc)),)))
@@ -1475,6 +1476,7 @@ class PetriNetEditor(Canvas):
             kind=ArcKind(data.kind),
             snap=self.view.snap,
             uuid=data.uuid,
+            snap_point=self.view.snap_point,
         )
         arc.restore_bends(data.controls, data.points)
         arc.label_offset = data.weight_offset

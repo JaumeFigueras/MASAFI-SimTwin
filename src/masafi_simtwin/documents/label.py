@@ -29,8 +29,9 @@ one up — :meth:`Label.itemChange` refuses a selection nobody asked for —
 and a caption is never among what *Delete* or *Cut* act on.  A caption cannot be
 deleted: it goes when the thing it describes goes.
 
-**A label is moved by dragging it**, a millimetre at a time and held on the
-paper, as its owner is.  Those two rules are for a *person's* drag only: where
+**A label is moved by dragging it**, landing one of nine points of its box —
+the centre, the middles of its sides, its corners — on the sheet's grid, and
+held on the paper, as its owner is.  Those two rules are for a *person's* drag only: where
 the owner puts the box — :meth:`Label.place` — is taken exactly as it is given,
 since a box laid out under a place, or an offset read back from a file, is
 already where it is meant to be.
@@ -47,7 +48,7 @@ still — which is why that side carries no handle at all.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 from PyQt6.QtCore import QLineF, QPointF, QRectF, QSizeF, Qt
 from PyQt6.QtGui import QFont, QPainterPath, QPen
@@ -95,8 +96,8 @@ class Label(QGraphicsItem):
         What the label belongs to.  A label is always a child: it is drawn in
         its owner's coordinates and goes when its owner goes.
     snap : collections.abc.Callable, optional
-        What to round a coordinate to as a person drags the label, which is the
-        millimetre its owner is snapped to.
+        What to round a width to as a person resizes the label, which is the
+        grid step its owner is snapped to.
     bounds : collections.abc.Callable, optional
         Where the label may be dragged, as something returning a rectangle in
         scene coordinates — the sheet, asked for at every move.
@@ -104,6 +105,13 @@ class Label(QGraphicsItem):
         Whether it carries handles to be made wider or narrower by.  Its owner
         then keeps the width, as ``label_width``, and says where a box of any
         size is centred, as ``label_centre(size)``.
+    snap_point : collections.abc.Callable, optional
+        What to move the box's centre to as a person drags it, given the centre,
+        the box's :meth:`snap_anchors` and where its owner's frame begins on the
+        sheet.  The canvas passes
+        :meth:`~masafi_simtwin.documents.canvas.CanvasView.snap_point`, so one
+        of the box's nine points lands on a crossing of the **sheet's** grid;
+        without one a box goes where it is dragged.
 
     Attributes
     ----------
@@ -121,6 +129,8 @@ class Label(QGraphicsItem):
         snap: Callable[[float], float] | None = None,
         bounds: Callable[[], QRectF] | None = None,
         resizable: bool = False,
+        *,
+        snap_point: Callable[..., QPointF] | None = None,
     ) -> None:
         super().__init__(parent)
         self._text = ''
@@ -131,6 +141,7 @@ class Label(QGraphicsItem):
         self._size = QSizeF(0.0, 0.0)
         self._asked = False
         self._snap = snap
+        self._snap_point = snap_point
         self._bounds = bounds
         self._placing = False
         self._resizable = resizable
@@ -277,6 +288,25 @@ class Label(QGraphicsItem):
             self._size.height(),
         )
 
+    def frame(self) -> QRectF:
+        """Give the frame drawn round the box while it is selected.
+
+        :data:`LABEL_PADDING` outside the box on every side.  It is what a person
+        sees of a caption while dragging it — a drag selects what it takes hold
+        of — so it is also what the caption is lined up on the grid by.
+
+        Returns
+        -------
+        PyQt6.QtCore.QRectF
+            The rectangle, centred on the label's own position, and an empty one
+            for a label with nothing to say.
+        """
+
+        box = self.box()
+        if box.isEmpty():
+            return QRectF()
+        return box.adjusted(-LABEL_PADDING, -LABEL_PADDING, LABEL_PADDING, LABEL_PADDING)
+
     # ------------------------------------------------------------------
     # Being a thing on the sheet
     # ------------------------------------------------------------------
@@ -313,9 +343,9 @@ class Label(QGraphicsItem):
         """
 
         path = QPainterPath()
-        box = self.box()
-        if not box.isEmpty():
-            path.addRect(box.adjusted(-LABEL_PADDING, -LABEL_PADDING, LABEL_PADDING, LABEL_PADDING))
+        frame = self.frame()
+        if not frame.isEmpty():
+            path.addRect(frame)
             for where in self.handles().values():
                 path.addEllipse(where, HANDLE_GRAB, HANDLE_GRAB)
         return path.simplified()
@@ -358,9 +388,7 @@ class Label(QGraphicsItem):
             return
         painter.setPen(QPen(ink, 0.0, Qt.PenStyle.DashLine))
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawRect(
-            self.box().adjusted(-LABEL_PADDING, -LABEL_PADDING, LABEL_PADDING, LABEL_PADDING)
-        )
+        painter.drawRect(self.frame())
 
         painter.setPen(QPen(ink, 0.0))
         painter.setBrush(paper_colour(option))
@@ -569,11 +597,53 @@ class Label(QGraphicsItem):
         finally:
             self._placing = False
 
+    def snap_anchors(self) -> tuple[QPointF, ...]:
+        """Give the points of the box that may land on the grid.
+
+        Nine, as agreed with Jaume: the centre, the middle of each side and the
+        four corners — so a caption can be lined up by whichever edge or corner
+        is nearest where it is let go, and a column of captions lined up by
+        their left sides.  They are the points of the :meth:`frame`, the line a
+        person sees while dragging, not of the text inside it: snapped by the
+        text, a caption's visible corner sat half a millimetre off every
+        crossing, which a render showed.
+
+        Returns
+        -------
+        tuple of PyQt6.QtCore.QPointF
+            The centre first, since a tie goes to the first; then the middles of
+            the top, right, bottom and left sides; then the top left, top right,
+            bottom right and bottom left corners.  In the label's own
+            coordinates, which are measured from its centre.  A label with
+            nothing to say has no box, and the centre alone.
+        """
+
+        frame = self.frame()
+        if frame.isEmpty():
+            return (QPointF(0.0, 0.0),)
+        return (
+            QPointF(0.0, 0.0),
+            QPointF(0.0, frame.top()),
+            QPointF(frame.right(), 0.0),
+            QPointF(0.0, frame.bottom()),
+            QPointF(frame.left(), 0.0),
+            frame.topLeft(),
+            frame.topRight(),
+            frame.bottomRight(),
+            frame.bottomLeft(),
+        )
+
     def _dragged_to(self, position: QPointF) -> QPointF:
         """Snap a place a person is dragging the label to, and hold it on the paper.
 
-        The whole **box** is held inside the sheet, not merely its centre, the
-        way a node is held.
+        One of the box's :meth:`snap_anchors` is put on a crossing of the
+        sheet's grid — not a whole step from its owner, whose own centre may
+        be off the grid, having been snapped by an edge.  The whole **box** is
+        then held inside the sheet, not merely its centre, the way a node is.
+
+        Both are worked out in the owner's frame rather than by mapping out to
+        the sheet and back, so a box that did not have to be held keeps exactly
+        the offset the snap gave it.
 
         Parameters
         ----------
@@ -586,24 +656,25 @@ class Label(QGraphicsItem):
             Where it goes instead.
         """
 
-        x, y = position.x(), position.y()
-        if self._snap is not None:
-            x, y = self._snap(x), self._snap(y)
         owner = self.parentItem()
+        origin = owner.scenePos() if owner is not None else QPointF()
+        if self._snap_point is not None:
+            position = self._snap_point(position, self.snap_anchors(), origin)
+        x, y = position.x(), position.y()
         box = self.box()
-        if self._bounds is None or owner is None or box.isEmpty():
+        if self._bounds is None or box.isEmpty():
             return QPointF(x, y)
 
         area = self._bounds()
-        centre = owner.mapToScene(QPointF(x, y))
-        cx, cy = centre.x(), centre.y()
-        left, right = area.left() - box.left(), area.right() - box.right()
-        top, bottom = area.top() - box.top(), area.bottom() - box.bottom()
+        left = area.left() - box.left() - origin.x()
+        right = area.right() - box.right() - origin.x()
+        top = area.top() - box.top() - origin.y()
+        bottom = area.bottom() - box.bottom() - origin.y()
         if left <= right:
-            cx = min(max(cx, left), right)
+            x = min(max(x, left), right)
         if top <= bottom:
-            cy = min(max(cy, top), bottom)
-        return owner.mapFromScene(QPointF(cx, cy))
+            y = min(max(y, top), bottom)
+        return QPointF(x, y)
 
     def itemChange(self, change, value):  # noqa: N802  (Qt naming)
         """Refuse a selection nobody asked for, and keep a drag on the paper.

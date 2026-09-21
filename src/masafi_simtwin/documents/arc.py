@@ -978,10 +978,13 @@ class Arc(QGraphicsItem):
         new one when it is drawn.
     snap : collections.abc.Callable, optional
         What to round a handle to as it is dragged.  The canvas passes its own,
-        which is the millimetre at every zoom; without one a handle goes where
+        which is the grid step at every zoom; without one a handle goes where
         it is put.
     parent : PyQt6.QtWidgets.QGraphicsItem, optional
         Parent item.
+    snap_point : collections.abc.Callable, optional
+        What the weight's box is snapped with as it is dragged, which the arc
+        only hands on — see :class:`~masafi_simtwin.documents.label.Label`.
 
     Attributes
     ----------
@@ -1012,6 +1015,7 @@ class Arc(QGraphicsItem):
         snap: Callable[[float], float] | None = None,
         parent: QGraphicsItem | None = None,
         uuid: str | None = None,
+        snap_point: Callable[..., QPointF] | None = None,
     ) -> None:
         super().__init__(parent)
         self.uuid = uuid or str(uuid4())
@@ -1026,7 +1030,7 @@ class Arc(QGraphicsItem):
         self._dragging: str | None = None
         self._line = QLineF()
         self._label_offset: tuple[float, float] | None = None
-        self._label = Label(self, snap, self._sheet)
+        self._label = Label(self, snap, self._sheet, snap_point=snap_point)
         #: The arc's own text and line style, ``None`` for the application's
         #: defaults.  Kept and written, not yet drawn with.
         self._text_style = None
