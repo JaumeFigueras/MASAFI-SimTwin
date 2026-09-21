@@ -618,14 +618,14 @@
     <message>
         <location filename="../main_window.py" line="1227" />
         <source>The model could not be exported</source>
-        <translation>No s&apos;ha pogut exportar el model</translation>
+        <translation>No s'ha pogut exportar el model</translation>
     </message>
     <message>
         <location filename="../main_window.py" line="1228" />
         <source>{0} could not be written.
 
 {1}</source>
-        <translation>No s&apos;ha pogut escriure {0}.
+        <translation>No s'ha pogut escriure {0}.
 
 {1}</translation>
     </message>
@@ -1418,24 +1418,24 @@
 </context><context>
     <name>SettingsDialog</name>
     <message>
-        <location filename="../dialogs/settings.py" line="164" />
+        <location filename="../dialogs/settings.py" line="167" />
         <source>Choose a Colour</source>
         <translation>Tria un color</translation>
     </message>
     <message>
-        <location filename="../dialogs/settings.py" line="433" />
+        <location filename="../dialogs/settings.py" line="443" />
         <source>System default</source>
         <comment>language, not theme</comment>
         <translation>Predeterminat del sistema</translation>
     </message>
     <message>
-        <location filename="../dialogs/settings.py" line="589" />
+        <location filename="../dialogs/settings.py" line="599" />
         <source>Default ({0})</source>
         <comment>the font a net is lettered in when none is chosen</comment>
         <translation>Per defecte ({0})</translation>
     </message>
     <message>
-        <location filename="../dialogs/settings.py" line="647" />
+        <location filename="../dialogs/settings.py" line="670" />
         <source>≈ {0} pt</source>
         <translation>≈ {0} pt</translation>
     </message>
@@ -1572,9 +1572,21 @@
     </message>
     <message>
         <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>Grid step:</source>
+        <extracomment>label of the grid spacing chooser in the settings</extracomment>
+        <translation>Pas de la graella:</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
         <source>The sizes offered are the ones this machine prints on. A model is drawn on a sheet ruled into pages of the size chosen here.</source>
         <extracomment>under the paper chooser, saying where the list of sizes comes from</extracomment>
         <translation>Les mides que s'ofereixen són les que imprimeix aquesta màquina. Un model es dibuixa sobre un full dividit en pàgines de la mida triada aquí.</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>What is drawn on a sheet lands on points this far apart. The squares drawn on the sheet are not changed by it.</source>
+        <extracomment>under the grid step chooser, saying what the distance does and what it does not do</extracomment>
+        <translation>El que es dibuixa en un full es col·loca en punts separats per aquesta distància. Els quadrats dibuixats al full no hi canvien.</translation>
     </message>
     <message>
         <location filename="../dialogs/forms/settings.ui" line="0" />

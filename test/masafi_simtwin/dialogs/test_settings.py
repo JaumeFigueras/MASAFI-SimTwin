@@ -17,8 +17,12 @@ from masafi_simtwin.preferences import (
     AUTOSAVE_INTERVALS,
     AUTOSAVE_KEY,
     DEFAULT_FONT_SIZE,
+    DEFAULT_GRID_STEP,
     DEFAULT_LINE_WIDTH,
     DISTANCE_UNITS,
+    GRID_STEP_KEY,
+    MAX_GRID_STEP,
+    MIN_GRID_STEP,
     SURFACE_UNITS,
     SYSTEM_FONT,
     SYSTEM_LANGUAGE,
@@ -635,6 +639,56 @@ def test_choosing_landscape_writes_it_and_turns_portrait_off(qtbot, preferences)
     assert preferences.value('appearance/page_orientation') == paper.LANDSCAPE
 
 
+def test_the_grid_step_is_on_the_page_of_the_paper(dialog):
+    """The paper and the points drawn on it are one page: they are the sheet."""
+
+    page = dialog.page_of(category(dialog, 'Page'))
+
+    assert dialog.grid_step_spin.parent() is page
+    assert dialog.grid_step_spin.suffix().strip() == 'mm'
+    assert 'squares' in dialog.grid_step_note.text()
+
+
+def test_the_grid_step_opens_on_the_millimetre_within_its_limits(dialog):
+    """The limits are set in code, so Designer cannot drift away from them."""
+
+    assert dialog.grid_step_spin.value() == DEFAULT_GRID_STEP
+    assert dialog.grid_step_spin.minimum() == MIN_GRID_STEP
+    assert dialog.grid_step_spin.maximum() == MAX_GRID_STEP
+
+
+def test_the_grid_step_opens_on_what_was_chosen_before(qtbot, preferences):
+    """A dialog opened after a choice shows that choice."""
+
+    preferences.set_value(GRID_STEP_KEY, 2.5)
+    dialog = SettingsDialog(preferences=preferences)
+    qtbot.addWidget(dialog)
+
+    assert dialog.grid_step_spin.value() == 2.5
+
+
+def test_choosing_a_grid_step_is_pending_until_the_dialog_is_accepted(
+    dialog, preferences
+):
+    """The spin box writes to the edit, which is not the store."""
+
+    dialog.grid_step_spin.setValue(5.0)
+
+    assert dialog.edit.value(GRID_STEP_KEY) == 5.0
+    assert preferences.value(GRID_STEP_KEY) == DEFAULT_GRID_STEP
+
+    dialog.accept()
+
+    assert preferences.value(GRID_STEP_KEY) == 5.0
+    assert GRID_STEP_KEY in dialog.written
+
+
+def test_the_grid_step_has_no_size_in_points_beside_it(dialog):
+    """A distance on the paper is not a typeface, so there is nothing to show."""
+
+    assert dialog.findChild(QLabel, 'grid_step_points') is None
+
+
 def test_the_page_asks_for_no_restart(qtbot, preferences, monkeypatch):
     """A sheet is ruled again where it stands, so nothing is said about restarting."""
 
@@ -647,6 +701,7 @@ def test_the_page_asks_for_no_restart(qtbot, preferences, monkeypatch):
     qtbot.addWidget(dialog)
     dialog.paper_combo.setCurrentIndex(dialog.paper_combo.findData('A3'))
     dialog.landscape_radio.setChecked(True)
+    dialog.grid_step_spin.setValue(2.0)
     dialog.accept()
 
     assert warned == []

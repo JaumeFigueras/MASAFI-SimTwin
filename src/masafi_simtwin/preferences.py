@@ -41,6 +41,13 @@ page in millimetres, the right way round.  ``petri_net/font`` is the same idiom
 for lettering: unset means whatever this machine offers, which
 :mod:`~masafi_simtwin.fonts` answers.
 
+**How far apart the points a drawing snaps to are** is
+``appearance/grid_step``, and :func:`grid_step` is the one question asked about
+it, as :func:`page` is the one question asked about the paper.  It is a
+distance on the *sheet* rather than anything a document holds — a net carries
+the positions its nodes were dragged to, not the grid they were dragged on — so
+its limits are declared here and no file is ever held to them.
+
 **How a net is drawn** is the ``petri_net`` group, and it is the application's
 half of the styles in :mod:`simtwin_core.petri_net`: an item with no style of
 its own is drawn the way these say.  :func:`text_appearance` and
@@ -198,6 +205,20 @@ DEFAULT_FONT_SIZE = 2.4
 #: what every item and every arc was drawn with before there were styles.
 DEFAULT_LINE_WIDTH = 0.3
 
+#: How far apart the points a drawing snaps to are by default, in millimetres,
+#: which is what everything on the sheet was snapped to before the distance
+#: could be chosen.
+DEFAULT_GRID_STEP = 1.0
+
+#: The closest and the furthest apart those points may be put, in millimetres.
+#: The limits are here rather than in the core because a grid is how a person
+#: draws rather than anything a document holds: nothing written to a file is
+#: held to them.  A tenth of a millimetre is as good as no snapping at all at
+#: any zoom a sheet is read at, and two centimetres is twice the width of a
+#: place.
+MIN_GRID_STEP = 0.1
+MAX_GRID_STEP = 20.0
+
 #: The kinds of text a net holds, each of which has a typeface of its own.  A
 #: guard and a time function do not exist yet; what they will be written in is
 #: decided, and is stored from now so that it is there when they do.
@@ -242,6 +263,9 @@ AUTOSAVE_INTERVALS: tuple[int, ...] = (0, 1, 2, 5, 10, 15, 30)
 #: and whenever the settings dialog writes it.
 AUTOSAVE_KEY = 'saving/autosave_interval'
 
+#: The key of the distance between the points a drawing snaps to.
+GRID_STEP_KEY = 'appearance/grid_step'
+
 #: Every preference the application has, in the order of the settings tree.
 #:
 #: Every unit defaults to the SI base unit of its quantity: the second, the
@@ -264,6 +288,12 @@ PREFERENCES: tuple[Preference, ...] = (
     Preference('appearance/page_size', SYSTEM_PAGE_SIZE, str),
     Preference(
         'appearance/page_orientation', paper.PORTRAIT, str, paper.ORIENTATIONS
+    ),
+    Preference(
+        GRID_STEP_KEY,
+        DEFAULT_GRID_STEP,
+        float,
+        allows=within(MIN_GRID_STEP, MAX_GRID_STEP),
     ),
     Preference('petri_net/font', SYSTEM_FONT, str),
     Preference(
@@ -352,9 +382,39 @@ def page(settings: Preferences | None = None) -> QSizeF:
     )
 
 
+def grid_step(settings: Preferences | None = None) -> float:
+    """Give how far apart the points a drawing snaps to are, in millimetres.
+
+    It is asked here rather than read as a key so that a sheet takes the grid
+    the way it takes its page, through one function — and so that a value a
+    hand-edited settings file put outside the limits has already fallen back to
+    the default before anything is drawn with it.
+
+    Parameters
+    ----------
+    settings : Preferences, optional
+        Where to read it from.  The application's own are used when it is
+        omitted.
+
+    Returns
+    -------
+    float
+        The distance, in millimetres, between one point a drawing may land on
+        and the next.
+    """
+
+    store = settings if settings is not None else Preferences()
+    return store.value(GRID_STEP_KEY)
+
+
 #: The preferences that decide what :func:`page` gives back, so that a caller
 #: watching for a change knows which keys to watch.
 PAGE_KEYS: tuple[str, ...] = ('appearance/page_size', 'appearance/page_orientation')
+
+#: The preferences that decide what :func:`grid_step` gives back, beside
+#: :data:`PAGE_KEYS` and watched the same way.  A sheet is re-gridded where it
+#: stands, so none of them waits for a restart either.
+GRID_KEYS: tuple[str, ...] = (GRID_STEP_KEY,)
 
 #: The preferences that say how a net is drawn, so that a caller watching for a
 #: change — the window, which draws every open sheet again — knows which keys to

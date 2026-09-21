@@ -1418,24 +1418,24 @@
 </context><context>
     <name>SettingsDialog</name>
     <message>
-        <location filename="../dialogs/settings.py" line="164" />
+        <location filename="../dialogs/settings.py" line="167" />
         <source>Choose a Colour</source>
         <translation>Choose a Colour</translation>
     </message>
     <message>
-        <location filename="../dialogs/settings.py" line="433" />
+        <location filename="../dialogs/settings.py" line="443" />
         <source>System default</source>
         <comment>language, not theme</comment>
         <translation>System default</translation>
     </message>
     <message>
-        <location filename="../dialogs/settings.py" line="589" />
+        <location filename="../dialogs/settings.py" line="599" />
         <source>Default ({0})</source>
         <comment>the font a net is lettered in when none is chosen</comment>
         <translation>Default ({0})</translation>
     </message>
     <message>
-        <location filename="../dialogs/settings.py" line="647" />
+        <location filename="../dialogs/settings.py" line="670" />
         <source>≈ {0} pt</source>
         <translation>≈ {0} pt</translation>
     </message>
@@ -1572,9 +1572,21 @@
     </message>
     <message>
         <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>Grid step:</source>
+        <extracomment>label of the grid spacing chooser in the settings</extracomment>
+        <translation>Grid step:</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
         <source>The sizes offered are the ones this machine prints on. A model is drawn on a sheet ruled into pages of the size chosen here.</source>
         <extracomment>under the paper chooser, saying where the list of sizes comes from</extracomment>
         <translation>The sizes offered are the ones this machine prints on. A model is drawn on a sheet ruled into pages of the size chosen here.</translation>
+    </message>
+    <message>
+        <location filename="../dialogs/forms/settings.ui" line="0" />
+        <source>What is drawn on a sheet lands on points this far apart. The squares drawn on the sheet are not changed by it.</source>
+        <extracomment>under the grid step chooser, saying what the distance does and what it does not do</extracomment>
+        <translation>What is drawn on a sheet lands on points this far apart. The squares drawn on the sheet are not changed by it.</translation>
     </message>
     <message>
         <location filename="../dialogs/forms/settings.ui" line="0" />

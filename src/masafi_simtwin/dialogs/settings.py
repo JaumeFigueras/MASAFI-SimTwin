@@ -61,6 +61,9 @@ from masafi_simtwin.preferences import (
     AUTOSAVE_INTERVALS,
     AUTOSAVE_KEY,
     DISTANCE_UNITS,
+    GRID_STEP_KEY,
+    MAX_GRID_STEP,
+    MIN_GRID_STEP,
     SURFACE_UNITS,
     SYSTEM_FONT,
     SYSTEM_LANGUAGE,
@@ -227,6 +230,13 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
             'petri_net/line_width',
             MIN_LINE_WIDTH,
             MAX_LINE_WIDTH,
+        )
+        self._bind_size(
+            self.grid_step_spin,
+            None,
+            GRID_STEP_KEY,
+            MIN_GRID_STEP,
+            MAX_GRID_STEP,
         )
         self._bind_typefaces()
         self._bind_colours()
@@ -602,22 +612,31 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
         )
 
     def _bind_size(
-        self, spin: QDoubleSpinBox, points: QLabel, key: str, low: float, high: float
+        self,
+        spin: QDoubleSpinBox,
+        points: QLabel | None,
+        key: str,
+        low: float,
+        high: float,
     ) -> None:
         """Put a length in a spin box, with its size in points beside it.
 
         The limits are set here rather than in the form because they are the
-        core's, and a number typed into Designer could drift away from the rule
-        a document is actually held to.  The points are shown because a font is
+        rule the value is actually held to — the core's for a size a document
+        carries, this module's for the grid — and a number typed into Designer
+        could drift away from it.  The points are shown because a font is
         chosen in points everywhere else in the world, while the sheet — and so
-        everything drawn on it — is measured in millimetres.
+        everything drawn on it — is measured in millimetres.  A length that is
+        not lettering has no size in points to show, so the label is optional:
+        the grid is a distance on the paper and nothing to do with a typeface.
 
         Parameters
         ----------
         spin : PyQt6.QtWidgets.QDoubleSpinBox
             The spin box in the form.
-        points : PyQt6.QtWidgets.QLabel
-            The label beside it, which says the same size in points.
+        points : PyQt6.QtWidgets.QLabel, optional
+            The label beside it, which says the same size in points, and
+            ``None`` for a length that is not a font's.
         key : str
             The preference it edits.
         low, high : float
@@ -633,20 +652,26 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
             )
         )
 
-    def _show_points(self, spin: QDoubleSpinBox, points: QLabel) -> None:
+    def _show_points(self, spin: QDoubleSpinBox, points: QLabel | None) -> None:
         """Say in points what a spin box holds in millimetres.
 
         Parameters
         ----------
         spin : PyQt6.QtWidgets.QDoubleSpinBox
             The spin box, in millimetres.
-        points : PyQt6.QtWidgets.QLabel
-            The label to write in.
+        points : PyQt6.QtWidgets.QLabel, optional
+            The label to write in, and ``None`` for a length with no size in
+            points to show, which is asked of this and answered by doing
+            nothing so that no caller has to remember which lengths have one.
         """
 
+        if points is None:
+            return
         points.setText(self.tr('≈ {0} pt').format(f'{spin.value() / 25.4 * 72.0:.1f}'))
 
-    def _on_size(self, key: str, value: float, spin: QDoubleSpinBox, points: QLabel) -> None:
+    def _on_size(
+        self, key: str, value: float, spin: QDoubleSpinBox, points: QLabel | None
+    ) -> None:
         """Hold a length that has just been typed or stepped to.
 
         Parameters
@@ -657,8 +682,8 @@ class SettingsDialog(QDialog, Ui_SettingsDialog):
             What it now holds, in millimetres.
         spin : PyQt6.QtWidgets.QDoubleSpinBox
             The spin box that moved.
-        points : PyQt6.QtWidgets.QLabel
-            The label beside it.
+        points : PyQt6.QtWidgets.QLabel, optional
+            The label beside it, and ``None`` for a length with none.
         """
 
         self.edit.set_value(key, float(value))

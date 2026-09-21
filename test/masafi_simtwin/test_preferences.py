@@ -15,11 +15,17 @@ from masafi_simtwin.preferences import (
     AUTOSAVE_KEY,
     BY_KEY,
     DEFAULT_FONT_SIZE,
+    DEFAULT_GRID_STEP,
     DEFAULT_LINE_WIDTH,
+    GRID_KEYS,
+    GRID_STEP_KEY,
     INSTALL_KEY,
+    MAX_GRID_STEP,
+    MIN_GRID_STEP,
     PAGE_KEYS,
     PREFERENCES,
     ROLES,
+    grid_step,
     install_id,
     line_appearance,
     needs_restart,
@@ -108,6 +114,7 @@ def test_the_keys_are_grouped_like_the_settings_tree():
         'appearance/theme',
         'appearance/page_size',
         'appearance/page_orientation',
+        'appearance/grid_step',
         'petri_net/font',
         'petri_net/font_size',
         'petri_net/alignment',
@@ -376,6 +383,53 @@ def test_neither_page_preference_asks_for_a_restart():
     assert not BY_KEY['appearance/page_size'].restart
     assert not BY_KEY['appearance/page_orientation'].restart
     assert not needs_restart(PAGE_KEYS)
+
+
+def test_a_drawing_snaps_to_the_millimetre_unless_told_otherwise(preferences):
+    """The step everything on the sheet was snapped to before it could be chosen."""
+
+    declared = BY_KEY[GRID_STEP_KEY]
+
+    assert declared.default == DEFAULT_GRID_STEP == 1.0
+    assert declared.type is float
+    assert not declared.restart
+    assert not needs_restart(GRID_KEYS)
+    assert grid_step(preferences) == 1.0
+
+
+def test_the_grid_step_is_asked_for_as_the_page_is(preferences):
+    """One question about the paper, one about the points drawn on it."""
+
+    preferences.set_value(GRID_STEP_KEY, 2.5)
+
+    assert grid_step(preferences) == 2.5
+    assert GRID_KEYS == (GRID_STEP_KEY,)
+
+
+@pytest.mark.parametrize('stored', ['0.05', '25', '2,5', 'abc', 'true'])
+def test_a_hand_written_grid_step_that_is_not_one_falls_back(path, stored):
+    """A settings file edited by hand cannot leave the sheet without a grid.
+
+    The limits are this module's rather than the core's — a grid is how a
+    person draws and no document is held to it — but a value outside them is
+    refused the same way, and so is a comma Qt reads as a list.
+    """
+
+    path.write_text(f'[appearance]\ngrid_step={stored}\n', encoding='utf-8')
+    reread = Preferences(QSettings(str(path), QSettings.Format.IniFormat))
+
+    assert grid_step(reread) == DEFAULT_GRID_STEP
+
+
+def test_a_grid_step_outside_the_limits_is_refused(preferences):
+    """Both ways round, and by the edit as well as by the store."""
+
+    assert MIN_GRID_STEP == 0.1
+    assert MAX_GRID_STEP == 20.0
+    with pytest.raises(ValueError, match=GRID_STEP_KEY):
+        preferences.set_value(GRID_STEP_KEY, 0.0)
+    with pytest.raises(ValueError, match=GRID_STEP_KEY):
+        preferences.edit().set_value(GRID_STEP_KEY, 50.0)
 
 
 def test_the_page_is_resolved_from_the_two_preferences(preferences):
