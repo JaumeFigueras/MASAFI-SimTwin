@@ -1919,6 +1919,7 @@ class MainWindow(QMainWindow):
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         self._apply_page(dialog.written)
+        self._apply_grid(dialog.written)
         self._apply_appearance(dialog.written)
         self._apply_autosave(dialog.written)
         if needs_restart(dialog.written) and ask_to_restart(self):
@@ -1947,6 +1948,29 @@ class MainWindow(QMainWindow):
         for document in self._document_area.documents:
             if isinstance(document, Canvas):
                 document.set_page(page)
+
+    def _apply_grid(self, written: tuple[str, ...]) -> None:
+        """Snap every open sheet to the grid step that has just been chosen.
+
+        Like the page it takes effect at once, and like the page the documents
+        opened afterwards read it for themselves.  **Nothing already drawn
+        moves**: a position was recorded when it was made, and putting every
+        node of every open net onto the new grid would be a change nobody made
+        and nothing could undo.  What is dragged next lands on the new grid.
+
+        Parameters
+        ----------
+        written : tuple of str
+            The keys the settings dialog wrote, so that nothing is touched when
+            the grid step was not among them.
+        """
+
+        if not any(key in written for key in preferences.GRID_KEYS):
+            return
+        step = preferences.grid_step()
+        for document in self._document_area.documents:
+            if isinstance(document, Canvas):
+                document.set_grid_step(step)
 
     def _apply_appearance(self, written: tuple[str, ...]) -> None:
         """Draw every open sheet again in the defaults that have just been chosen.

@@ -59,7 +59,7 @@ from masafi_simtwin.documents.arc import (
     arc_between,
 )
 from masafi_simtwin.documents.arc_toolbar import ArcToolBar
-from masafi_simtwin.documents.canvas import Canvas
+from masafi_simtwin.documents.canvas import SNAP_DIGITS, Canvas
 from masafi_simtwin.documents.guide import Guide
 from masafi_simtwin.documents.label import Label
 from masafi_simtwin.documents.net_item import NetItem
@@ -706,7 +706,8 @@ class PetriNetEditor(Canvas):
         element : str
             The key of the element.
         position : PyQt6.QtCore.QPointF
-            Where it was let go, in scene millimetres, already snapped.
+            Where it was let go, in scene millimetres.  The item snaps as it
+            lands, by its own anchors.
         """
 
         self.add_element(library, element, position)
@@ -1389,8 +1390,10 @@ class PetriNetEditor(Canvas):
         so nothing here refuses anything.
 
         Two things are made to fit rather than taken as they are.  A position is
-        snapped and held on the sheet, as every position of a node is, so a net
-        written by another tool lands on the millimetre.  And a connecting point
+        held on the sheet, as every position of a node is — and **not snapped**:
+        it is where the node was drawn, on whatever grid, and snapping it would
+        move a net nobody moved when it was drawn at another step.  A node read
+        off the grid lands on it the first time it is dragged.  And a connecting point
         a node does not have is held to its last one, as
         :meth:`~masafi_simtwin.documents.net_item.NetItem.scene_port` holds it
         when it is drawn — so the arc that is drawn is the arc that is written
@@ -1905,8 +1908,9 @@ class PetriNetEditor(Canvas):
         — the piece keeps its shape and its middle goes where the pointer is —
         and otherwise :data:`PASTE_OFFSET` down and to the right of where it was
         copied from, so that a pasted piece is beside the original rather than
-        exactly on top of it.  Every node is snapped as it lands, as everything
-        on the sheet is.
+        exactly on top of it.  The piece is then **snapped whole** — see
+        :meth:`_snapped_offset` — so its nodes stay where they were relative to
+        each other.
 
         What lands is **left selected**, and nothing else with it: a paste is
         followed by dragging it where it belongs.
@@ -1933,7 +1937,7 @@ class PetriNetEditor(Canvas):
             return False
 
         where = at if at is not None else self.view.pointer_on_the_sheet()
-        offset = self._paste_offset(nodes, where)
+        offset = self._snapped_offset(nodes, self._paste_offset(nodes, where))
         names = {
             kind: iter(
                 self.next_names(
@@ -1952,8 +1956,8 @@ class PetriNetEditor(Canvas):
                     uuid=identities[node.uuid],
                     name=next(names[type(node)]),
                     position=(
-                        self.view.snap(node.position[0] + offset.x()),
-                        self.view.snap(node.position[1] + offset.y()),
+                        round(node.position[0] + offset.x(), SNAP_DIGITS),
+                        round(node.position[1] + offset.y(), SNAP_DIGITS),
                     ),
                 )
             )
@@ -2002,6 +2006,43 @@ class PetriNetEditor(Canvas):
             (min(across) + max(across)) / 2.0, (min(down) + max(down)) / 2.0
         )
         return where - middle
+
+    def _snapped_offset(self, nodes, offset: QPointF) -> QPointF:
+        """Move a piece by the least that puts one of its nodes' anchors on the grid.
+
+        **One move for the whole piece**, not one per node.  Each node snapped
+        by its own nearest anchor would bend the piece: at a step of 4 mm, a
+        place whose west rim is on the grid and a transition three millimetres
+        to its right, pasted two and a half millimetres across, ask for moves of
+        half a millimetre and of one and a half, and land two millimetres apart
+        rather than three.  Moved as one, the piece keeps its shape, and a
+        piece copied off the grid keeps what lined it up.
+
+        It is the sheet's own rule asked about the piece: every anchor of every
+        node, measured from the piece's origin, the first node's centre first so
+        a tie goes to it.
+
+        Parameters
+        ----------
+        nodes : tuple
+            The nodes of the piece, as they were copied.
+        offset : PyQt6.QtCore.QPointF
+            How far the piece is to move before it is snapped.
+
+        Returns
+        -------
+        PyQt6.QtCore.QPointF
+            How far it moves instead.
+        """
+
+        anchors = [
+            QPointF(*node.position) + anchor
+            for node in nodes
+            for anchor in NODE_ITEMS[type(node)].anchors_for(
+                isinstance(node, TransitionData) and node.vertical
+            )
+        ]
+        return self.view.snap_point(offset, anchors)
 
     def work_on_nodes(self, uuids) -> None:
         """Leave some nodes selected, and nothing else.

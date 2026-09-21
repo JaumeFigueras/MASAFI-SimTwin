@@ -1302,3 +1302,120 @@ few tenths off the grid are a dozen things to drag.
 - **A *Snap to Grid* command** on a selection, one recorded change, which is the tidying done when it is
   wanted rather than whenever a file is read.
 - Leave it: a node off the grid is one drag from being on it.
+
+---
+
+## The squares drawn on the sheet are not the grid things snap to
+
+**Now.** The sheet is drawn with 5 mm squares and a heavier line every 50 mm, `GRID_STEP` and
+`GRID_MAJOR`, whatever `appearance/grid_step` says. What is dragged lands on points that far apart —
+a millimetre by default — and nothing on the screen shows where those points are. At a step that
+divides 5 mm they fall on the squares' lines now and then; at 3 mm they do not line up with the
+squares at all.
+
+**Why it was done this way.** Decided with Jaume. At the default step a grid of 1 mm squares is under
+`MIN_GRID_PIXELS` at life size and is dropped, so a drawn grid that followed the step would leave the
+sheet with no squares at all until it was zoomed in. The 5 mm squares say how big things are; the step
+says where they go.
+
+**When it will not be enough.** A step that is not a divisor of 5 mm, where a thing lands visibly off
+every line; a person wanting to see where something will land before letting go.
+
+**Options.**
+
+- **Draw the snap points as dots** where they are far enough apart to be told apart, the way drawing
+  programs do — over the squares rather than instead of them, and dropped below a pixel spacing as the
+  squares are.
+- **Let the squares follow the step**, heavier every ten, with the squares dropped when too fine: one
+  grid, but none to be seen at 1 mm and life size.
+- **Show the landing point while dragging**: a mark on the anchor that will land, which says both where
+  and by which point.
+
+---
+
+## Snapping cannot be turned off
+
+**Now.** Everything dragged snaps, always. The finest step is `MIN_GRID_STEP`, a tenth of a
+millimetre, and there is no step that means *no snapping*, no key that suspends it during a drag and
+no menu entry that turns it off.
+
+**Why it was done this way.** A number with limits was chosen for `appearance/grid_step` over one where
+`0` meant *off*, the way `0 (Off)` works for the autosave. A tenth of a millimetre is below anything a
+sheet can show at a zoom it is read at, so it is snapping in name only.
+
+**When it will not be enough.** Lining a node up by eye with something that is not on the grid — a
+node read from another tool's file, or a caption nobody has dragged.
+
+**Options.**
+
+- **A key held while dragging**, commonly *Alt*, that suspends the snap for that drag. The gesture
+  already goes through `itemChange()`, which would ask the view whether the key is down.
+- **`0 (Off)`** in the settings, as the autosave has, `MIN_GRID_STEP` becoming the smallest step above
+  nought.
+- **A toggle in *View***, per window rather than per machine.
+
+---
+
+## Only nodes and captions snap by their anchors
+
+**Now.** A place snaps by five points, a transition by three and a caption by nine; everything else
+that snaps rounds one coordinate at a time to the step — a guide, a point laid while an arc is drawn,
+an arc's shaping handles and its points. Resizing a caption rounds its **width**, not the side being
+dragged, so that side lands on the grid only when the other one happens to be on it too; a caption
+that grows about its centre, under a place, has its sides on the grid only by coincidence.
+
+**Why it was done this way.** A guide is a line and is its own anchor; a handle or a point is a point.
+The width was snapped before there was a step to choose, and it was left as it was: what was asked for
+was where a caption goes, not how wide it is.
+
+**When it will not be enough.** Lining up the right-hand sides of a column of captions by resizing
+them.
+
+**Options.**
+
+- **Snap the dragged side** rather than the width: `Label.resize_to()` already works out where the side
+  is from the width; it would snap the side's place on the sheet through `snap_point()` with an
+  `origin`, then solve for the width, as it solves now.
+- Leave it: a caption resized and then dragged by that side's corner lines up.
+
+---
+
+## A thing snaps by one of its points, not by one point per axis
+
+**Now.** Of a thing's anchors, the one asking for the shortest move is put on a crossing of the grid,
+**both** coordinates at once. So a place lands with its centre, or one of the four points of its rim,
+on a crossing — never with its left side on one line and its centre on another.
+
+**Why it was done this way.** It is what was asked for: five points of a place, three of a transition,
+nine of a caption, each one a point. Choosing per axis would snap by an x-anchor and a y-anchor that
+need not be the same point, which lines things up with more lines at once and is harder to predict.
+
+**When it will not be enough.** Lining a caption's left side up with one line and its top with another
+where no corner is at the crossing of the two — which a corner snap already does whenever the two
+lines cross at that corner, so mostly never.
+
+**Options.**
+
+- **Per axis**: in `snap_point()`, take for x the shortest x-move over the anchors and for y the
+  shortest y-move, separately. A few lines; the tests that name which point lands would change.
+
+---
+
+## Changing the step tidies nothing
+
+**Now.** `set_grid_step()` changes what the **next** drag lands on. A net drawn at 1 mm and looked at
+with a 3 mm step keeps every node where it was, most of them off the new grid, until each is dragged.
+A caption nobody has dragged is not on the grid at all: it is placed under its node by `place()`.
+
+**Why it was done this way.** Moving every node of every open net onto a new grid would be a change
+nobody made, recorded nowhere, and the sheet would disagree with what the project holds — the bug
+*A net read off the grid stays off it until it is dragged* describes, made on purpose.
+
+**When it will not be enough.** Choosing a coarser step in order to tidy a net that was drawn loosely.
+
+**Options.**
+
+- **A *Snap to Grid* command** on the selection, one recorded change *Snap to Grid*, undone like any
+  other — the same command the entry *A net read off the grid stays off it until it is dragged*
+  offers, and one command for both.
+- **Offer it when the step changes**, once, over the nets that are open.

@@ -665,6 +665,31 @@ def test_a_node_read_off_the_grid_lands_on_it_when_dragged(editor):
     assert place.pos() == QPointF(40.0, 39.0)
 
 
+def test_a_piece_is_pasted_whole_keeping_its_shape(editor):
+    """One move for the piece, not one per node.
+
+    At 4 mm, a place whose west rim is on the grid (21 − 5 = 16) and a
+    transition three millimetres right of it with its centre on the grid, pasted
+    two and a half millimetres across: the place asks for half a millimetre and
+    the transition, on its own, for one and a half — which would land them two
+    millimetres apart.  Snapped whole, the place's half millimetre moves both.
+    """
+
+    editor.view.set_grid_step(4.0)
+    piece = NetDocument(
+        places=(PlaceData('a', 'P1', (21.0, 20.0)),),
+        transitions=(TransitionData('t', 'T1', (24.0, 40.0)),),
+    )
+
+    editor.paste(piece, at=QPointF(25.0, 70.0))
+    place, transition = editor.places[0], editor.transitions[0]
+
+    assert place.pos() == QPointF(24.0, 60.0)
+    assert transition.pos() == QPointF(27.0, 80.0)
+    assert transition.pos().x() - place.pos().x() == 3.0
+    assert editor.to_document().places[0].position == (24.0, 60.0)
+
+
 def test_a_change_of_several_operations_is_undone_whole(editor):
     """Deleting a place takes its arcs with it, and undoing brings back both."""
 

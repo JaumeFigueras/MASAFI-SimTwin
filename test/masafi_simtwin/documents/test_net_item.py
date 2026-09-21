@@ -403,6 +403,29 @@ def test_dropping_an_element_puts_one_on_the_sheet(editor, element):
     )
 
 
+def test_a_dropped_item_lands_by_its_nearest_anchor(editor, element):
+    """Not by its centre rounded: the sheet does not pre-round a drop.
+
+    At a step of 3 mm the spot this is let go at is nearer a crossing by the
+    right-hand point of a place's rim, or the right-hand end of a bar, than by
+    the centre — so rounding the centre first, as the drop once did, would
+    have left the anchors nothing to do.
+    """
+
+    editor.view.set_grid_step(3.0)
+    spot = QPointF(220.0, 140.0)
+    scene = editor.view.mapToScene(spot.toPoint())
+    kind = dict(ELEMENTS)[element]
+    by_its_centre = QPointF(editor.view.snap(scene.x()), editor.view.snap(scene.y()))
+    by_its_anchors = editor.view.snap_point(scene, kind.anchors_for())
+
+    assert by_its_anchors != by_its_centre, 'the spot tells the two apart'
+
+    drop(editor.view, element_mime_data('pt-petri-net', element), spot)
+
+    assert editor.items_of(NetItem)[0].pos() == by_its_anchors
+
+
 def test_a_dropped_item_can_be_moved_afterwards(editor, element):
     """An item put down by a drag is an item like any other."""
 

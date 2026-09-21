@@ -1800,6 +1800,74 @@ def test_a_settings_change_that_is_not_the_page_leaves_the_sheets_alone(
     assert editor.page == before
 
 
+def test_a_new_grid_step_reaches_the_documents_that_are_open(window, opened, monkeypatch):
+    """Snapped to at once, with no restart and no reopening."""
+
+    add_model(window, monkeypatch)
+    editor = window.document_area.tabs.currentWidget()
+
+    monkeypatch.setattr('masafi_simtwin.main_window.preferences.grid_step', lambda: 2.5)
+    window._apply_grid((preferences.GRID_STEP_KEY,))
+
+    assert editor.grid_step == 2.5
+
+
+def test_a_new_grid_step_moves_nothing_already_drawn(window, opened, monkeypatch):
+    """A position was recorded when it was made; only the next drag follows.
+
+    The place is at 42 across and down, where at a step of 4 mm none of its
+    five points is on a crossing, so snapping it again would move it.
+    """
+
+    add_model(window, monkeypatch)
+    editor = window.document_area.tabs.currentWidget()
+    place = editor.add_element('pt-petri-net', 'place', QPointF(42.0, 42.0))
+    drawn = editor.to_document()
+    recorded = editor.undo_stack.count()
+
+    monkeypatch.setattr('masafi_simtwin.main_window.preferences.grid_step', lambda: 4.0)
+    window._apply_grid((preferences.GRID_STEP_KEY,))
+
+    assert editor.view.snap_point(place.pos(), place.snap_anchors()) != place.pos()
+    assert editor.to_document() == drawn
+    assert editor.undo_stack.count() == recorded
+    place.setPos(QPointF(42.2, 42.0))
+    assert place.pos() == editor.view.snap_point(QPointF(42.2, 42.0), place.snap_anchors())
+
+
+def test_a_settings_change_that_is_not_the_grid_leaves_the_step_alone(
+    window, opened, monkeypatch
+):
+    """Which is every other preference there is."""
+
+    add_model(window, monkeypatch)
+    editor = window.document_area.tabs.currentWidget()
+
+    monkeypatch.setattr('masafi_simtwin.main_window.preferences.grid_step', lambda: 2.5)
+    window._apply_grid(('appearance/page_size',))
+
+    assert editor.grid_step == 1.0
+
+
+def test_the_settings_dialog_applies_the_grid_step(window, opened, monkeypatch):
+    """Accepting the dialog with the step changed is what reaches the sheets."""
+
+    add_model(window, monkeypatch)
+    editor = window.document_area.tabs.currentWidget()
+
+    def choose_a_step(dialog):
+        dialog.grid_step_spin.setValue(5.0)
+        return QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(
+        'masafi_simtwin.main_window.SettingsDialog.exec',
+        lambda dialog: (choose_a_step(dialog), dialog.accept())[0],
+    )
+    window.show_settings()
+
+    assert editor.grid_step == 5.0
+
+
 def test_new_drawing_defaults_reach_the_documents_that_are_open(
     window, opened, monkeypatch
 ):

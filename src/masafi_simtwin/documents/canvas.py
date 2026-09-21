@@ -220,7 +220,9 @@ class CanvasView(QGraphicsView):
         again.
     element_dropped : PyQt6.QtCore.pyqtSignal
         Emitted with the keys of the library and of the element dragged out of
-        the Libraries pane, and the snapped scene position it was let go over.
+        the Libraries pane, and the scene position it was let go over — not
+        snapped, since which of its points lands on the grid is the element's to
+        say, and the element does not exist until the document makes it.
         The view takes the drop and says so; what an element *becomes* is the
         document's to decide, a canvas being the sheet rather than the drawing
         on it.
@@ -1171,9 +1173,12 @@ class CanvasView(QGraphicsView):
     def dropEvent(self, event) -> None:  # noqa: N802  (Qt naming)
         """Say what was dropped and where, in scene millimetres.
 
-        The position is snapped like every other position on the sheet, so an
-        element dropped by hand lands on the same grid the guides do
-        and can be moved off it afterwards no more freely than it was put there.
+        The position is where the pointer let go, **not snapped**.  What is
+        dropped snaps as it lands, by whichever of its own anchors is nearest
+        the grid — a place by its rim, a transition by the end of its bar — and
+        the sheet cannot know those: it does not know what a place is.
+        Rounding the position here first would put the element's centre on the
+        grid and leave its anchors nothing to do.
 
         Parameters
         ----------
@@ -1187,11 +1192,7 @@ class CanvasView(QGraphicsView):
             return
 
         position = self.mapToScene(event.position().toPoint())
-        self.element_dropped.emit(
-            element[0],
-            element[1],
-            QPointF(self.snap(position.x()), self.snap(position.y())),
-        )
+        self.element_dropped.emit(element[0], element[1], position)
 
     # ------------------------------------------------------------------
     # Drawing an arc between two items
