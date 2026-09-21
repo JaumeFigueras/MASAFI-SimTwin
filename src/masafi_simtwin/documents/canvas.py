@@ -33,16 +33,25 @@ sheet is at a negative coordinate and the first page is the one a new document
 opens on.
 
 Guides are pulled out of the rulers and dropped on the sheet, and they snap as
-they go — always to the millimetre, and to the millimetre at every zoom.  A snap
-that changed with the zoom would mean the same drag put a guide in a different
-place depending on how close the sheet happened to be, which is the one thing a
-guide is there not to do.  Everything that snaps on the sheet goes through
-:meth:`CanvasView.snap`.
+they go — to the **grid step**, the distance between the points a drawing lands
+on, which is the preference :func:`masafi_simtwin.preferences.grid_step` resolves
+and a millimetre by default.  It is the same at every zoom.  A snap that changed
+with the zoom would mean the same drag put a guide in a different place depending
+on how close the sheet happened to be, which is the one thing a guide is there
+not to do.  Everything that snaps on the sheet goes through
+:meth:`CanvasView.snap`, or through :meth:`CanvasView.snap_point` when a thing
+has more than one point of its own that may land on the grid.
+
+The grid that is **drawn** is not the grid things snap to, decided with Jaume:
+the squares stay :data:`GRID_STEP` whatever the step is.  At the default step of
+a millimetre a drawn grid would be under :data:`MIN_GRID_PIXELS` at life size and
+dropped, leaving the sheet with no squares at all.
 """
 
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 
 from PyQt6.QtCore import QLineF, QPointF, QRectF, QSizeF, Qt, pyqtSignal
 from PyQt6.QtGui import QActionGroup, QColor, QCursor, QPainter, QPalette, QPen
@@ -137,10 +146,19 @@ def sheet_rect(page: QSizeF) -> QRectF:
 
     return QRectF(0.0, 0.0, page.width() * PAGES_ACROSS, page.height() * PAGES_DOWN)
 
-#: What a position is snapped to, in millimetres.  It does not follow the zoom:
-#: the sheet is in millimetres, so a millimetre is where things go, whether or
-#: not one can be told apart on the screen at the time.
-SNAP_STEP = 1.0
+#: How many decimals of a millimetre a snapped coordinate is kept to.  A step
+#: that is not a whole number multiplies out inexactly — three steps of 0.1 are
+#: 0.30000000000000004 — and a position is written to a file as it is held, so
+#: it is rounded to what anybody could have meant: a nanometre, far below
+#: anything a sheet can show and far above what a double loses at four metres.
+SNAP_DIGITS = 9
+
+#: How much longer one anchor's move may be than another's and still be the
+#: same move, in millimetres.  The anchors of a place a whole number of steps
+#: from its centre all ask for one move, which floating point makes differ in
+#: the last bit; within this they tie, and the tie goes to the first anchor —
+#: the centre — rather than to whichever the rounding happened to favour.
+SNAP_TIE = 1e-9
 
 
 def _multiples_of(spacing: float, first: float, last: float) -> list[float]:
@@ -292,6 +310,7 @@ class CanvasView(QGraphicsView):
         self.setObjectName('CanvasView')
         self.empty_note = ''
         self._page = QSizeF(page) if page is not None else preferences.page()
+        self._grid_step = preferences.grid_step()
 
         scene = QGraphicsScene(self)
         scene.setSceneRect(sheet_rect(self._page))
@@ -426,12 +445,45 @@ class CanvasView(QGraphicsView):
     # Snapping
     # ------------------------------------------------------------------
 
+    @property
+    def grid_step(self) -> float:
+        """float: How far apart the points a drawing lands on are, in millimetres."""
+
+        return self._grid_step
+
+    def set_grid_step(self, step: float) -> None:
+        """Snap to points a different distance apart from now on.
+
+        Nothing already on the sheet moves.  Where a thing is was recorded when
+        it was put there, and moving every item of every open net onto a new
+        grid would be a change nobody made and nothing could undo.  The next
+        drag lands on the new grid; what is not dragged stays where it was.
+
+        Nothing is repainted either: the squares that are drawn are
+        :data:`GRID_STEP` whatever the step is.
+
+        Parameters
+        ----------
+        step : float
+            The distance, in millimetres.
+
+        Raises
+        ------
+        ValueError
+            When it is not a positive number, which no grid can be made of.
+        """
+
+        if not (math.isfinite(step) and step > 0.0):
+            raise ValueError(f'a grid step must be a positive distance, not {step!r}')
+        self._grid_step = float(step)
+
     def snap(self, value: float) -> float:
-        """Round a scene coordinate to the millimetre.
+        """Round a scene coordinate to the grid.
 
         The zoom has nothing to do with it.  A guide dropped at the same place
-        lands on the same millimetre whether the sheet was close to or far from
-        the eye when it was dropped.
+        lands on the same point whether the sheet was close to or far from the
+        eye when it was dropped.  The grid is measured from the sheet's origin,
+        where both rulers read nought.
 
         Parameters
         ----------
@@ -441,10 +493,54 @@ class CanvasView(QGraphicsView):
         Returns
         -------
         float
-            The nearest multiple of :data:`SNAP_STEP`.
+            The nearest multiple of :attr:`grid_step`, kept to
+            :data:`SNAP_DIGITS` decimals.
         """
 
-        return round(value / SNAP_STEP) * SNAP_STEP
+        step = self._grid_step
+        return round(round(value / step) * step, SNAP_DIGITS)
+
+    def snap_point(
+        self, point: QPointF, anchors: Sequence[QPointF] = ()
+    ) -> QPointF:
+        """Move a point by the least that puts one of its anchors on the grid.
+
+        An anchor is a point of a thing that may land on the grid, measured from
+        the point the thing is placed by — a place's centre and the four
+        points of its rim, a transition's centre and the ends of its bar.  Each
+        asks for the move that would put *it* on the nearest crossing of the
+        grid, and the shortest of those moves is the one made, so a thing
+        dragged near a line by its edge snaps by its edge and by its centre
+        when that is nearer.  Decided with Jaume: no mode to choose, and a
+        thing whose anchors all ask the same is snapped by its centre, exactly
+        as before there were anchors.
+
+        The anchor is chosen as a **point**, both coordinates at once, rather
+        than one per axis: a place lands with one of its five points on a
+        crossing, not with its left edge on one line and its centre on another.
+
+        Parameters
+        ----------
+        point : PyQt6.QtCore.QPointF
+            Where the thing would be placed, in scene millimetres.
+        anchors : sequence of PyQt6.QtCore.QPointF, optional
+            Its anchors, from ``point``, the centre first: a tie goes to the
+            first.  None given is the centre alone.
+
+        Returns
+        -------
+        PyQt6.QtCore.QPointF
+            Where the thing is placed instead.
+        """
+
+        best: tuple[float, QPointF] | None = None
+        for anchor in anchors or (QPointF(),):
+            x = round(self.snap(point.x() + anchor.x()) - anchor.x(), SNAP_DIGITS)
+            y = round(self.snap(point.y() + anchor.y()) - anchor.y(), SNAP_DIGITS)
+            length = math.hypot(x - point.x(), y - point.y())
+            if best is None or length < best[0] - SNAP_TIE:
+                best = (length, QPointF(x, y))
+        return best[1]
 
     def pointer_on_the_sheet(self) -> QPointF | None:
         """Give where the pointer is on the sheet, if it is over it at all.
@@ -1047,7 +1143,7 @@ class CanvasView(QGraphicsView):
         """Say what was dropped and where, in scene millimetres.
 
         The position is snapped like every other position on the sheet, so an
-        element dropped by hand lands on the same millimetre grid the guides do
+        element dropped by hand lands on the same grid the guides do
         and can be moved off it afterwards no more freely than it was put there.
 
         Parameters
@@ -2270,6 +2366,23 @@ class Canvas(QWidget):
         """
 
         self.view.set_page(page)
+
+    @property
+    def grid_step(self) -> float:
+        """float: How far apart the points a drawing lands on are, in millimetres."""
+
+        return self.view.grid_step
+
+    def set_grid_step(self, step: float) -> None:
+        """Snap to points a different distance apart from now on.
+
+        Parameters
+        ----------
+        step : float
+            The distance, in millimetres.
+        """
+
+        self.view.set_grid_step(step)
 
     @property
     def zoom(self) -> float:

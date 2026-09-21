@@ -739,7 +739,7 @@ class NetItem(QGraphicsItem):
     # ------------------------------------------------------------------
 
     def itemChange(self, change, value):  # noqa: N802  (Qt naming)
-        """Snap a moving item to the millimetre and hold it to the sheet.
+        """Snap a moving item to the grid and hold it to the sheet.
 
         This is the one place a position is decided, so an item dropped from the
         library and one dragged by the hand land under the same rule.

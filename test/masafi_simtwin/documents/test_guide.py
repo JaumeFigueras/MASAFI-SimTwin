@@ -6,7 +6,7 @@ import pytest
 from PyQt6.QtCore import QEvent, QPointF, Qt
 from PyQt6.QtGui import QColor, QImage, QKeyEvent, QMouseEvent, QPainter, QPalette
 
-from masafi_simtwin.documents.canvas import SNAP_STEP, Canvas
+from masafi_simtwin.documents.canvas import Canvas
 from masafi_simtwin.documents.guide import Guide
 
 
@@ -161,11 +161,20 @@ def test_a_guide_snaps_to_the_millimetre(canvas):
 
     guide = canvas.add_guide(Qt.Orientation.Horizontal, 12.4)
 
-    assert SNAP_STEP == 1.0
+    assert canvas.grid_step == 1.0
     assert guide.position == pytest.approx(12.0)
     assert canvas.view.snap(12.6) == pytest.approx(13.0)
     assert canvas.view.snap(-7.4) == pytest.approx(-7.0)
     assert canvas.view.snap(-7.6) == pytest.approx(-8.0)
+
+
+def test_a_guide_snaps_to_the_step_that_was_chosen(canvas):
+    """A guide has no anchors of its own: it is a line, and it lands on the grid."""
+
+    canvas.set_grid_step(2.5)
+    guide = canvas.add_guide(Qt.Orientation.Horizontal, 12.4)
+
+    assert guide.position == 12.5
 
 
 def test_the_snapping_does_not_follow_the_zoom(canvas):

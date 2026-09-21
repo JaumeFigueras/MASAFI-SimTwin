@@ -221,7 +221,7 @@ DEFAULT_L_POINTS = ((0.5, 0.5),)
 #: How many places along a segment are looked at when the nearest place on the
 #: curve is wanted — for putting a new point on the line where the pointer is,
 #: which is the only thing that asks.  A curve is not a thing to solve exactly
-#: when the answer is snapped to the millimetre afterwards.
+#: when the answer is snapped to the grid afterwards.
 SEGMENT_SAMPLES = 24
 
 #: What the name of a point handle begins with, the rest of it being which
@@ -1453,7 +1453,7 @@ class Arc(QGraphicsItem):
     def nearest_on_curve(self, point: QPointF) -> tuple[int, QPointF]:
         """Find the place on the drawn arc nearest a place on the sheet.
 
-        Sampled rather than solved: the answer is snapped to the millimetre
+        Sampled rather than solved: the answer is snapped to the grid
         afterwards, so an exact root of a cubic would be thrown away.
 
         Parameters

@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import pytest
-from PyQt6.QtCore import QEvent, QPoint, QPointF, QRectF, QSizeF, Qt
+from PyQt6.QtCore import QEvent, QLineF, QPoint, QPointF, QRectF, QSizeF, Qt
 from PyQt6.QtGui import QImage, QMouseEvent, QPainter, QPalette, QWheelEvent
 from PyQt6.QtWidgets import QGraphicsView
 
 from masafi_simtwin import paper
 from masafi_simtwin.documents.place import Place
+from masafi_simtwin.preferences import DEFAULT_GRID_STEP, GRID_STEP_KEY, Preferences
 from masafi_simtwin.documents.canvas import (
     GRID_MAJOR_ALPHA,
     MAX_ZOOM,
@@ -614,6 +615,176 @@ def test_no_page_is_ruled_off_the_sheet(canvas):
     beyond = QRectF(canvas.scene().sceneRect().right() + 10.0, 0.0, 400.0, 400.0)
 
     assert grid_of(canvas, beyond).page_lines == []
+
+
+# ----------------------------------------------------------------------
+# Snapping
+# ----------------------------------------------------------------------
+
+#: A place's anchors — its centre and the four points of its rim — written out
+#: here rather than asked of the place, which learns them in the next step.
+PLACE_ANCHORS = (
+    QPointF(0.0, 0.0),
+    QPointF(5.0, 0.0),
+    QPointF(-5.0, 0.0),
+    QPointF(0.0, -5.0),
+    QPointF(0.0, 5.0),
+)
+
+
+def test_a_sheet_snaps_to_the_millimetre_unless_told_otherwise(canvas):
+    """Which is what everything on it was snapped to before it could be chosen."""
+
+    assert canvas.grid_step == DEFAULT_GRID_STEP == 1.0
+    assert canvas.view.snap(12.4) == 12.0
+    assert canvas.view.snap(12.6) == 13.0
+
+
+def test_a_sheet_takes_the_step_the_preferences_ask_for(qtbot):
+    """As it takes its page: a canvas opened after a choice snaps to that choice."""
+
+    Preferences().set_value(GRID_STEP_KEY, 2.5)
+    widget = Canvas(page=A4)
+    qtbot.addWidget(widget)
+
+    assert widget.grid_step == 2.5
+    assert widget.view.snap(6.2) == 5.0
+    assert widget.view.snap(6.3) == 7.5
+
+
+def test_the_step_can_be_changed_under_the_sheet(canvas):
+    """Which is what a change in the settings comes to, without reopening."""
+
+    canvas.set_grid_step(5.0)
+
+    assert canvas.grid_step == 5.0
+    assert canvas.view.grid_step == 5.0
+    assert canvas.view.snap(12.4) == 10.0
+
+
+def test_changing_the_step_moves_nothing_already_on_the_sheet(canvas):
+    """Where a thing is was recorded when it was put there.
+
+    Moving it onto a new grid would be a change nobody made and nothing could
+    undo, so only what is put down afterwards lands on the new grid.
+    """
+
+    before = canvas.add_guide(Qt.Orientation.Vertical, 12.0)
+    canvas.set_grid_step(5.0)
+    after = canvas.add_guide(Qt.Orientation.Vertical, 12.0)
+
+    assert before.position == 12.0
+    assert after.position == 10.0
+
+
+@pytest.mark.parametrize('step', [0.0, -1.0, float('nan'), float('inf')])
+def test_a_step_that_is_not_a_distance_is_refused(canvas, step):
+    """No grid is made of nothing, of less, or of no number at all."""
+
+    with pytest.raises(ValueError, match='grid step'):
+        canvas.set_grid_step(step)
+
+    assert canvas.grid_step == 1.0
+
+
+def test_a_step_that_is_not_whole_gives_the_number_that_was_meant(canvas):
+    """Three steps of a tenth are three tenths, not 0.30000000000000004.
+
+    A position is written to a file exactly as it is held, so the rounding a
+    fractional step multiplies out to would otherwise reach the file.
+    """
+
+    canvas.set_grid_step(0.1)
+
+    assert canvas.view.snap(0.29) == 0.3
+    assert canvas.view.snap(0.71) == 0.7
+    assert canvas.view.snap_point(QPointF(0.29, 0.71)) == QPointF(0.3, 0.7)
+
+
+def test_a_point_with_no_anchors_is_snapped_by_itself(canvas):
+    """Which is both of its coordinates snapped: the rule before there were anchors."""
+
+    canvas.set_grid_step(2.5)
+
+    assert canvas.view.snap_point(QPointF(6.2, 6.3)) == QPointF(5.0, 7.5)
+    assert canvas.view.snap_point(QPointF(6.2, 6.3), [QPointF()]) == QPointF(5.0, 7.5)
+
+
+def test_the_anchor_nearest_the_grid_is_the_one_put_on_it(canvas):
+    """A thing dragged near a crossing by its edge snaps by its edge.
+
+    At a step of 3 mm a place's radius of 5 mm is not a whole number of steps,
+    so its five anchors ask for five different moves.  The right-hand point of
+    the rim asks for the least, and lands on a crossing while the centre does
+    not.
+    """
+
+    canvas.set_grid_step(3.0)
+
+    placed = canvas.view.snap_point(QPointF(10.4, 20.2), PLACE_ANCHORS)
+
+    assert placed == QPointF(10.0, 21.0)
+    assert (placed.x() + 5.0) % 3.0 == 0.0
+    assert placed.y() % 3.0 == 0.0
+    assert placed.x() % 3.0 != 0.0
+
+
+def test_the_move_is_the_least_any_anchor_asks_for(canvas):
+    """Every anchor is tried, and none of them would have moved the point less."""
+
+    canvas.set_grid_step(3.0)
+    point = QPointF(10.4, 20.2)
+
+    placed = canvas.view.snap_point(point, PLACE_ANCHORS)
+
+    assert placed != point
+    for anchor in PLACE_ANCHORS:
+        alone = canvas.view.snap_point(point, [anchor])
+        assert QLineF(point, placed).length() <= QLineF(point, alone).length()
+
+
+def test_a_thing_whose_anchors_all_agree_is_snapped_by_its_centre(canvas):
+    """At a millimetre a place's rim is a whole number of steps from its centre.
+
+    So every anchor asks for the same move, which floating point makes differ in
+    the last bit; the move is still the centre's, landing it on a crossing.
+    """
+
+    placed = canvas.view.snap_point(QPointF(10.3, 20.7), PLACE_ANCHORS)
+
+    assert placed == QPointF(10.0, 21.0)
+
+
+def test_a_tie_goes_to_the_first_anchor_which_is_the_centre(canvas):
+    """Two anchors asking for moves of one length but to different places.
+
+    At a step of 2 mm, a point at 0.5 is half a millimetre from a crossing by its
+    centre and half a millimetre from one by an anchor a millimetre to its
+    right, the two moves going opposite ways.
+    """
+
+    canvas.set_grid_step(2.0)
+    point = QPointF(0.5, 0.0)
+    centre, right = QPointF(0.0, 0.0), QPointF(1.0, 0.0)
+
+    assert canvas.view.snap_point(point, [centre, right]) == QPointF(0.0, 0.0)
+    assert canvas.view.snap_point(point, [right, centre]) == QPointF(1.0, 0.0)
+
+
+def test_a_tie_floating_point_would_decide_is_still_the_centre_s(canvas):
+    """The two moves are equal, and the arithmetic says the anchor's is shorter.
+
+    At a step of 0.3 mm a point at 96.8 is a tenth from a crossing by its centre
+    (96.9) and a tenth from one by an anchor 8 mm to its right (104.7).  Worked
+    out in doubles the anchor's tenth comes out a hair shorter, and a plain
+    comparison hands it the tie; :data:`SNAP_TIE` is what gives it back.
+    """
+
+    canvas.set_grid_step(0.3)
+    point = QPointF(96.8, 0.0)
+    centre, right = QPointF(0.0, 0.0), QPointF(8.0, 0.0)
+
+    assert canvas.view.snap_point(point, [centre, right]) == QPointF(96.9, 0.0)
 
 
 # ----------------------------------------------------------------------
