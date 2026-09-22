@@ -1242,6 +1242,9 @@ def test_an_arc_offers_its_four_shapes_and_a_way_out(editor, net):
         'Curved',
         'S-Curved',
         'L-Shaped',
+        'Reset Label',
+        'Reset Text Appearance',
+        'Reset Line Appearance',
         'Delete Arc',
     ]
 
@@ -2072,6 +2075,9 @@ def test_an_s_offers_a_point_to_be_added(editor, ess):
         'S-Curved',
         'L-Shaped',
         'Add Point',
+        'Reset Label',
+        'Reset Text Appearance',
+        'Reset Line Appearance',
         'Delete Arc',
     ]
 
@@ -2088,6 +2094,9 @@ def test_a_point_of_an_s_offers_to_be_taken_out(editor, ess):
         'S-Curved',
         'L-Shaped',
         'Delete Point',
+        'Reset Label',
+        'Reset Text Appearance',
+        'Reset Line Appearance',
         'Delete Arc',
     ]
 

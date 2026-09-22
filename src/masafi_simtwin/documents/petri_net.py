@@ -486,6 +486,7 @@ class PetriNetEditor(Canvas):
         self.view.rotation_asked.connect(self._on_rotation_asked)
         self.view.text_reset_asked.connect(self._on_text_reset_asked)
         self.view.line_reset_asked.connect(self._on_line_reset_asked)
+        self.view.label_reset_asked.connect(self._on_label_reset_asked)
         self.arc_tool_bar.shape_chosen.connect(self._on_shape_chosen)
         self.arc_tool_bar.kind_chosen.connect(self._on_kind_chosen)
         self.scene().selectionChanged.connect(self._on_selection_changed)
@@ -1247,6 +1248,17 @@ class PetriNetEditor(Canvas):
 
         self.set_line_style([item.uuid for item in items], None)
 
+    def _on_label_reset_asked(self, items) -> None:
+        """Put back the captions a context menu asked to have put back.
+
+        Parameters
+        ----------
+        items : list
+            What was aimed at.
+        """
+
+        self.reset_label([item.uuid for item in items])
+
     # ------------------------------------------------------------------
     # What can be undone
     # ------------------------------------------------------------------
@@ -1330,6 +1342,7 @@ class PetriNetEditor(Canvas):
             'move-guide': self.tr('Move Guide'),
             'move-label': self.tr('Move Label'),
             'resize-label': self.tr('Resize Label'),
+            'reset-label': self.tr('Reset Label'),
             'add-guide': self.tr('Add Guide'),
             'shape-arc': self.tr('Shape Arc'),
             'move-arc-end': self.tr('Move Arc End'),
@@ -1337,6 +1350,8 @@ class PetriNetEditor(Canvas):
             'rename-node': self.tr('Rename'),
             'set-tokens': self.tr('Change Tokens'),
             'set-description': self.tr('Change Description'),
+            'set-text-style': self.tr('Change Text Appearance'),
+            'set-line-style': self.tr('Change Line Appearance'),
             'rotate': self.tr('Rotate'),
             'cut': self.tr('Cut'),
             'paste': self.tr('Paste'),
@@ -2086,6 +2101,45 @@ class PetriNetEditor(Canvas):
             SetArcWeight(arc.uuid, arc.weight, weight) for arc in arcs if arc.weight != weight
         )
         self.push(Change('set-arc-weight', operations))
+        return bool(operations)
+
+    def reset_label(self, uuids) -> bool:
+        """Put some captions back where and how wide the editor puts them, as
+        one recorded change.
+
+        ``None`` is *where the editor puts it* for an offset and *the editor's
+        own width* for a width, so this is the ordinary moving and resizing of
+        a caption asked for nothing: undoing it gives the box back where it was
+        dragged to.  One change for both, decided with Jaume — a box dragged out
+        of sight and one widened past its node are both a box to be put back.
+        An arc's weight is moved and never resized, so it has only the offset,
+        which is put back even while the weight is one and no box is shown: the
+        next weight that is not one then appears beside the line.
+
+        Parameters
+        ----------
+        uuids : collections.abc.Iterable of str
+            The places, transitions or arcs.
+
+        Returns
+        -------
+        bool
+            Whether any caption changed.
+        """
+
+        operations: list[Operation] = []
+        for item in (self.node_or_arc(uuid) for uuid in uuids):
+            if item is None:
+                continue
+            if isinstance(item, Arc):
+                if item.label_offset is not None:
+                    operations.append(MoveWeight(item.uuid, item.label_offset, None))
+                continue
+            if item.label_offset is not None:
+                operations.append(MoveLabel(item.uuid, item.label_offset, None))
+            if item.label_width is not None:
+                operations.append(SetLabelWidth(item.uuid, item.label_width, None))
+        self.push(Change('reset-label', tuple(operations)))
         return bool(operations)
 
     def set_text_style(self, uuids, style) -> bool:

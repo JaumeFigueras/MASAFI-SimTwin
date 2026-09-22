@@ -782,7 +782,7 @@ there, what its rate means, and where the number came from, which is a paragraph
 
 ---
 
-## A label is moved and resized by hand, and nothing puts it back or out of the way
+## A label is moved and resized by hand, and nothing moves it out of the way
 
 **Now.** A node's name and description are written in one box, `Name: Description`, wrapped to
 `LABEL_WIDTH`. Until it is moved the box is in a fixed place: under a place, centred; across a
@@ -795,7 +795,7 @@ no width for a label. Only the width: the height is what the wrap makes of it.
 A resized box is **drawn as wide as it was made**, however little text is in it, and is **not held on
 the paper** while it is resized — only while it is moved — so a box widened at the edge of the sheet can
 reach off it. It cannot be made narrower than `MIN_LABEL_WIDTH` (5 mm), and a word wider than the box is
-broken. Like a move, there is no way back to the editor's own width except *Undo*.
+broken. *Reset Label* gives it the editor's own width again, as it gives a moved box its fixed place.
 
 An **arc's weight** is the same kind of box, moved but never resized. A moved number is kept in the
 arc's **chord frame** — how far along and across, as fractions of the chord, the way its bends are — so
@@ -809,9 +809,10 @@ passed over, and the number sits beside the middle of the line.
 
 A moved box is **where the person put it, and nothing moves it again**: not a longer description (the
 box grows about its centre, so it can grow over its own node), not a transition turned (a box put beside
-a bar lying across stays there when the bar stands up), and not a node dragged near it. There is **no
-way back** to the fixed place except *Undo*, which gives back `None` rather than the place the box
-happened to be in. The box is drawn straight onto the sheet with nothing behind it, so an arc can still
+a bar lying across stays there when the bar stands up), and not a node dragged near it. The way back to
+the fixed place is *Reset Label*, on the owner's context menu and the caption's own: one recorded change
+putting the offset and the width back to `None`, so the box follows its text and its bar again — for a
+weight flung far off by a reshaped arc as much as for a caption dragged out of sight. The box is drawn straight onto the sheet with nothing behind it, so an arc can still
 run across the words.
 
 **Why it was done this way.** A box nobody moved costs nothing — no offset stored, nothing in the file —
@@ -828,13 +829,10 @@ word.
 
 **When it will not be enough.** A dense net, where boxes collide with each other and with the arcs; a
 long description of a moved box, which grows over its node; a box moved beside a bar that is later
-stood up; and anybody who wants a box back where it started long after *Undo* has stopped reaching.
+stood up.
 
 **Options.**
 
-- **A *Reset Label Position* entry** on the item's context menu, recording a `MoveLabel` to `None`
-  (and a *Reset Label Width* beside it, a `SetLabelWidth` to `None`, or one entry doing both). Small,
-  and the obvious first addition if a person asks for it.
 - **Reading another tool's inscription offset**, by handing it to the editor as millimetres from the
   middle of the arc and turning it into the chord frame there, the way a node without positions is laid
   out. Worth it once files from other tools with placed weights are met.
@@ -990,7 +988,7 @@ transitions and the arcs between them, and has to do it in three passes.
   which is the rule the arc page already keeps.
 - **Ask what the selection has in common** and show the rest as partly ticked, which is what the box
   already does for several items of one kind.
-- **Leave it**, and let *Reset* and the context menu (the step after this one) carry the quick cases.
+- **Leave it**, and let the *Reset* entries on each item's context menu carry the quick cases.
 
 ---
 

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 import pytest
 from PyQt6.QtCore import QEvent, QLineF, QPointF, Qt
 from PyQt6.QtGui import QContextMenuEvent, QMouseEvent
@@ -13,6 +16,7 @@ from masafi_simtwin.documents.arc import (
     ArcKind,
     ArcShape,
 )
+from masafi_simtwin.documents import petri_net as petri_net_module
 from masafi_simtwin.documents.canvas import Canvas
 from masafi_simtwin.documents.place import Place
 from masafi_simtwin.documents.net_item import NetItem
@@ -1653,6 +1657,17 @@ def test_the_new_changes_are_named_for_undo(editor, name, label):
     assert editor.change_label(name) == label
 
 
+def test_every_change_the_editor_records_is_named_for_undo(editor):
+    """Read out of the source, so a change added without a name fails rather
+    than offering *Undo set-text-style*, which is what the two appearance
+    changes did."""
+
+    source = Path(petri_net_module.__file__).read_text(encoding='utf-8')
+    names = set(re.findall(r"Change\(\s*'([a-z-]+)'", source))
+
+    assert {'set-text-style', 'set-line-style', 'reset-label'} <= names
+    assert [name for name in sorted(names) if editor.change_label(name) == name] == []
+
 
 def test_an_invented_name_counts_numbers_whatever_the_case_of_their_prefix(editor):
     """Names are unique ignoring case, so beside a ``p7`` the next place is
@@ -1923,14 +1938,31 @@ def test_a_place_the_document_asks_to_turn_is_refused(editor):
         editor.apply(Change('rotate', (SetVertical(place.uuid, False, True),)))
 
 
-def test_a_transition_offers_to_be_turned_and_a_place_offers_nothing(editor):
+RESETS = ['Reset Label', 'Reset Text Appearance', 'Reset Line Appearance']
+
+
+def entries(menu):
+    """The words of a menu, separators left out."""
+
+    return [action.text() for action in menu.actions() if not action.isSeparator()]
+
+
+def enabled(menu):
+    """The words of the entries of a menu that can be chosen."""
+
+    return [
+        action.text() for action in menu.actions() if not action.isSeparator() and action.isEnabled()
+    ]
+
+
+def test_a_transition_offers_to_be_turned_and_a_place_does_not(editor):
     """A bar has a way round and a circle has not, which each item says of
-    itself."""
+    itself; both offer the resets."""
 
     place, _free, transition, _arc = little_net(editor)
 
-    assert [action.text() for action in editor.view.item_menu(transition).actions()] == ['Rotate']
-    assert editor.view.item_menu(place) is None
+    assert entries(editor.view.item_menu(transition)) == ['Rotate', *RESETS]
+    assert entries(editor.view.item_menu(place)) == RESETS
     assert editor.view.item_menu(None) is None
 
 
@@ -1963,48 +1995,77 @@ def test_the_menu_turns_the_transition_it_was_aimed_at_and_no_other(editor):
     assert (transition.vertical, another.vertical) == (True, False)
 
 
+def test_an_item_following_the_defaults_offers_every_reset_greyed(editor):
+    """The menu keeps one shape and says what could be done, decided with
+    Jaume, rather than leaving out what has nothing to take back."""
+
+    place = editor.add_element('pt-petri-net', 'place', QPointF(40.0, 40.0))
+    menu = editor.view.item_menu(place)
+
+    assert entries(menu) == RESETS
+    assert enabled(menu) == []
+
+
 def test_an_item_given_an_appearance_is_offered_a_reset(editor):
-    """And one that follows the defaults still offers nothing at all, so the
-    pointer goes on falling through to whatever is under it."""
+    """Each half is enabled by its own style and by nothing else."""
 
     place = editor.add_element('pt-petri-net', 'place', QPointF(40.0, 40.0))
 
-    assert editor.view.item_menu(place) is None
-
     place.text_style = TextStyle('DejaVu Sans', 4.0)
-    assert [entry.text() for entry in editor.view.item_menu(place).actions()] == [
-        'Reset Text Appearance'
-    ]
+    assert enabled(editor.view.item_menu(place)) == ['Reset Text Appearance']
 
     place.line_style = LineStyle('#aa0000', 1.0)
-    assert [entry.text() for entry in editor.view.item_menu(place).actions()] == [
+    assert enabled(editor.view.item_menu(place)) == [
         'Reset Text Appearance',
         'Reset Line Appearance',
     ]
 
 
-def test_only_the_half_there_is_something_to_take_back_for_is_offered(editor):
-    """An entry that would do nothing is worse than no entry."""
+def test_a_caption_moved_or_resized_is_offered_a_reset(editor):
+    """One entry for both, decided with Jaume: where the box is and how wide
+    it is are both the editor's again once it is reset."""
 
     place = editor.add_element('pt-petri-net', 'place', QPointF(40.0, 40.0))
-    place.line_style = LineStyle('#aa0000', 1.0)
 
-    assert [entry.text() for entry in editor.view.item_menu(place).actions()] == [
-        'Reset Line Appearance'
-    ]
+    place.label_offset = (6.0, 9.0)
+    assert enabled(editor.view.item_menu(place)) == ['Reset Label']
+
+    place.label_offset = None
+    place.label_width = 12.0
+    assert enabled(editor.view.item_menu(place)) == ['Reset Label']
+
+
+def test_a_weight_moved_is_offered_a_reset_even_while_it_is_one(editor):
+    """A weight of one shows no box but keeps where it was dragged to, and
+    the next weight that is not one would appear there."""
+
+    place = editor.add_element('pt-petri-net', 'place', QPointF(40.0, 40.0))
+    transition = editor.add_element('pt-petri-net', 'transition', QPointF(80.0, 40.0))
+    arc = editor.add_arc(place, transition)
+
+    assert 'Reset Label' not in enabled(editor.view.arc_menu(arc))
+
+    arc.label_offset = (0.5, 0.3)
+    assert 'Reset Label' in enabled(editor.view.arc_menu(arc))
 
 
 def test_a_transition_keeps_its_rotate_above_the_resets(editor):
-    """With a separator between what it is and what can be taken off it."""
+    """With a separator between what it is and what can be taken off it, and
+    another between the caption and the appearance."""
 
     transition = editor.add_element('pt-petri-net', 'transition', QPointF(80.0, 40.0))
-    transition.line_style = LineStyle('#aa0000', 1.0)
 
-    entries = [entry.text() for entry in editor.view.item_menu(transition).actions()]
+    texts = [entry.text() for entry in editor.view.item_menu(transition).actions()]
 
-    assert entries[0] == 'Rotate'
-    assert entries[1] == ''
-    assert entries[2] == 'Reset Line Appearance'
+    assert texts == ['Rotate', '', 'Reset Label', '', 'Reset Text Appearance', 'Reset Line Appearance']
+
+
+def test_a_place_does_not_open_on_a_separator(editor):
+    """It has no Rotate above its resets."""
+
+    place = editor.add_element('pt-petri-net', 'place', QPointF(40.0, 40.0))
+
+    assert not editor.view.item_menu(place).actions()[0].isSeparator()
 
 
 def test_resetting_from_the_menu_is_one_recorded_change(editor):
@@ -2035,12 +2096,13 @@ def test_an_arc_given_an_appearance_is_offered_a_reset_above_delete(editor):
     place = editor.add_element('pt-petri-net', 'place', QPointF(40.0, 40.0))
     transition = editor.add_element('pt-petri-net', 'transition', QPointF(80.0, 40.0))
     arc = editor.add_arc(place, transition)
-    plain = [entry.text() for entry in editor.view.arc_menu(arc).actions()]
+    plain = enabled(editor.view.arc_menu(arc))
 
     arc.line_style = LineStyle('#aa0000', 1.0)
-    offered = [entry.text() for entry in editor.view.arc_menu(arc).actions()]
+    offered = entries(editor.view.arc_menu(arc))
 
     assert 'Reset Line Appearance' not in plain
+    assert 'Reset Line Appearance' in enabled(editor.view.arc_menu(arc))
     assert offered.index('Reset Line Appearance') < offered.index('Delete Arc')
 
 
@@ -2059,24 +2121,107 @@ def test_resetting_an_arc_from_its_menu_takes_the_style_back(editor):
     assert arc.line_style is None
 
 
-def test_the_menu_over_a_place_given_an_appearance_is_the_item_menu(editor, monkeypatch):
-    """A plain place offers nothing, so the pointer falls through it to the
-    guides; one that has been given an appearance has something to take back,
-    and the pointer stops there."""
+def choose(menu, text):
+    """Trigger the entry of a menu that reads so."""
+
+    [action for action in menu.actions() if action.text() == text][0].trigger()
+
+
+def test_resetting_a_caption_puts_it_back_as_one_recorded_change(editor):
+    """Where it was dragged to and how wide it was made both go, in one entry
+    to undo, and undoing gives both back."""
+
+    place = editor.add_element('pt-petri-net', 'place', QPointF(40.0, 40.0))
+    editor.push(
+        Change(
+            'move-label',
+            (MoveLabel(place.uuid, None, (60.0, 80.0)), SetLabelWidth(place.uuid, None, 12.0)),
+        )
+    )
+    before = editor.to_document()
+    was = editor.undo_stack.count()
+
+    choose(editor.view.item_menu(place), 'Reset Label')
+
+    assert (place.label_offset, place.label_width) == (None, None)
+    assert place.label.pos() == place.label_anchor(place.label.size)
+    assert editor.undo_stack.count() == was + 1
+    assert editor.undo_stack.undoText() == 'Reset Label'
+
+    editor.undo_stack.undo()
+    assert editor.to_document() == before
+
+
+def test_resetting_a_caption_only_moved_leaves_its_width_alone(editor):
+    """Nothing is recorded for the half that was already the editor's."""
+
+    place = editor.add_element('pt-petri-net', 'place', QPointF(40.0, 40.0))
+    editor.push(Change('move-label', (MoveLabel(place.uuid, None, (60.0, 80.0)),)))
+    recorded = []
+    editor.change_recorded.connect(lambda _model, change: recorded.append(change))
+
+    assert editor.reset_label([place.uuid])
+
+    assert recorded == [Change('reset-label', (MoveLabel(place.uuid, (60.0, 80.0), None),))]
+
+
+def test_resetting_what_was_never_moved_records_nothing(editor):
+    """A change of no operations is never recorded."""
+
+    place = editor.add_element('pt-petri-net', 'place', QPointF(40.0, 40.0))
+    was = editor.undo_stack.count()
+
+    assert not editor.reset_label([place.uuid])
+    assert editor.undo_stack.count() == was
+
+
+def test_a_weight_flung_off_by_a_reshaped_arc_comes_back_beside_the_line(editor):
+    """The case that asked for this: a weight dragged aside on an arc that was
+    then reshaped is put back where the editor puts a weight."""
+
+    place = editor.add_element('pt-petri-net', 'place', QPointF(40.0, 40.0))
+    transition = editor.add_element('pt-petri-net', 'transition', QPointF(80.0, 40.0))
+    arc = editor.add_arc(place, transition)
+    editor.set_weight([arc.uuid], 4)
+    editor.push(Change('move-label', (MoveWeight(arc.uuid, None, (0.5, 2.0)),)))
+    editor.view.set_arc_shape(arc, ArcShape.CURVED)
+
+    choose(editor.view.arc_menu(arc), 'Reset Label')
+
+    assert arc.label_offset is None
+    assert arc.label.pos() == arc.label_anchor(arc.label.size)
+
+    editor.undo_stack.undo()
+    assert arc.label_offset == (0.5, 2.0)
+
+
+def test_a_weight_of_one_is_put_back_though_no_box_is_shown(editor):
+    """So the next weight that is not one appears beside the line."""
+
+    place = editor.add_element('pt-petri-net', 'place', QPointF(40.0, 40.0))
+    transition = editor.add_element('pt-petri-net', 'transition', QPointF(80.0, 40.0))
+    arc = editor.add_arc(place, transition)
+    editor.push(Change('move-label', (MoveWeight(arc.uuid, None, (0.5, 2.0)),)))
+
+    choose(editor.view.arc_menu(arc), 'Reset Label')
+
+    assert arc.label_offset is None
+
+
+def test_the_menu_over_a_plain_place_is_the_item_menu(editor, monkeypatch):
+    """Every place offers its resets, so the pointer stops at it rather than
+    falling through to the guides under it."""
 
     shown = []
-    monkeypatch.setattr(
-        QMenu, 'exec', lambda self, *rest: shown.append([action.text() for action in self.actions()])
-    )
+    monkeypatch.setattr(QMenu, 'exec', lambda self, *rest: shown.append(entries(self)))
     place, _free, _transition, _arc = little_net(editor)
-    place.line_style = LineStyle('#aa0000', 1.0)
     spot = editor.view.mapFromScene(place.scenePos())
 
     editor.view.contextMenuEvent(
         QContextMenuEvent(QContextMenuEvent.Reason.Mouse, spot, editor.view.mapToGlobal(spot))
     )
 
-    assert shown == [['Reset Line Appearance']]
+    assert shown == [RESETS]
 
 
 def test_the_menu_over_a_transition_is_the_item_menu(editor, monkeypatch):
@@ -2085,7 +2230,7 @@ def test_the_menu_over_a_transition_is_the_item_menu(editor, monkeypatch):
 
     shown = []
     monkeypatch.setattr(
-        QMenu, 'exec', lambda self, *rest: shown.append([action.text() for action in self.actions()])
+        QMenu, 'exec', lambda self, *rest: shown.append(entries(self))
     )
     _place, _free, transition, _arc = little_net(editor)
     spot = editor.view.mapFromScene(transition.scenePos())
@@ -2094,7 +2239,54 @@ def test_the_menu_over_a_transition_is_the_item_menu(editor, monkeypatch):
         QContextMenuEvent(QContextMenuEvent.Reason.Mouse, spot, editor.view.mapToGlobal(spot))
     )
 
-    assert shown == [['Rotate']]
+    assert shown == [['Rotate', *RESETS]]
+
+
+def right_click(editor, monkeypatch, scene_point):
+    """Open the context menu at a point of the sheet, and say what it offered."""
+
+    shown = []
+    monkeypatch.setattr(QMenu, 'exec', lambda self, *rest: shown.append(entries(self)))
+    spot = editor.view.mapFromScene(scene_point)
+    editor.view.contextMenuEvent(
+        QContextMenuEvent(QContextMenuEvent.Reason.Mouse, spot, editor.view.mapToGlobal(spot))
+    )
+    return shown
+
+
+def test_the_menu_over_a_caption_is_its_nodes(editor, monkeypatch):
+    """So a caption dragged far from its node is put back from the caption,
+    and Reset Label is enabled there."""
+
+    transition = editor.add_element('pt-petri-net', 'transition', QPointF(80.0, 40.0))
+    editor.push(Change('move-label', (MoveLabel(transition.uuid, None, (0.0, 60.0)),)))
+    menus = []
+    monkeypatch.setattr(QMenu, 'exec', lambda self, *rest: menus.append(self))
+    spot = editor.view.mapFromScene(transition.label.sceneBoundingRect().center())
+
+    editor.view.contextMenuEvent(
+        QContextMenuEvent(QContextMenuEvent.Reason.Mouse, spot, editor.view.mapToGlobal(spot))
+    )
+
+    assert [entries(menu) for menu in menus] == [['Rotate', *RESETS]]
+    choose(menus[0], 'Reset Label')
+    assert transition.label_offset is None
+
+
+def test_the_menu_over_a_weight_is_its_arcs(editor, monkeypatch):
+    """The same for the number beside an arc, however far it was flung."""
+
+    place = editor.add_element('pt-petri-net', 'place', QPointF(40.0, 40.0))
+    transition = editor.add_element('pt-petri-net', 'transition', QPointF(80.0, 40.0))
+    arc = editor.add_arc(place, transition)
+    editor.set_weight([arc.uuid], 4)
+    editor.push(Change('move-label', (MoveWeight(arc.uuid, None, (0.5, 1.5)),)))
+
+    shown = right_click(editor, monkeypatch, arc.label.sceneBoundingRect().center())
+
+    assert len(shown) == 1
+    assert shown[0][:4] == ['Straight', 'Curved', 'S-Curved', 'L-Shaped']
+    assert 'Delete Arc' in shown[0]
 
 
 # ----------------------------------------------------------------------

@@ -83,6 +83,7 @@ from masafi_simtwin.documents.arc import (
     untouched_segments,
 )
 from masafi_simtwin.documents.guide import Guide
+from masafi_simtwin.documents.label import Label
 from masafi_simtwin.documents.net_item import PORT_GRAB, NetItem
 from masafi_simtwin.documents.ruler import MILLIMETRES, Ruler, RulerCorner, RulerUnit
 from masafi_simtwin.library_tree import element_from_mime
@@ -285,6 +286,9 @@ class CanvasView(QGraphicsView):
         defaults again.
     line_reset_asked : PyQt6.QtCore.pyqtSignal
         The same for the lines they are drawn with.
+    label_reset_asked : PyQt6.QtCore.pyqtSignal
+        The same for where their caption was dragged to and how wide it was
+        made, so that it goes back to where and how wide the editor puts it.
     """
 
     view_changed = pyqtSignal()
@@ -296,6 +300,7 @@ class CanvasView(QGraphicsView):
     arc_shape_asked = pyqtSignal(object, object)
     text_reset_asked = pyqtSignal(object)
     line_reset_asked = pyqtSignal(object)
+    label_reset_asked = pyqtSignal(object)
     arc_end_asked = pyqtSignal(object, str, object, int)
     deletion_asked = pyqtSignal(object)
     items_moved = pyqtSignal(object)
@@ -749,9 +754,11 @@ class CanvasView(QGraphicsView):
         """Offer what can be done to whatever is under the pointer.
 
         An arc first, because an arc lies over the sheet a guide runs across and
-        is the smallest target there is; then the item under the pointer, which
-        an arc may end on; then the guides, which run the whole length of the
-        sheet.  None of the three has an entry in the menu bar to be reached
+        is the smallest target there is; then a caption, which offers **its
+        owner's** menu — selecting a caption is already how a person says *this
+        place*, and its owner's menu is where *Reset Label* is; then the item
+        under the pointer, which an arc may end on; then the guides, which run
+        the whole length of the sheet.  None of the three has an entry in the menu bar to be reached
         from, so this is where they are found, and when the *Edit* menu grows a
         *Delete* it should come here rather than repeat this.
 
@@ -771,7 +778,14 @@ class CanvasView(QGraphicsView):
             event.accept()
             return
 
-        menu = self.arc_menu(self.arc_at(event.pos()), self.mapToScene(event.pos()))
+        at = self.mapToScene(event.pos())
+        menu = self.arc_menu(self.arc_at(event.pos()), at)
+        if menu is None:
+            owner = self.caption_owner_at(event.pos())
+            if isinstance(owner, Arc):
+                menu = self.arc_menu(owner, at)
+            else:
+                menu = self.item_menu(owner)
         if menu is None:
             menu = self.item_menu(self.item_at(event.pos()))
         if menu is None:
@@ -799,6 +813,26 @@ class CanvasView(QGraphicsView):
         for item in self.items(position):
             if isinstance(item, Guide):
                 return item
+        return None
+
+    def caption_owner_at(self, position) -> NetItem | Arc | None:
+        """Find what the caption under a point of the viewport belongs to.
+
+        Parameters
+        ----------
+        position : PyQt6.QtCore.QPoint
+            Where to look, in the viewport's coordinates.
+
+        Returns
+        -------
+        masafi_simtwin.documents.net_item.NetItem or masafi_simtwin.documents.arc.Arc, optional
+            The node or arc whose caption is there, or ``None`` when there is
+            no caption there.
+        """
+
+        for item in self.items(position):
+            if isinstance(item, Label) and isinstance(item.parentItem(), (NetItem, Arc)):
+                return item.parentItem()
         return None
 
     def arc_at(self, position) -> Arc | None:
@@ -974,12 +1008,12 @@ class CanvasView(QGraphicsView):
         :meth:`guide_menu` are, so that what is offered can be checked without a
         menu going up and blocking on its own event loop.
 
-        There is one entry so far and not every item has it: a bar has a way
-        round and can be turned, a circle has not — which the item says of
-        itself through
+        Not every item can be turned: a bar has a way round and a circle has
+        not — which the item says of itself through
         :attr:`~masafi_simtwin.documents.net_item.NetItem.CAN_ROTATE` rather than
-        being asked what class it is.  An item with nothing to offer gives no
-        menu at all, so the pointer falls through to whatever is under it.
+        being asked what class it is.  Every item offers the resets, greyed
+        where there is nothing to take back, so every item has a menu and the
+        pointer stops at it rather than falling through to the guides.
 
         It acts on the item under the pointer and on no other, even when several
         are selected: a context menu is aimed at a thing, as an arc's is.
@@ -992,13 +1026,10 @@ class CanvasView(QGraphicsView):
         Returns
         -------
         PyQt6.QtWidgets.QMenu, optional
-            The menu, or ``None`` when there is nothing to offer over it.
+            The menu, or ``None`` when the pointer is not over an item.
         """
 
         if item is None:
-            return None
-        given = item.text_style is not None or item.line_style is not None
-        if not (item.CAN_ROTATE or given):
             return None
 
         menu = QMenu(self)
@@ -1049,13 +1080,28 @@ class CanvasView(QGraphicsView):
 
         self.line_reset_asked.emit(list(items))
 
-    def _add_reset_entries(self, menu: QMenu, items) -> bool:
-        """Offer to take back the appearance given to some things.
+    def reset_label(self, items) -> None:
+        """Ask for the captions of some things to go back where they were
+        before anybody moved or resized them.
 
-        Only the half there is something to take back for is offered: an entry
-        that would do nothing is worse than no entry, which is the rule this
-        menu already keeps by giving no menu at all over an item with nothing
-        to offer.  A separator goes in first only when the menu already holds
+        Parameters
+        ----------
+        items : list
+            The places, transitions or arcs.
+        """
+
+        self.label_reset_asked.emit(list(items))
+
+    def _add_reset_entries(self, menu: QMenu, items) -> None:
+        """Offer to take back what was done to some things by hand.
+
+        Three entries, and **always all three**, decided with Jaume: *Reset
+        Label* puts a caption back where and how wide the editor puts it — the
+        way back to a box dragged out of sight, or a weight flung off by a
+        reshaped arc — and *Reset Text Appearance* and *Reset Line Appearance*
+        take back a style.  An entry with nothing to take back is **greyed**
+        rather than left out, so the menu keeps one shape and says what could
+        be done.  A separator goes in first only when the menu already holds
         something, so a place — which has no *Rotate* — does not open on one.
 
         Parameters
@@ -1064,27 +1110,29 @@ class CanvasView(QGraphicsView):
             What to add them to.
         items : list
             The things the menu was aimed at.
-
-        Returns
-        -------
-        bool
-            Whether anything was added.
         """
 
+        moved = [
+            item
+            for item in items
+            if item.label_offset is not None or getattr(item, 'label_width', None) is not None
+        ]
         lettered = [item for item in items if item.text_style is not None]
         drawn = [item for item in items if item.line_style is not None]
-        if not (lettered or drawn):
-            return False
 
         if menu.actions():
             menu.addSeparator()
-        if lettered:
-            entry = menu.addAction(self.tr('Reset Text Appearance'))
-            entry.triggered.connect(lambda: self.reset_text_appearance(lettered))
-        if drawn:
-            entry = menu.addAction(self.tr('Reset Line Appearance'))
-            entry.triggered.connect(lambda: self.reset_line_appearance(drawn))
-        return True
+        entry = menu.addAction(self.tr('Reset Label'))
+        entry.setEnabled(bool(moved))
+        entry.triggered.connect(lambda: self.reset_label(moved))
+
+        menu.addSeparator()
+        entry = menu.addAction(self.tr('Reset Text Appearance'))
+        entry.setEnabled(bool(lettered))
+        entry.triggered.connect(lambda: self.reset_text_appearance(lettered))
+        entry = menu.addAction(self.tr('Reset Line Appearance'))
+        entry.setEnabled(bool(drawn))
+        entry.triggered.connect(lambda: self.reset_line_appearance(drawn))
 
     def guide_menu(self, guide: Guide | None) -> QMenu | None:
         """Build what is offered over a guide, or over the bare sheet.
