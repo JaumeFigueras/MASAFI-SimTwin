@@ -4,16 +4,15 @@
 # package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: MASAFI-SimTwin 0.1\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-23 23:38+0200\n"
+"POT-Creation-Date: 2026-10-24 00:09+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Last-Translator: Jaume Figueras\n"
 "Language: ca\n"
-"Language-Team: ca <LL@li.org>\n"
+"Language-Team: Català\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=utf-8\n"
@@ -25,13 +24,898 @@ msgid "Project and Menus"
 msgstr "Projecte i menús"
 
 #: ../../source/using/manual/project_menus.rst:4
-msgid "Todo"
-msgstr ""
-
-#: ../../source/using/manual/project_menus.rst:6
 msgid ""
-"A tour of the window: the tabs, the tool panes and the menus, and what a "
-"project is: making one, opening it, saving it, its recent history, "
-"recovering after a crash, and the models it holds."
+"Everything you make in MASAFI-SimTwin lives in a **project**: one file "
+"that holds all the models of a piece of work. This page shows you the "
+"window, how to make, open and close a project, how to add models to it, "
+"how your work is saved, and what each menu holds."
 msgstr ""
+"Tot el que feu amb MASAFI-SimTwin viu dins d'un **projecte**: un sol "
+"fitxer que conté tots els models d'una feina. Aquesta pàgina us mostra la"
+" finestra; com es crea, s'obre i es tanca un projecte; com s'hi afegeixen"
+" models; com es desa la feina, i què hi ha a cada menú."
+
+#: ../../source/using/manual/project_menus.rst:9
+msgid ""
+"The MASAFI-SimTwin window with a project open and a Petri net drawn in a "
+"tab."
+msgstr ""
+"La finestra de MASAFI-SimTwin amb un projecte obert i una xarxa de Petri "
+"dibuixada en una pestanya."
+
+#: ../../source/using/manual/project_menus.rst:12
+msgid ""
+"The window with the *Bottling Line* project open and its *Filling "
+"Station* model in a tab."
+msgstr ""
+"La finestra amb el projecte *Línia d'embotellament* obert i el seu model "
+"*Estació d'ompliment* en una pestanya."
+
+#: ../../source/using/manual/project_menus.rst:17
+msgid "The window"
+msgstr "La finestra"
+
+#: ../../source/using/manual/project_menus.rst:19
+msgid "The window has four parts:"
+msgstr "La finestra té quatre parts:"
+
+#: ../../source/using/manual/project_menus.rst:21
+msgid "The top bar"
+msgstr "La barra superior"
+
+#: ../../source/using/manual/project_menus.rst:22
+msgid ""
+"From left to right: the main menu button (:guilabel:`☰`), the name of the"
+" open project, which opens a list of recent projects, and, on the right, "
+"the simulation controls, search and settings."
+msgstr ""
+"D'esquerra a dreta: el botó del menú principal (:guilabel:`☰`); el nom "
+"del projecte obert, que obre la llista de projectes recents, i, a la "
+"dreta, els controls de la simulació, la cerca i la configuració."
+
+#: ../../source/using/manual/project_menus.rst:26
+msgid "The tool stripes"
+msgstr "Les franges d'eines"
+
+#: ../../source/using/manual/project_menus.rst:27
+msgid ""
+"The narrow columns of buttons on the left and right edges. Each button "
+"opens a **pane**: :guilabel:`Project` and :guilabel:`Libraries` at the "
+"top of the left stripe, :guilabel:`Python Console` and "
+":guilabel:`Problems` at the bottom, and :guilabel:`Properties` on the "
+"right."
+msgstr ""
+"Les columnes estretes de botons de les vores esquerra i dreta. Cada botó "
+"obre una **subfinestra**: :guilabel:`Projecte` i :guilabel:`Biblioteques`"
+" a dalt de la franja esquerra, :guilabel:`Consola de Python` i "
+":guilabel:`Problemes` a baix, i :guilabel:`Propietats` a la dreta."
+
+#: ../../source/using/manual/project_menus.rst:32
+msgid "The document area"
+msgstr "L'àrea de documents"
+
+#: ../../source/using/manual/project_menus.rst:33
+msgid "The middle of the window. Every model you open is a tab here."
+msgstr "El centre de la finestra. Cada model que obriu hi és una pestanya."
+
+#: ../../source/using/manual/project_menus.rst:35
+msgid "The status bar"
+msgstr "La barra d'estat"
+
+#: ../../source/using/manual/project_menus.rst:36
+msgid ""
+"The line along the bottom. It says what has just happened, such as a "
+"project opened or saved, and it names the model you are looking at."
+msgstr ""
+"La línia de baix de tot. Diu què acaba de passar, com ara que s'ha obert "
+"o desat un projecte, i dona el nom del model que esteu mirant."
+
+#: ../../source/using/manual/project_menus.rst:39
+msgid ""
+"The simulation controls (run, stop, fast forward and reset) and search "
+"are there to show where they will be; they do nothing yet."
+msgstr ""
+"Els controls de la simulació (executa, atura, avanç ràpid i reinicia) i "
+"la cerca hi són per mostrar on aniran; encara no fan res."
+
+#: ../../source/using/manual/project_menus.rst:44
+msgid "The panes"
+msgstr "Les subfinestres"
+
+#: ../../source/using/manual/project_menus.rst:46
+msgid ""
+"Click a stripe button to open its pane, and click it again to close it. "
+"Only one pane of each group is open at a time: opening "
+":guilabel:`Libraries` closes :guilabel:`Project`, and the panes at the "
+"bottom take the whole width of the window."
+msgstr ""
+"Feu clic en un botó d'una franja per obrir la seva subfinestra, i torneu-"
+"hi a fer clic per tancar-la. De cada grup només n'hi ha una d'oberta "
+"alhora: obrir :guilabel:`Biblioteques` tanca :guilabel:`Projecte`, i les "
+"subfinestres de baix ocupen tota l'amplada de la finestra."
+
+#: ../../source/using/manual/project_menus.rst:51
+#: ../../source/using/manual/project_menus.rst:337
+msgid ":guilabel:`Project`"
+msgstr ":guilabel:`Projecte`"
+
+#: ../../source/using/manual/project_menus.rst:52
+msgid "What the open project holds. It opens by itself when you open a project."
+msgstr "El que conté el projecte obert. S'obre tota sola quan obriu un projecte."
+
+#: ../../source/using/manual/project_menus.rst:54
+msgid ":guilabel:`Libraries`"
+msgstr ":guilabel:`Biblioteques`"
+
+#: ../../source/using/manual/project_menus.rst:55
+msgid ""
+"The elements a model is drawn with, grouped by kind of model. Drag one "
+"onto a model to add it."
+msgstr ""
+"Els elements amb què es dibuixa un model, agrupats per tipus de model. "
+"Arrossegueu-ne un a sobre d'un model per afegir-l'hi."
+
+#: ../../source/using/manual/project_menus.rst:58
+msgid ":guilabel:`Properties`"
+msgstr ":guilabel:`Propietats`"
+
+#: ../../source/using/manual/project_menus.rst:59
+msgid ""
+"The name, the tokens, the description and the appearance of what is "
+"selected in the model you are looking at, ready to be changed. With "
+"nothing selected it shows the model itself."
+msgstr ""
+"El nom, les marques, la descripció i l'aparença del que està seleccionat "
+"al model que esteu mirant, a punt per canviar-los. Si no hi ha res "
+"seleccionat, mostra el model mateix."
+
+#: ../../source/using/manual/project_menus.rst:63
+msgid ":guilabel:`Python Console` and :guilabel:`Problems`"
+msgstr ":guilabel:`Consola de Python` i :guilabel:`Problemes`"
+
+#: ../../source/using/manual/project_menus.rst:64
+msgid "Not built yet."
+msgstr "Encara no estan fetes."
+
+#: ../../source/using/manual/project_menus.rst:68
+msgid "The main menu"
+msgstr "El menú principal"
+
+#: ../../source/using/manual/project_menus.rst:70
+msgid ""
+"The menu bar is folded into the :guilabel:`☰` button to leave more room "
+"for the model. Click the button and the menus take its place; they fold "
+"away again when you choose an entry or click anywhere else."
+msgstr ""
+"La barra de menús està plegada dins del botó :guilabel:`☰` per deixar més"
+" espai al model. Feu clic al botó i els menús n'ocupen el lloc; es tornen"
+" a plegar quan trieu una entrada o feu clic a qualsevol altre lloc."
+
+#: ../../source/using/manual/project_menus.rst:74
+msgid "The top bar with the menu bar unfolded."
+msgstr "La barra superior amb la barra de menús desplegada."
+
+#: ../../source/using/manual/project_menus.rst:77
+msgid "The menus, unfolded."
+msgstr "Els menús, desplegats."
+
+#: ../../source/using/manual/project_menus.rst:79
+msgid ""
+"While no project is open only :guilabel:`File` and :guilabel:`Help` are "
+"there: the other menus act on a project and appear when you open one."
+msgstr ""
+"Mentre no hi ha cap projecte obert només hi ha :guilabel:`Fitxer` i "
+":guilabel:`Ajuda`: els altres menús actuen sobre un projecte i apareixen "
+"quan n'obriu un."
+
+#: ../../source/using/manual/project_menus.rst:82
+msgid "The File menu with no project open."
+msgstr "El menú Fitxer sense cap projecte obert."
+
+#: ../../source/using/manual/project_menus.rst:85
+msgid "With no project open, the window offers to make one or open one."
+msgstr "Sense cap projecte obert, la finestra ofereix crear-ne un o obrir-ne un."
+
+#: ../../source/using/manual/project_menus.rst:89
+msgid "Projects"
+msgstr "Projectes"
+
+#: ../../source/using/manual/project_menus.rst:91
+msgid ""
+"A project is **one file**, ending in ``.mfstz``. Everything in it travels"
+" together: you can copy it, send it or keep it under version control as "
+"one thing."
+msgstr ""
+"Un projecte és **un sol fitxer**, acabat en ``.mfstz``. Tot el que conté "
+"viatja junt: el podeu copiar, enviar o posar sota control de versions com"
+" una sola cosa."
+
+#: ../../source/using/manual/project_menus.rst:95
+msgid ""
+"A project knows its own name, which is written inside the file. Renaming "
+"the file in your file manager does not rename the project: it still opens"
+" under the name it was given."
+msgstr ""
+"Un projecte sap el seu nom, que està escrit dins del fitxer. Canviar el "
+"nom del fitxer al gestor de fitxers no canvia el nom del projecte: s'obre"
+" igualment amb el nom que se li va donar."
+
+#: ../../source/using/manual/project_menus.rst:101
+msgid "Making a project"
+msgstr "Crear un projecte"
+
+#: ../../source/using/manual/project_menus.rst:103
+msgid "Choose :menuselection:`File --> New Project…` (:kbd:`Ctrl+N`)."
+msgstr "Trieu :menuselection:`Fitxer --> Projecte nou…` (:kbd:`Ctrl+N`)."
+
+#: ../../source/using/manual/project_menus.rst:105
+msgid "The New Project dialog."
+msgstr "El diàleg Projecte nou."
+
+#: ../../source/using/manual/project_menus.rst:108
+msgid "The New Project dialog. The file it will make is shown under the fields."
+msgstr "El diàleg Projecte nou. El fitxer que crearà es mostra sota els camps."
+
+#: ../../source/using/manual/project_menus.rst:110
+#: ../../source/using/manual/project_menus.rst:200
+msgid ":guilabel:`Name`"
+msgstr ":guilabel:`Nom`"
+
+#: ../../source/using/manual/project_menus.rst:111
+msgid "What the project is called. The file is named after it."
+msgstr "Com es diu el projecte. El fitxer en porta el nom."
+
+#: ../../source/using/manual/project_menus.rst:113
+msgid ":guilabel:`Location`"
+msgstr ":guilabel:`Ubicació`"
+
+#: ../../source/using/manual/project_menus.rst:114
+msgid "The folder the file goes in. :guilabel:`Browse…` lets you pick one."
+msgstr "La carpeta on va el fitxer. :guilabel:`Navega…` us en deixa triar una."
+
+#: ../../source/using/manual/project_menus.rst:116
+msgid ""
+"The full path of the file is shown under the two fields. :guilabel:`OK` "
+"stays disabled until there is a name, the folder exists and no file of "
+"that name is already there. The new project opens straight away."
+msgstr ""
+"El camí complet del fitxer es mostra sota els dos camps. "
+":guilabel:`D'acord` està desactivat fins que hi ha un nom, la carpeta "
+"existeix i no hi ha cap fitxer amb aquest nom. El projecte nou s'obre de "
+"seguida."
+
+#: ../../source/using/manual/project_menus.rst:122
+msgid "Opening a project"
+msgstr "Obrir un projecte"
+
+#: ../../source/using/manual/project_menus.rst:124
+msgid "There are three ways:"
+msgstr "Hi ha tres maneres:"
+
+#: ../../source/using/manual/project_menus.rst:126
+msgid ""
+":menuselection:`File --> Open Project…` (:kbd:`Ctrl+O`) asks for a "
+"``.mfstz`` file."
+msgstr ""
+":menuselection:`Fitxer --> Obre un projecte…` (:kbd:`Ctrl+O`) demana un "
+"fitxer ``.mfstz``."
+
+#: ../../source/using/manual/project_menus.rst:128
+msgid ""
+":menuselection:`File --> Open Recent` lists the projects you opened last,"
+" newest first."
+msgstr ""
+":menuselection:`Fitxer --> Obre un projecte recent` mostra els últims "
+"projectes que heu obert, el més nou primer."
+
+#: ../../source/using/manual/project_menus.rst:130
+msgid ""
+"The project name on the top bar opens the same list, with :guilabel:`Open"
+" Project…` at its head."
+msgstr ""
+"El nom del projecte a la barra superior obre la mateixa llista, amb "
+":guilabel:`Obre un projecte…` al capdamunt."
+
+#: ../../source/using/manual/project_menus.rst:133
+msgid "The recent projects list under the project name on the top bar."
+msgstr ""
+"La llista de projectes recents sota el nom del projecte a la barra "
+"superior."
+
+#: ../../source/using/manual/project_menus.rst:136
+msgid "The recent projects, under the project name on the top bar."
+msgstr "Els projectes recents, sota el nom del projecte a la barra superior."
+
+#: ../../source/using/manual/project_menus.rst:138
+msgid ""
+"Recent projects are listed by name. Two projects with the same name show "
+"their path as well, so you can tell them apart, and a project whose file "
+"is no longer there is dropped from the list. :guilabel:`Clear Recent "
+"Projects` empties the list; the projects themselves are not touched."
+msgstr ""
+"Els projectes recents es mostren pel nom. Dos projectes amb el mateix nom"
+" mostren també el camí, perquè els pugueu distingir, i un projecte el "
+"fitxer del qual ja no hi és desapareix de la llista. :guilabel:`Neteja "
+"els projectes recents` buida la llista; els projectes no es toquen."
+
+#: ../../source/using/manual/project_menus.rst:143
+msgid "Opening a project closes the one that was open, saving it first."
+msgstr "Obrir un projecte tanca el que estava obert, després de desar-lo."
+
+#: ../../source/using/manual/project_menus.rst:145
+msgid ""
+"**A project can be open in one window only.** If it is already open, in "
+"another window or by somebody else on a shared folder, you are told who "
+"has it and it is not opened a second time: two windows writing to one "
+"file would lose each other's work."
+msgstr ""
+"**Un projecte només pot estar obert en una finestra.** Si ja està obert, "
+"en una altra finestra o per algú altre en una carpeta compartida, se us "
+"diu qui el té i no s'obre per segona vegada: dues finestres escrivint en "
+"un mateix fitxer perdrien la feina l'una de l'altra."
+
+#: ../../source/using/manual/project_menus.rst:152
+msgid "The Project pane"
+msgstr "La subfinestra Projecte"
+
+#: ../../source/using/manual/project_menus.rst:154
+msgid ""
+"The :guilabel:`Project` pane shows the project as a tree: its name, then "
+":guilabel:`Models`, :guilabel:`Simulations` and :guilabel:`Statistics`. "
+"Simulations and statistics will be filled in once models can be run."
+msgstr ""
+"La subfinestra :guilabel:`Projecte` mostra el projecte com un arbre: el "
+"seu nom i, a sota, :guilabel:`Models`, :guilabel:`Simulacions` i "
+":guilabel:`Estadístiques`. Les simulacions i les estadístiques s'ompliran"
+" quan els models es puguin executar."
+
+#: ../../source/using/manual/project_menus.rst:158
+msgid "Right-click a node to see what can be done to it."
+msgstr "Feu clic amb el botó dret en un node per veure què s'hi pot fer."
+
+#: ../../source/using/manual/project_menus.rst:160
+msgid "The context menu of the project in the Project pane."
+msgstr "El menú contextual del projecte a la subfinestra Projecte."
+
+#: ../../source/using/manual/project_menus.rst:163
+msgid "The project's context menu: the same entries as the Project menu."
+msgstr ""
+"El menú contextual del projecte: les mateixes entrades que el menú "
+"Projecte."
+
+#: ../../source/using/manual/project_menus.rst:165
+msgid "The context menu of the Models folder."
+msgstr "El menú contextual de la carpeta Models."
+
+#: ../../source/using/manual/project_menus.rst:168
+msgid ":guilabel:`Models` offers to add a model."
+msgstr ":guilabel:`Models` ofereix afegir un model."
+
+#: ../../source/using/manual/project_menus.rst:170
+msgid "The context menu of a model."
+msgstr "El menú contextual d'un model."
+
+#: ../../source/using/manual/project_menus.rst:173
+msgid "A model can be changed or deleted."
+msgstr "Un model es pot canviar o suprimir."
+
+#: ../../source/using/manual/project_menus.rst:177
+msgid "Closing a project"
+msgstr "Tancar un projecte"
+
+#: ../../source/using/manual/project_menus.rst:179
+msgid ""
+":menuselection:`File --> Close Project` saves the project and closes it, "
+"with all its tabs. Opening another project and quitting do the same."
+msgstr ""
+":menuselection:`Fitxer --> Tanca el projecte` desa el projecte i el "
+"tanca, amb totes les seves pestanyes. Obrir un altre projecte i sortir "
+"fan el mateix."
+
+#: ../../source/using/manual/project_menus.rst:184
+msgid "Models"
+msgstr "Models"
+
+#: ../../source/using/manual/project_menus.rst:186
+msgid ""
+"A project holds any number of models. Each one is drawn in a tab of its "
+"own."
+msgstr ""
+"Un projecte conté tants models com calgui. Cadascun es dibuixa en una "
+"pestanya pròpia."
+
+#: ../../source/using/manual/project_menus.rst:190
+msgid "Adding a model"
+msgstr "Afegir un model"
+
+#: ../../source/using/manual/project_menus.rst:192
+msgid ""
+"Choose :menuselection:`Project --> New Model…`, or right-click the "
+"project or :guilabel:`Models` in the :guilabel:`Project` pane."
+msgstr ""
+"Trieu :menuselection:`Projecte --> Model nou…`, o feu clic amb el botó "
+"dret al projecte o a :guilabel:`Models` a la subfinestra "
+":guilabel:`Projecte`."
+
+#: ../../source/using/manual/project_menus.rst:195
+#: ../../source/using/manual/project_menus.rst:198
+msgid "The New Model dialog."
+msgstr "El diàleg Model nou."
+
+#: ../../source/using/manual/project_menus.rst:201
+msgid "What the model is called. Two models of one project cannot share a name."
+msgstr ""
+"Com es diu el model. Dos models d'un mateix projecte no poden tenir el "
+"mateix nom."
+
+#: ../../source/using/manual/project_menus.rst:203
+msgid ":guilabel:`Type`"
+msgstr ":guilabel:`Tipus`"
+
+#: ../../source/using/manual/project_menus.rst:204
+msgid ""
+"What kind of model it is. Only :guilabel:`Petri Net` can be made today; "
+"the other kinds are listed to show what is coming, and choosing one tells"
+" you it is not built yet."
+msgstr ""
+"Quin tipus de model és. Avui només es pot crear una :guilabel:`Xarxa de "
+"Petri`; els altres tipus hi són per mostrar què vindrà, i si en trieu un "
+"se us diu que encara no està fet."
+
+#: ../../source/using/manual/project_menus.rst:208
+msgid ":guilabel:`Time unit`"
+msgstr ":guilabel:`Unitat de temps`"
+
+#: ../../source/using/manual/project_menus.rst:209
+msgid "The unit the model's times are written in."
+msgstr "La unitat en què s'escriuen els temps del model."
+
+#: ../../source/using/manual/project_menus.rst:211
+msgid ":guilabel:`Distance unit`"
+msgstr ":guilabel:`Unitat de distància`"
+
+#: ../../source/using/manual/project_menus.rst:212
+msgid ""
+"The unit its distances are written in. Only 2D and 3D models have "
+"distances, so it is disabled for a Petri net and for a process flow."
+msgstr ""
+"La unitat en què s'escriuen les distàncies. Només els models 2D i 3D "
+"tenen distàncies, de manera que està desactivada per a una xarxa de Petri"
+" i per a un flux de procés."
+
+#: ../../source/using/manual/project_menus.rst:215
+msgid "The new model opens in a tab, ready to be drawn."
+msgstr "El model nou s'obre en una pestanya, a punt per dibuixar-lo."
+
+#: ../../source/using/manual/project_menus.rst:219
+msgid "Opening, changing and deleting a model"
+msgstr "Obrir, canviar i suprimir un model"
+
+#: ../../source/using/manual/project_menus.rst:221
+msgid ""
+"Double-click a model in the :guilabel:`Project` pane to open it. A model "
+"is open in one tab at most: double-clicking a model that is already open "
+"brings its tab to the front."
+msgstr ""
+"Feu doble clic en un model a la subfinestra :guilabel:`Projecte` per "
+"obrir-lo. Un model està obert com a molt en una pestanya: fer doble clic "
+"en un model que ja està obert en porta la pestanya al davant."
+
+#: ../../source/using/manual/project_menus.rst:225
+msgid ""
+"Right-click a model and choose :guilabel:`Model Properties…` to rename it"
+" or change its units. Its type was settled when it was made and cannot be"
+" changed."
+msgstr ""
+"Feu clic amb el botó dret en un model i trieu :guilabel:`Propietats del "
+"model…` per canviar-ne el nom o les unitats. El tipus es va decidir quan "
+"es va crear i no es pot canviar."
+
+#: ../../source/using/manual/project_menus.rst:228
+msgid "The Model Properties dialog."
+msgstr "El diàleg Propietats del model."
+
+#: ../../source/using/manual/project_menus.rst:231
+msgid "A model's properties: the type is shown but cannot be changed."
+msgstr "Les propietats d'un model: el tipus es mostra però no es pot canviar."
+
+#: ../../source/using/manual/project_menus.rst:233
+msgid ""
+":guilabel:`Delete Model` removes the model and everything drawn in it. It"
+" asks first, because **a deleted model cannot be got back**: undo does "
+"not reach it."
+msgstr ""
+":guilabel:`Suprimeix el model` elimina el model i tot el que hi ha "
+"dibuixat. Abans ho pregunta, perquè **un model suprimit no es pot "
+"recuperar**: desfer no hi arriba."
+
+#: ../../source/using/manual/project_menus.rst:238
+msgid "Saving your work"
+msgstr "Desar la feina"
+
+#: ../../source/using/manual/project_menus.rst:240
+msgid ""
+":menuselection:`File --> Save` (:kbd:`Ctrl+S`) saves every open model. "
+"MASAFI-SimTwin also saves on its own:"
+msgstr ""
+":menuselection:`Fitxer --> Desa` (:kbd:`Ctrl+S`) desa tots els models "
+"oberts. MASAFI-SimTwin també desa tot sol:"
+
+#: ../../source/using/manual/project_menus.rst:243
+msgid "when you close a model's tab, close the project, open another or quit;"
+msgstr ""
+"quan tanqueu la pestanya d'un model, tanqueu el projecte, n'obriu un "
+"altre o sortiu;"
+
+#: ../../source/using/manual/project_menus.rst:244
+msgid ""
+"every few minutes while you work. You choose how often in "
+":menuselection:`Settings --> Saving`, from 1 to 30 minutes; the default "
+"is 5, and 0 turns it off."
+msgstr ""
+"cada pocs minuts mentre treballeu. Trieu cada quant a "
+":menuselection:`Configuració --> Desament`, d'1 a 30 minuts; per defecte "
+"són 5, i 0 ho desactiva."
+
+#: ../../source/using/manual/project_menus.rst:248
+msgid ""
+"A model with changes that are not saved yet has an asterisk after its "
+"name on its tab, and the window's title says so too. Undoing back to what"
+" was saved takes the asterisk away."
+msgstr ""
+"Un model amb canvis encara no desats porta un asterisc després del nom a "
+"la pestanya, i el títol de la finestra també ho indica. Desfer fins al "
+"que estava desat treu l'asterisc."
+
+#: ../../source/using/manual/project_menus.rst:252
+msgid "A tab whose name ends in an asterisk."
+msgstr "Una pestanya amb el nom acabat en un asterisc."
+
+#: ../../source/using/manual/project_menus.rst:255
+msgid "The asterisk: this model has changes that are not saved yet."
+msgstr "L'asterisc: aquest model té canvis que encara no s'han desat."
+
+#: ../../source/using/manual/project_menus.rst:257
+msgid ""
+"A model that cannot be saved is named in a message, and the other models "
+"are saved all the same. Today that is a Petri net with an inhibitor arc "
+"in it: the file format cannot hold one yet. When such a model would be "
+"closed, you are asked whether to close it without saving "
+"(:guilabel:`Discard`) or keep it open (:guilabel:`Cancel`)."
+msgstr ""
+"Un model que no es pot desar s'anomena en un missatge, i els altres "
+"models es desen igualment. Avui és el cas d'una xarxa de Petri amb un arc"
+" inhibidor: el format del fitxer encara no en pot contenir cap. Quan un "
+"model així s'hauria de tancar, se us pregunta si el voleu tancar sense "
+"desar (:guilabel:`Descarta`) o mantenir-lo obert (:guilabel:`Cancel·la`)."
+
+#: ../../source/using/manual/project_menus.rst:265
+msgid "If the application stops"
+msgstr "Si l'aplicació s'atura"
+
+#: ../../source/using/manual/project_menus.rst:267
+msgid ""
+"Every change you make is written down beside the project the moment you "
+"make it. If MASAFI-SimTwin stops before your work is saved, whether it "
+"crashed or the computer went off, open the project again: the work is put"
+" back in its tabs and the status bar names the models it was put back in."
+msgstr ""
+"Cada canvi que feu s'anota al costat del projecte en el moment de fer-lo."
+" Si MASAFI-SimTwin s'atura abans que la feina estigui desada, tant si ha "
+"fallat com si l'ordinador s'ha apagat, torneu a obrir el projecte: la "
+"feina es recupera a les seves pestanyes i la barra d'estat diu en quins "
+"models s'ha recuperat."
+
+#: ../../source/using/manual/project_menus.rst:272
+msgid ""
+"What is put back is **shown, not saved**: the tabs carry the asterisk, so"
+" you can look at it before you keep it. Save to keep it."
+msgstr ""
+"El que es recupera **es mostra, però no es desa**: les pestanyes porten "
+"l'asterisc, perquè ho pugueu mirar abans de quedar-vos-ho. Deseu per "
+"quedar-vos-ho."
+
+#: ../../source/using/manual/project_menus.rst:277
+msgid "Earlier versions"
+msgstr "Versions anteriors"
+
+#: ../../source/using/manual/project_menus.rst:279
+msgid ""
+"Every save that changes the project first keeps the project as it was, as"
+" a numbered copy in a folder beside it: for *Bottling Line.mfstz*, the "
+"folder is *Bottling Line.mfstz.versions*. The highest number is the "
+"newest, and it is the project as it was just before the last save."
+msgstr ""
+"Cada desament que canvia el projecte primer en guarda una còpia tal com "
+"era, numerada, en una carpeta al costat: per a *Línia "
+"d'embotellament.mfstz*, la carpeta és *Línia "
+"d'embotellament.mfstz.versions*. El número més alt és la més nova, i és "
+"el projecte tal com era just abans de l'últim desament."
+
+#: ../../source/using/manual/project_menus.rst:284
+msgid ""
+"Once a project has kept more than 50 versions, opening it asks whether to"
+" delete the oldest and keep the last 10. If you say no, nothing is "
+"deleted and you are asked again next time."
+msgstr ""
+"Quan un projecte ha guardat més de 50 versions, en obrir-lo se us "
+"pregunta si voleu suprimir les més antigues i quedar-vos les 10 últimes. "
+"Si dieu que no, no se suprimeix res i la pregunta torna la vegada "
+"següent."
+
+#: ../../source/using/manual/project_menus.rst:288
+msgid ""
+"A version is a whole project file. To go back to one, copy it out of the "
+"folder, give it a name of its own and open the copy. Do not open it "
+"inside the folder."
+msgstr ""
+"Una versió és un fitxer de projecte sencer. Per tornar-hi, copieu-la fora"
+" de la carpeta, doneu-li un nom propi i obriu la còpia. No l'obriu dins "
+"de la carpeta."
+
+#: ../../source/using/manual/project_menus.rst:294
+msgid "The files beside a project"
+msgstr "Els fitxers al costat d'un projecte"
+
+#: ../../source/using/manual/project_menus.rst:296
+msgid "Next to *Bottling Line.mfstz* you may see:"
+msgstr "Al costat de *Línia d'embotellament.mfstz* hi podeu veure:"
+
+#: ../../source/using/manual/project_menus.rst:298
+msgid "``Bottling Line.mfstz.lock``"
+msgstr "``Línia d'embotellament.mfstz.lock``"
+
+#: ../../source/using/manual/project_menus.rst:299
+msgid ""
+"Says the project is open, and by whom. It goes when the project is "
+"closed; one left by a crash is cleared the next time the project is "
+"opened on the same computer."
+msgstr ""
+"Indica que el projecte està obert, i per qui. Desapareix quan es tanca el"
+" projecte; el que deixa una fallada s'elimina la propera vegada que "
+"s'obre el projecte al mateix ordinador."
+
+#: ../../source/using/manual/project_menus.rst:303
+msgid "``Bottling Line.mfstz.journal``"
+msgstr "``Línia d'embotellament.mfstz.journal``"
+
+#: ../../source/using/manual/project_menus.rst:304
+msgid "The changes not saved yet: what is put back after a crash."
+msgstr "Els canvis encara no desats: el que es recupera després d'una fallada."
+
+#: ../../source/using/manual/project_menus.rst:306
+msgid "``Bottling Line.mfstz.versions``"
+msgstr "``Línia d'embotellament.mfstz.versions``"
+
+#: ../../source/using/manual/project_menus.rst:307
+msgid "The earlier versions."
+msgstr "Les versions anteriors."
+
+#: ../../source/using/manual/project_menus.rst:309
+msgid ""
+"Leave them alone while the project is open. To move or rename a project, "
+"close it first and move the ``.versions`` folder along with it: the "
+"application cannot see a file being renamed, so the versions of a renamed"
+" project stay behind under the old name."
+msgstr ""
+"No els toqueu mentre el projecte està obert. Per moure un projecte o "
+"canviar-ne el nom, tanqueu-lo primer i moveu també la carpeta "
+"``.versions``: l'aplicació no veu quan es canvia el nom d'un fitxer, de "
+"manera que les versions d'un projecte reanomenat es queden enrere amb el "
+"nom antic."
+
+#: ../../source/using/manual/project_menus.rst:316
+msgid "The menus"
+msgstr "Els menús"
+
+#: ../../source/using/manual/project_menus.rst:318
+msgid ""
+"Entries that are not built yet are shown greyed out, so you can see where"
+" they will be."
+msgstr ""
+"Les entrades que encara no estan fetes es mostren en gris, perquè pugueu "
+"veure on aniran."
+
+#: ../../source/using/manual/project_menus.rst:325
+msgid "Menu"
+msgstr "Menú"
+
+#: ../../source/using/manual/project_menus.rst:326
+msgid "What it holds"
+msgstr "Què conté"
+
+#: ../../source/using/manual/project_menus.rst:327
+msgid ":guilabel:`File`"
+msgstr ":guilabel:`Fitxer`"
+
+#: ../../source/using/manual/project_menus.rst:328
+msgid ""
+":guilabel:`New Project…`, :guilabel:`Open Project…`, :guilabel:`Open "
+"Recent`, :guilabel:`Save`, :guilabel:`Export to PDF…`, :guilabel:`Close "
+"Project`, :guilabel:`Settings` and :guilabel:`Exit`."
+msgstr ""
+":guilabel:`Projecte nou…`, :guilabel:`Obre un projecte…`, :guilabel:`Obre"
+" un projecte recent`, :guilabel:`Desa`, :guilabel:`Exporta a PDF…`, "
+":guilabel:`Tanca el projecte`, :guilabel:`Configuració` i "
+":guilabel:`Surt`."
+
+#: ../../source/using/manual/project_menus.rst:331
+msgid ":guilabel:`Edit`"
+msgstr ":guilabel:`Edita`"
+
+#: ../../source/using/manual/project_menus.rst:332
+msgid ""
+":guilabel:`Undo` and :guilabel:`Redo`, then :guilabel:`Cut`, "
+":guilabel:`Copy` and :guilabel:`Paste`. They act on the model you are "
+"looking at."
+msgstr ""
+":guilabel:`Desfés` i :guilabel:`Refés`, i després :guilabel:`Retalla`, "
+":guilabel:`Copia` i :guilabel:`Enganxa`. Actuen sobre el model que esteu "
+"mirant."
+
+#: ../../source/using/manual/project_menus.rst:335
+msgid ":guilabel:`View`"
+msgstr ":guilabel:`Visualitza`"
+
+#: ../../source/using/manual/project_menus.rst:336
+msgid "Tool windows, appearance and zoom: not built yet."
+msgstr "Finestres d'eines, aparença i zoom: encara no estan fets."
+
+#: ../../source/using/manual/project_menus.rst:338
+msgid ""
+":guilabel:`New Model…`, :guilabel:`New Simulation…` and "
+":guilabel:`Project Settings…`. Only the first is built."
+msgstr ""
+":guilabel:`Model nou…`, :guilabel:`Simulació nova…` i "
+":guilabel:`Configuració del projecte…`. Només el primer està fet."
+
+#: ../../source/using/manual/project_menus.rst:340
+msgid ":guilabel:`Window`"
+msgstr ":guilabel:`Finestra`"
+
+#: ../../source/using/manual/project_menus.rst:341
+msgid "Moving between tabs: not built yet."
+msgstr "Moure's entre pestanyes: encara no està fet."
+
+#: ../../source/using/manual/project_menus.rst:342
+msgid ":guilabel:`Help`"
+msgstr ":guilabel:`Ajuda`"
+
+#: ../../source/using/manual/project_menus.rst:343
+msgid ""
+":guilabel:`About MASAFI-SimTwin`, with the version you are running. "
+":guilabel:`Documentation` is not built yet."
+msgstr ""
+":guilabel:`Quant a MASAFI-SimTwin`, amb la versió que esteu fent servir. "
+":guilabel:`Documentació` encara no està feta."
+
+#: ../../source/using/manual/project_menus.rst:346
+msgid "The File menu."
+msgstr "El menú Fitxer."
+
+#: ../../source/using/manual/project_menus.rst:349
+msgid ":guilabel:`File`."
+msgstr ":guilabel:`Fitxer`."
+
+#: ../../source/using/manual/project_menus.rst:351
+msgid "The Edit menu."
+msgstr "El menú Edita."
+
+#: ../../source/using/manual/project_menus.rst:354
+msgid ":guilabel:`Edit`."
+msgstr ":guilabel:`Edita`."
+
+#: ../../source/using/manual/project_menus.rst:356
+msgid "The Project menu."
+msgstr "El menú Projecte."
+
+#: ../../source/using/manual/project_menus.rst:359
+msgid ":guilabel:`Project`."
+msgstr ":guilabel:`Projecte`."
+
+#: ../../source/using/manual/project_menus.rst:361
+msgid ""
+":guilabel:`Settings` is also the gear button at the right end of the top "
+"bar. Exporting a model to PDF and the editing commands are described in "
+":doc:`petri_nets`."
+msgstr ""
+":guilabel:`Configuració` també és el botó de l'engranatge a l'extrem dret"
+" de la barra superior. Exportar un model a PDF i les ordres d'edició es "
+"descriuen a :doc:`petri_nets`."
+
+#: ../../source/using/manual/project_menus.rst:367
+msgid "Keyboard shortcuts"
+msgstr "Dreceres de teclat"
+
+#: ../../source/using/manual/project_menus.rst:373
+msgid "Keys"
+msgstr "Tecles"
+
+#: ../../source/using/manual/project_menus.rst:374
+msgid "What they do"
+msgstr "Què fan"
+
+#: ../../source/using/manual/project_menus.rst:375
+msgid ":kbd:`Ctrl+N`"
+msgstr ":kbd:`Ctrl+N`"
+
+#: ../../source/using/manual/project_menus.rst:376
+msgid "New project"
+msgstr "Projecte nou"
+
+#: ../../source/using/manual/project_menus.rst:377
+msgid ":kbd:`Ctrl+O`"
+msgstr ":kbd:`Ctrl+O`"
+
+#: ../../source/using/manual/project_menus.rst:378
+msgid "Open a project"
+msgstr "Obre un projecte"
+
+#: ../../source/using/manual/project_menus.rst:379
+msgid ":kbd:`Ctrl+S`"
+msgstr ":kbd:`Ctrl+S`"
+
+#: ../../source/using/manual/project_menus.rst:380
+msgid "Save"
+msgstr "Desa"
+
+#: ../../source/using/manual/project_menus.rst:381
+msgid ":kbd:`Ctrl+Shift+E`"
+msgstr ":kbd:`Ctrl+Maj+E`"
+
+#: ../../source/using/manual/project_menus.rst:382
+msgid "Export the model to PDF"
+msgstr "Exporta el model a PDF"
+
+#: ../../source/using/manual/project_menus.rst:383
+msgid ":kbd:`Ctrl+Z`"
+msgstr ":kbd:`Ctrl+Z`"
+
+#: ../../source/using/manual/project_menus.rst:384
+msgid "Undo"
+msgstr "Desfés"
+
+#: ../../source/using/manual/project_menus.rst:385
+msgid ":kbd:`Ctrl+Shift+Z`"
+msgstr ":kbd:`Ctrl+Maj+Z`"
+
+#: ../../source/using/manual/project_menus.rst:386
+msgid "Redo"
+msgstr "Refés"
+
+#: ../../source/using/manual/project_menus.rst:387
+msgid ":kbd:`Ctrl+X`, :kbd:`Ctrl+C`, :kbd:`Ctrl+V`"
+msgstr ":kbd:`Ctrl+X`, :kbd:`Ctrl+C`, :kbd:`Ctrl+V`"
+
+#: ../../source/using/manual/project_menus.rst:388
+msgid "Cut, copy and paste"
+msgstr "Retalla, copia i enganxa"
+
+#: ../../source/using/manual/project_menus.rst:389
+msgid ":kbd:`Ctrl+Q`"
+msgstr ":kbd:`Ctrl+Q`"
+
+#: ../../source/using/manual/project_menus.rst:390
+msgid "Exit"
+msgstr "Surt"
+
+#: ../../source/using/manual/project_menus.rst:392
+msgid ""
+"On a Mac, :kbd:`⌘` takes the place of :kbd:`Ctrl`. Windows has no "
+"shortcut for :guilabel:`Exit`: close the window with :kbd:`Alt+F4`."
+msgstr ""
+"En un Mac, :kbd:`⌘` ocupa el lloc de :kbd:`Ctrl`. Windows no té cap "
+"drecera per a :guilabel:`Surt`: tanqueu la finestra amb :kbd:`Alt+F4`."
+
+#~ msgid "Todo"
+#~ msgstr ""
+
+#~ msgid ""
+#~ "A tour of the window: the tabs,"
+#~ " the tool panes and the menus, "
+#~ "and what a project is: making one,"
+#~ " opening it, saving it, its recent"
+#~ " history, recovering after a crash, "
+#~ "and the models it holds."
+#~ msgstr ""
 

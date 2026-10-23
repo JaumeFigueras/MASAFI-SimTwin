@@ -164,6 +164,10 @@ docs-po:  ## Extract the docs' English and update the Catalan catalogues
 	$(SPHINX_INTL) update -p $(DOCS_GETTEXT) -d $(DOCS_SOURCE)/locale \
 		$(addprefix -l ,$(filter-out $(firstword $(DOCS_LANGUAGES)),$(DOCS_LANGUAGES)))
 
+.PHONY: docs-screenshots
+docs-screenshots:  ## Retake the user manual's screenshots, every language
+	$(PYTHON) tools/docs_screenshots.py
+
 .PHONY: docs-clean
 docs-clean:  ## Remove the built documentation
 	rm -rf $(DOCS_BUILD) $(DOCS_SOURCE)/developing/api
