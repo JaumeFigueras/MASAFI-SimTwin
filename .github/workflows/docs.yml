@@ -30,19 +30,19 @@ jobs:
       # requirements.txt installs MASAFI-sim-petri from ../MASAFI-sim-petri, so
       # the two are checked out side by side, as on a development machine.
       - name: Check out MASAFI-SimTwin
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: MASAFI-SimTwin
 
       - name: Check out MASAFI-sim-petri
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: JaumeFigueras/MASAFI-sim-petri
           ref: main
           path: MASAFI-sim-petri
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.13'
 
@@ -64,7 +64,7 @@ jobs:
         run: make docs-strict
 
       - name: Upload the site
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: MASAFI-SimTwin/docs/build/html
 
@@ -77,4 +77,4 @@ jobs:
     steps:
       - name: Publish on GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
