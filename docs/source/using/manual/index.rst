@@ -3,11 +3,12 @@ User Manual
 
 .. todo::
 
-   A tour of the window: the tabs, the tool panes and the menus, and what a project is.
+   What the manual covers and the order to read it in.
 
 .. toctree::
    :maxdepth: 1
 
+   project_menus
    petri_nets
    process_flow
    animation_2d

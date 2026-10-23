@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: MASAFI-SimTwin 0.1\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-23 21:54+0200\n"
+"POT-Creation-Date: 2026-10-23 23:38+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: Jaume Figueras\n"
 "Language: ca\n"
@@ -28,6 +28,12 @@ msgid "Todo"
 msgstr ""
 
 #: ../../source/using/manual/index.rst:6
-msgid "A tour of the window: the tabs, the tool panes and the menus, and what a project is."
+msgid "What the manual covers and the order to read it in."
 msgstr ""
+
+#~ msgid ""
+#~ "A tour of the window: the tabs,"
+#~ " the tool panes and the menus, "
+#~ "and what a project is."
+#~ msgstr ""
 
