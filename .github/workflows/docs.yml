@@ -1,0 +1,80 @@
+# Build the documentation in every language and publish it on GitHub Pages.
+#
+# Runs on every push to main.  The build is `make docs-strict`, the one run by
+# hand, so a warning stops the publishing and a broken page never goes out.
+#
+# Once, by hand: Settings -> Pages -> Source: "GitHub Actions".
+
+name: Documentation
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One publishing at a time; a newer push waits rather than cancelling one
+# half way through deploying.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # requirements.txt installs MASAFI-sim-petri from ../MASAFI-sim-petri, so
+      # the two are checked out side by side, as on a development machine.
+      - name: Check out MASAFI-SimTwin
+        uses: actions/checkout@v4
+        with:
+          path: MASAFI-SimTwin
+
+      - name: Check out MASAFI-sim-petri
+        uses: actions/checkout@v4
+        with:
+          repository: JaumeFigueras/MASAFI-sim-petri
+          ref: main
+          path: MASAFI-sim-petri
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      # The API reference imports PyQt6, whose Qt libraries load these.
+      - name: Install Qt's system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
+
+      - name: Install
+        working-directory: MASAFI-SimTwin
+        run: make install
+
+      - name: Build the documentation
+        working-directory: MASAFI-SimTwin
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: make docs-strict
+
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: MASAFI-SimTwin/docs/build/html
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publish on GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -197,7 +197,7 @@ class Guide(QGraphicsItem):
     def paint(self, painter, option, widget=None) -> None:
         """Draw the guide, dashed while it is selected.
 
-The colour is the palette's ``Link``, which is where
+        The colour is the palette's ``Link``, which is where
         :data:`~masafi_simtwin.theme.ThemeColors.accent` is kept — ``Highlight``
         is the pale wash behind selected text, and a guide drawn in it is a
         guide nobody can see.  It is taken from the option rather than from a

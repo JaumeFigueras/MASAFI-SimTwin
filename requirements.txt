@@ -1,6 +1,7 @@
 # Docs system
 sphinx>=8.2.3
 sphinx-rtd-theme>=3.0.2
+sphinx-intl>=2.3  # the Catalan catalogues of the documentation
 Pygments>=2.21.0
 # Project dependencies
 PyQt6>=6.6

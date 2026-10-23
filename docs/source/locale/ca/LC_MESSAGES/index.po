@@ -1,0 +1,118 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2026, Jaume Figueras
+# This file is distributed under the same license as the MASAFI-SimTwin
+# package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: MASAFI-SimTwin 0.1\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-23 21:54+0200\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: Jaume Figueras\n"
+"Language: ca\n"
+"Language-Team: Català\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../source/index.rst:28
+msgid "Using MASAFI-SimTwin"
+msgstr "Ús de MASAFI-SimTwin"
+
+#: ../../source/index.rst:35
+msgid "Developing MASAFI-SimTwin"
+msgstr "Desenvolupament de MASAFI-SimTwin"
+
+#: ../../source/index.rst:2
+msgid "MASAFI-SimTwin"
+msgstr "MASAFI-SimTwin"
+
+#: ../../source/index.rst:4
+msgid ""
+"MASAFI-SimTwin is the graphical frontend of the MASAFI family of simulation libraries "
+"(Manufacturing, Automation & Simulation Analytics for Factory Integration).  It holds no "
+"simulation engine of its own: it is the model editor, the animation and the statistics laid over "
+"the libraries that do the simulating."
+msgstr ""
+"MASAFI-SimTwin és la interfície gràfica de la família de biblioteques de simulació MASAFI "
+"(Manufacturing, Automation & Simulation Analytics for Factory Integration).  No té cap motor de "
+"simulació propi: és l'editor de models, l'animació i les estadístiques que se situen damunt de "
+"les biblioteques que fan la simulació."
+
+#: ../../source/index.rst:10
+msgid "The family it is built for:"
+msgstr "La família per a la qual està feta:"
+
+#: ../../source/index.rst:13
+msgid "Library"
+msgstr "Biblioteca"
+
+#: ../../source/index.rst:13
+msgid "What it is"
+msgstr "Què és"
+
+#: ../../source/index.rst:13
+msgid "Status"
+msgstr "Estat"
+
+#: ../../source/index.rst:15
+msgid "MASAFI-sim-petri"
+msgstr "MASAFI-sim-petri"
+
+#: ../../source/index.rst:15
+msgid "Petri nets: modelling, analysis and simulation"
+msgstr "Xarxes de Petri: modelització, anàlisi i simulació"
+
+#: ../../source/index.rst:15
+msgid "In progress"
+msgstr "En curs"
+
+#: ../../source/index.rst:16
+msgid "MASAFI-sim-blocks"
+msgstr "MASAFI-sim-blocks"
+
+#: ../../source/index.rst:16
+msgid "Block-based discrete event simulation"
+msgstr "Simulació d'esdeveniments discrets basada en blocs"
+
+#: ../../source/index.rst:16 ../../source/index.rst:17 ../../source/index.rst:18
+msgid "Planned"
+msgstr "Previst"
+
+#: ../../source/index.rst:17
+msgid "MASAFI-sim-blocks-2d"
+msgstr "MASAFI-sim-blocks-2d"
+
+#: ../../source/index.rst:17
+msgid "The blocks laid out and animated in 2D"
+msgstr "Els blocs disposats i animats en 2D"
+
+#: ../../source/index.rst:18
+msgid "MASAFI-sim-blocks-3d"
+msgstr "MASAFI-sim-blocks-3d"
+
+#: ../../source/index.rst:18
+msgid "The blocks laid out and animated in 3D"
+msgstr "Els blocs disposats i animats en 3D"
+
+#: ../../source/index.rst:21
+msgid ""
+"What works today is the place/transition Petri net editor: a net can be drawn, named, described, "
+"saved, recovered, undone, copied and exported to PDF.  Nothing runs a net yet."
+msgstr ""
+"El que funciona avui és l'editor de xarxes de Petri de llocs i transicions: una xarxa es pot "
+"dibuixar, anomenar, descriure, desar, recuperar, desfer, copiar i exportar a PDF.  Encara no "
+"s'executa cap xarxa."
+
+#: ../../source/index.rst:25
+msgid ""
+"MASAFI-SimTwin is free software, released under the GNU General Public License, version 3 or "
+"later."
+msgstr ""
+"MASAFI-SimTwin és programari lliure, publicat sota la Llicència Pública General de GNU, versió 3 "
+"o posterior."
+

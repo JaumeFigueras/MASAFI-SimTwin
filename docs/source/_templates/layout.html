@@ -1,0 +1,27 @@
+{#-
+  The Read the Docs layout, with a LANGUAGES caption under the table of
+  contents linking this same page in every language of conf.py's LANGUAGES.
+
+  Each language is built into a folder of its own beside the others
+  (docs/build/html/en, docs/build/html/ca), so the same page in another
+  language is up out of this one's root and down into that one's.  A language
+  is shown under its own name, as the application's settings do.
+-#}
+{%- extends "!layout.html" %}
+
+{%- block menu %}
+  {{ super() }}
+  {%- set root = pathto('objects.inv', 1)|replace('objects.inv', '') %}
+  <p class="caption" role="heading">
+    <span class="caption-text">{% if language == 'ca' %}Idiomes{% else %}Languages{% endif %}</span>
+  </p>
+  <ul class="language-switcher">
+    {%- for code, name in languages %}
+      {%- if code == language %}
+        <li class="toctree-l1 current"><a class="reference internal current" href="#">{{ name }}</a></li>
+      {%- else %}
+        <li class="toctree-l1"><a class="reference external" href="{{ root }}../{{ code }}/{{ pagename }}{{ file_suffix }}" hreflang="{{ code }}" lang="{{ code }}">{{ name }}</a></li>
+      {%- endif %}
+    {%- endfor %}
+  </ul>
+{%- endblock %}

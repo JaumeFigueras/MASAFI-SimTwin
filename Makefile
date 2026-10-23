@@ -39,9 +39,11 @@ venv:  ## Create the virtualenv if it does not exist
 	@test -d $(VENV) || python3 -m venv $(VENV)
 
 .PHONY: install
-install: venv  ## Install the dependencies from requirements.txt
+install: venv  ## Install the dependencies from requirements.txt, and SimTwin itself
 	$(PIP) install --upgrade pip
 	$(PIP) install -r requirements.txt
+	@# Editable, so src/ resolves for pytest and the docs read the version off it.
+	$(PIP) install -e .
 
 # ----------------------------------------------------------------------------
 # Application
@@ -127,19 +129,44 @@ linguist:  ## Open a catalogue in Qt Linguist, e.g. make linguist L=ca
 # Documentation
 # ----------------------------------------------------------------------------
 
+# Every language of docs/source/conf.py's LANGUAGES, the first being the one the
+# pages are written in.  Each is built into a folder of its own, and the root of
+# the build sends a browser to the first.
+DOCS_LANGUAGES := en ca
+DOCS_SOURCE    := $(DOCS_DIR)/source
+DOCS_GETTEXT   := $(DOCS_BUILD)/gettext
+SPHINX_BUILD   := $(VENV)/bin/sphinx-build
+SPHINX_INTL    := $(VENV)/bin/sphinx-intl
+
 .PHONY: docs
-docs:  ## Build the HTML documentation
-	@PATH="$(CURDIR)/$(VENV)/bin:$$PATH" $(MAKE) -C $(DOCS_DIR) html
+docs:  ## Build the HTML documentation, every language
+	@$(MAKE) --no-print-directory docs-html SPHINXOPTS="$(SPHINXOPTS)"
 	@echo
 	@echo "Documentation: $(DOCS_BUILD)/html/index.html"
 
 .PHONY: docs-strict
 docs-strict:  ## Build the docs treating warnings as errors
-	@PATH="$(CURDIR)/$(VENV)/bin:$$PATH" $(MAKE) -C $(DOCS_DIR) html SPHINXOPTS="-W"
+	@$(MAKE) --no-print-directory docs-html SPHINXOPTS="-W --keep-going"
+
+.PHONY: docs-html
+docs-html:
+	@for language in $(DOCS_LANGUAGES); do \
+		$(SPHINX_BUILD) -b html -q -D language=$$language $(SPHINXOPTS) \
+			$(DOCS_SOURCE) $(DOCS_BUILD)/html/$$language || exit 1; \
+	done
+	@cp $(DOCS_DIR)/redirect.html $(DOCS_BUILD)/html/index.html
+
+.PHONY: docs-po
+docs-po:  ## Extract the docs' English and update the Catalan catalogues
+	$(SPHINX_BUILD) -b gettext -q $(DOCS_SOURCE) $(DOCS_GETTEXT)
+	@# The API reference is the docstrings, and is read in English everywhere.
+	rm -rf $(DOCS_GETTEXT)/developing/api
+	$(SPHINX_INTL) update -p $(DOCS_GETTEXT) -d $(DOCS_SOURCE)/locale \
+		$(addprefix -l ,$(filter-out $(firstword $(DOCS_LANGUAGES)),$(DOCS_LANGUAGES)))
 
 .PHONY: docs-clean
 docs-clean:  ## Remove the built documentation
-	@PATH="$(CURDIR)/$(VENV)/bin:$$PATH" $(MAKE) -C $(DOCS_DIR) clean
+	rm -rf $(DOCS_BUILD) $(DOCS_SOURCE)/developing/api
 
 # ----------------------------------------------------------------------------
 # Housekeeping
