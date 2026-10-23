@@ -222,6 +222,17 @@ def test_clearing_the_override_follows_the_desktop_again(qapp):
 # ----------------------------------------------------------------------
 
 
+@pytest.mark.parametrize('colors', [LIGHT_COLORS, DARK_COLORS])
+def test_the_palette_carries_the_page_line_colour(colors):
+    """The canvas reads its colours off the palette, so the page boundaries'
+    colour reaches it there, apart from the accent links are drawn in."""
+
+    palette = build_palette(colors)
+
+    assert palette.color(QPalette.ColorRole.LinkVisited).name() == colors.page_line
+    assert colors.page_line not in (colors.accent, colors.text, colors.editor)
+
+
 def test_paper_is_black_on_white():
     """A drawing is printed black on white whatever the application is running
     in.  The **accent is black here too**: it says *this is in hand*, which is a

@@ -11,7 +11,6 @@ from masafi_simtwin import paper
 from masafi_simtwin.documents.place import Place
 from masafi_simtwin.preferences import DEFAULT_GRID_STEP, GRID_STEP_KEY, Preferences
 from masafi_simtwin.documents.canvas import (
-    GRID_MAJOR_ALPHA,
     MAX_ZOOM,
     MIN_ZOOM,
     PAGES_ACROSS,
@@ -563,8 +562,9 @@ def test_the_pages_are_ruled_down_the_whole_sheet(canvas):
     assert across == [page * A4.height() for page in range(PAGES_DOWN + 1)]
 
 
-def test_a_page_boundary_is_dashed_and_in_the_grid_colour(canvas):
-    """It is the paper the drawing is measured against, so it is drawn like it."""
+def test_a_page_boundary_is_dashed_and_in_the_page_line_colour(canvas):
+    """It is the paper the drawing is measured against, and a colour of its own
+    tells it from the grid's heavier lines."""
 
     strip = QRectF(200.0, 0.0, 40.0, 400.0)
     strokes = [
@@ -576,8 +576,8 @@ def test_a_page_boundary_is_dashed_and_in_the_grid_colour(canvas):
     assert strokes
     for _line, pen in strokes:
         assert pen.widthF() == 0.0
-        assert pen.color().alpha() == GRID_MAJOR_ALPHA
-        assert pen.color().rgb() == canvas.palette().color(QPalette.ColorRole.Text).rgb()
+        assert pen.color() == canvas.palette().color(QPalette.ColorRole.LinkVisited)
+        assert pen.color().rgb() != canvas.palette().color(QPalette.ColorRole.Text).rgb()
 
 
 def test_a_page_boundary_spans_the_strip_it_is_drawn_in(canvas):

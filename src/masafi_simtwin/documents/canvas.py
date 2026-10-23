@@ -24,8 +24,10 @@ The sheet is **ruled into pages**: it is a whole number of them —
 drawn, so that what falls on which sheet of paper can be seen without printing
 anything.  Which page that is, and which way round, are the two preferences
 :func:`masafi_simtwin.preferences.page` resolves — by default the size this
-machine prints on, upright.  The lines are drawn like the grid and belong with it: the
-paper the drawing is measured against rather than anything in the drawing.
+machine prints on, upright.  The lines are drawn with the grid and belong with it: the
+paper the drawing is measured against rather than anything in the drawing.  They
+are dashed and in a colour of their own, the theme's ``page_line``, which the
+palette carries as ``LinkVisited``.
 
 The **origin is the sheet's top left corner**, not its middle.  Both rulers read
 nought there and count right and down, the way a page is read, so nothing on the
@@ -2244,13 +2246,14 @@ class CanvasView(QGraphicsView):
                     continue
                 painter.drawLine(QLineF(rect.left(), y, rect.right(), y))
 
-        self._draw_pages(painter, rect, major)
+        self._draw_pages(painter, rect)
 
-    def _draw_pages(self, painter, rect, colour: QColor) -> None:
+    def _draw_pages(self, painter, rect) -> None:
         """Rule the sheet into pages, so that every one of them can be seen.
 
-        The lines fall every page from the origin, dashed, in the
-        colour of the grid's own heavier lines: they are a thing to measure
+        The lines fall every page from the origin, dashed, in the theme's
+        ``page_line`` colour — the palette's ``LinkVisited`` — so they are told
+        from the grid's heavier lines at a glance.  They are a thing to measure
         against rather than a thing on the sheet, so they belong to the paper
         and not to the drawing.  They are drawn at every zoom — the squares of
         the grid are dropped when they crowd, but where a page ends is worth
@@ -2269,15 +2272,13 @@ class CanvasView(QGraphicsView):
             The painter of the view.
         rect : PyQt6.QtCore.QRectF
             The part of the scene that needs painting.
-        colour : PyQt6.QtGui.QColor
-            The colour of the grid's heavier lines.
         """
 
         area = rect.intersected(self.sceneRect())
         if area.isEmpty():
             return
 
-        pen = QPen(colour, 0)
+        pen = QPen(self.palette().color(QPalette.ColorRole.LinkVisited), 0)
         pen.setStyle(Qt.PenStyle.DashLine)
         painter.setPen(pen)
 

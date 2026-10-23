@@ -126,6 +126,10 @@ class ThemeColors:
         Foreground of a selected item.
     error : str
         Foreground used to report a problem.
+    page_line : str
+        The dashed boundary of every page the sheet is ruled into.  A colour
+        of its own rather than the grid's, so where a page ends can be told
+        from a heavier line of the grid at a glance.
     """
 
     window: str
@@ -141,6 +145,7 @@ class ThemeColors:
     selection: str
     selection_text: str
     error: str
+    page_line: str
 
 
 LIGHT_COLORS = ThemeColors(
@@ -157,6 +162,7 @@ LIGHT_COLORS = ThemeColors(
     selection='#d4e2ff',
     selection_text='#1e1f22',
     error='#db3b4b',
+    page_line='#9b30d9',
 )
 
 DARK_COLORS = ThemeColors(
@@ -173,6 +179,7 @@ DARK_COLORS = ThemeColors(
     selection='#2e436e',
     selection_text='#dfe1e5',
     error='#f75462',
+    page_line='#bf7af0',
 )
 
 COLORS: dict[ColorScheme, ThemeColors] = {
@@ -323,7 +330,9 @@ def build_palette(colors: ThemeColors) -> QPalette:
     palette.setColor(role.Highlight, QColor(colors.selection))
     palette.setColor(role.HighlightedText, QColor(colors.selection_text))
     palette.setColor(role.Link, QColor(colors.accent))
-    palette.setColor(role.LinkVisited, QColor(colors.accent))
+    # Nothing in the application shows a visited link, so the role carries
+    # the page boundaries to the canvas, which reads its colours off the palette.
+    palette.setColor(role.LinkVisited, QColor(colors.page_line))
     palette.setColor(role.Light, QColor(colors.hover))
     palette.setColor(role.Mid, QColor(colors.border))
     palette.setColor(role.Dark, QColor(colors.border))
